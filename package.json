@@ -1,0 +1,23 @@
+{
+  "name": "mcp-practice",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "start": "tsc --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "shx": "^0.4.0",
+    "typescript": "^5.8.2"
+  }
+}
