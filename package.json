@@ -2,10 +2,12 @@
   "name": "mcp-practice",
   "version": "1.0.0",
   "description": "",
-  "type": "module",
   "main": "index.js",
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
+    "clean": "shx rm -rf dist",
+    "build-ts": "tsc",
+    "copy-public": "shx test -d public && shx cp -r public/* dist/",
+    "build": "npm run clean && npm run build-ts && npm run copy-public",
     "prepare": "npm run build",
     "start": "tsc --watch"
   },
@@ -14,9 +16,11 @@
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
+    "playwright": "^1.51.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/node": "^22.14.0",
     "shx": "^0.4.0",
     "typescript": "^5.8.2"
   }
