@@ -1,6 +1,6 @@
 {
   "name": "mcp-practice",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -23,5 +23,8 @@
     "@types/node": "^22.14.0",
     "shx": "^0.4.0",
     "typescript": "^5.8.2"
+  },
+  "bin": {
+    "mcp-practice": "cli.js"
   }
 }
