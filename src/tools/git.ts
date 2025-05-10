@@ -17,6 +17,7 @@ export const registerGetCommitMessage: RegisterToolType = ({
   });
 
   tool({
+    capability: "git",
     name: "generate_commit_message",
     description: "Generate standardized commit message",
     schema,

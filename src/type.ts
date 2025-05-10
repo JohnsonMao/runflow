@@ -26,7 +26,14 @@ export interface IResult {
   reset(): IResult;
 }
 
+type ToolCapabilityType = "git";
+
+export type ProgramOptionsType = {
+  capability?: ToolCapabilityType;
+};
+
 export type ToolProps<T extends z.ZodRawShape = z.ZodRawShape> = {
+  capability: ToolCapabilityType;
   name: string;
   description: string;
   schema?: z.ZodObject<T>;
@@ -47,4 +54,5 @@ export type RegisterToolsPropsType = {
   server: McpServer;
   context: IContext;
   result: IResult;
+  options: ProgramOptionsType;
 };

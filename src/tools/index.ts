@@ -11,14 +11,20 @@ export default function registerTools({
   server,
   context,
   result,
+  options,
 }: RegisterToolsPropsType) {
+  const capabilities = options.capability?.split(",");
+
   Object.values(tools).forEach((registerTool) => {
     const tool = <T extends z.ZodRawShape = z.ZodRawShape>({
+      capability,
       name,
       description,
       schema,
       handler,
     }: ToolProps<T>) => {
+      if (capabilities && !capabilities.includes(capability)) return;
+
       server.tool.call(
         server,
         name,
