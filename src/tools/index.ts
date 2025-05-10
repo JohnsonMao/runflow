@@ -1,16 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RegisterToolType } from "./type";
+import type Context from "../context";
 
 import * as getCommitMessage from "./getCommitMessage";
-import * as memoryTools from "./memoryTools";
 
 const tools = {
   ...getCommitMessage,
-  ...memoryTools,
 };
 
-export default function registerTools(server: McpServer) {
+export default function registerTools(server: McpServer, context: Context) {
   Object.values(tools).forEach((registerTool: RegisterToolType) =>
-    registerTool(server.tool.bind(server))
+    registerTool(server.tool.bind(server), context)
   );
 }

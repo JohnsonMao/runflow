@@ -3,14 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-/**
- * 創建用戶數據目錄
- * @param browserName 瀏覽器名稱
- * @returns 用戶數據目錄路徑
- */
-async function createUserDataDir(
-  browserName: "chromium" | "firefox" | "webkit"
-) {
+async function createUserDataDir() {
   let cacheDirectory: string;
   if (process.platform === "linux")
     cacheDirectory =
@@ -24,7 +17,7 @@ async function createUserDataDir(
   const result = path.join(
     cacheDirectory,
     "ms-playwright",
-    `mcp-${browserName}-profile`
+    `mcp-chromium-profile`
   );
   await fs.promises.mkdir(result, { recursive: true });
   return result;
@@ -35,18 +28,16 @@ export async function injectScript(
   script: Parameters<Page["evaluate"]>[0],
   timeout?: number
 ): Promise<ReturnType<Page["evaluate"]>> {
-  // 使用臨時用戶數據目錄，避免與現有 Chrome 進程衝突
-  const userDataDir = await createUserDataDir("chromium");
+  // Use temporary user data directory to avoid conflicts with existing Chrome processes
+  const userDataDir = await createUserDataDir();
 
   try {
-    // 使用臨時用戶數據目錄啟動 Chrome 瀏覽器
     const browser = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
       executablePath: getChromePath(),
       args: ["--disable-blink-features=AutomationControlled"],
     });
 
-    // 導航到目標網站
     const page = await browser.newPage();
     await page.goto(targetUrl);
 
@@ -58,7 +49,6 @@ export async function injectScript(
   }
 }
 
-// 根據作業系統獲取 Chrome 可執行檔路徑
 function getChromePath(): string {
   switch (process.platform) {
     case "darwin":

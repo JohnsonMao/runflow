@@ -2,17 +2,26 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import registerTools from "./tools";
+import Context from "./context";
 
-const packageJson = require("../package.json");
+async function main() {
+  const packageJson = require("../package.json");
 
-// Create an MCP server
-const server = new McpServer({
-  name: packageJson.name,
-  version: packageJson.version,
+  const server = new McpServer({
+    name: packageJson.name,
+    version: packageJson.version,
+  });
+
+  const context = new Context();
+
+  registerTools(server, context);
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("Weather MCP Server running on stdio");
+}
+
+main().catch((error) => {
+  console.error("Fatal error in main():", error);
+  process.exit(1);
 });
-
-registerTools(server);
-
-// Start receiving messages on stdin and sending messages on stdout
-const transport = new StdioServerTransport();
-(async () => await server.connect(transport))();
