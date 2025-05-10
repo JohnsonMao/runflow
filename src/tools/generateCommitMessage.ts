@@ -3,10 +3,10 @@ import { z } from "zod";
 import { RegisterToolType } from "./type";
 import { getMdFile } from "../utils/getMdFile";
 import {
-  createErrorResponse,
-  createSuccessResponse,
+  createErrorResult,
+  createSuccessResult,
   createTextContent,
-} from "../utils/responseUtils";
+} from "../utils/resultUtils";
 import { execCommand } from "../utils/execCommand";
 
 export const registerGetCommitMessage: RegisterToolType = (tool) => {
@@ -40,12 +40,12 @@ export const registerGetCommitMessage: RegisterToolType = (tool) => {
         result += "```";
         result += "Generate commit message:";
 
-        return createSuccessResponse(
+        return createSuccessResult(
           createTextContent(mdFileContent),
           createTextContent(result)
         );
       } catch (error) {
-        return createErrorResponse(error);
+        return createErrorResult(error);
       }
     }
   );

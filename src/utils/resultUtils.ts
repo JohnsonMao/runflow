@@ -6,28 +6,33 @@ export function createTextContent(text: string): CallToolResultContent {
   return { type: "text", text };
 }
 
-export function createTextResponse(text: string): CallToolResult {
-  return { content: [createTextContent(text)] };
+export function createResult(
+  content: CallToolResultContent[],
+  isError: boolean = false
+): CallToolResult {
+  return { content, isError };
 }
 
-export function createSuccessResponse(
+export function createSuccessResult(
   ...content: CallToolResultContent[]
 ): CallToolResult {
-  return { content };
+  return createResult(content);
 }
 
-export function createErrorResponse(error: unknown): CallToolResult {
+export function createErrorResult(error: unknown): CallToolResult {
   const text = error instanceof Error ? error.message : String(error);
 
-  return {
-    content: [{ type: "text", text }],
-    isError: true,
-  };
+  return createResult([createTextContent(text)], true);
+}
+
+export function createTextResult(text: string): CallToolResult {
+  return createSuccessResult(createTextContent(text));
 }
 
 export function formatPrettyJsonString(data: any): string {
-  let stringified = "```json\n";
+  let stringified = "";
 
+  stringified += "```json\n";
   stringified += JSON.stringify(data, null, 2);
   stringified += "\n```";
 
