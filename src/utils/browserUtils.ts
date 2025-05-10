@@ -3,17 +3,34 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+function getCacheDirectory(): string {
+  switch (process.platform) {
+    case "linux":
+      return process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
+    case "darwin":
+      return path.join(os.homedir(), "Library", "Caches");
+    case "win32":
+      return (
+        process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local")
+      );
+    default:
+      throw new Error("Unsupported platform: " + process.platform);
+  }
+}
+
+function getChromePath(): string {
+  switch (process.platform) {
+    case "darwin":
+      return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    case "win32":
+      return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+    default:
+      return "/usr/bin/google-chrome";
+  }
+}
+
 async function createUserDataDir() {
-  let cacheDirectory: string;
-  if (process.platform === "linux")
-    cacheDirectory =
-      process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
-  else if (process.platform === "darwin")
-    cacheDirectory = path.join(os.homedir(), "Library", "Caches");
-  else if (process.platform === "win32")
-    cacheDirectory =
-      process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-  else throw new Error("Unsupported platform: " + process.platform);
+  const cacheDirectory = getCacheDirectory();
   const result = path.join(
     cacheDirectory,
     "ms-playwright",
@@ -46,16 +63,5 @@ export async function injectScript(
     return page.evaluate(script);
   } catch (error) {
     throw error;
-  }
-}
-
-function getChromePath(): string {
-  switch (process.platform) {
-    case "darwin":
-      return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-    case "win32":
-      return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-    default:
-      return "/usr/bin/google-chrome";
   }
 }
