@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 
-export function getMdFile(fileName: string) {
+type MDFileNameType = `${string}.md` | `${string}.mdx` | `${string}.markdown`;
+
+export function getMdFile(fileName: MDFileNameType) {
   try {
     const absolutePath = path.resolve(
       __dirname,
@@ -11,8 +13,8 @@ export function getMdFile(fileName: string) {
       "md",
       fileName
     );
-    return fs.readFileSync(absolutePath, "utf-8");
-  } catch {
-    throw new Error(`No such file or directory: ${fileName}`);
+    return fs.promises.readFile(absolutePath, "utf-8");
+  } catch (error) {
+    throw new Error(`No such file or directory: ${fileName}\nerror: ${error}`);
   }
 }
