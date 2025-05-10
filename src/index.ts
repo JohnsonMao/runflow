@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import registerTools from "./tools";
 import Context from "./context";
+import Result from "./result";
 
 async function main() {
   const packageJson = require("../package.json");
@@ -13,12 +14,13 @@ async function main() {
   });
 
   const context = new Context();
+  const result = new Result([], false);
 
-  registerTools(server, context);
+  registerTools(server, context, result);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Weather MCP Server running on stdio");
+  console.log("Frontend AI MCP Server running on stdio");
 }
 
 main().catch((error) => {

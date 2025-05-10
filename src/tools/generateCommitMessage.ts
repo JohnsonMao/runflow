@@ -2,29 +2,26 @@ import { z } from "zod";
 
 import { RegisterToolType } from "./type";
 import { getMdFile } from "../utils/getMdFile";
-import {
-  createErrorResult,
-  createSuccessResult,
-  createTextContent,
-} from "../utils/resultUtils";
 import { execCommand } from "../utils/execCommand";
 
-export const registerGetCommitMessage: RegisterToolType = (tool) => {
-  const schema = {
+export const registerGetCommitMessage: RegisterToolType = ({
+  tool,
+  result,
+}) => {
+  const schema = z.object({
     workingDirectory: z
       .string()
       .describe(
         "The absolute path of the project root directory, for example: /Users/yourname/projects/yourproject"
       ),
-  };
+  });
 
-  tool(
-    "generate_commit_message",
-    "Generate standardized commit message",
+  tool({
+    name: "generate_commit_message",
+    description: "Generate standardized commit message",
     schema,
-    async (args) => {
+    handler: async ({ workingDirectory }) => {
       try {
-        const { workingDirectory } = z.object(schema).parse(args);
         const mdFileContent = await getMdFile("git-commit-message.md");
         const gitDiff = await execCommand(
           "git",
@@ -32,21 +29,18 @@ export const registerGetCommitMessage: RegisterToolType = (tool) => {
           workingDirectory
         );
 
-        let result = "";
+        let gitDiffResult = "";
 
-        result += "Here is the result of `git diff --staged`:";
-        result += "```diff";
-        result += gitDiff;
-        result += "```";
-        result += "Generate commit message:";
+        gitDiffResult += "Here is the result of `git diff --staged`:";
+        gitDiffResult += "```diff";
+        gitDiffResult += gitDiff;
+        gitDiffResult += "```";
+        gitDiffResult += "Generate commit message:";
 
-        return createSuccessResult(
-          createTextContent(mdFileContent),
-          createTextContent(result)
-        );
+        return result.addText(mdFileContent).addText(gitDiffResult);
       } catch (error) {
-        return createErrorResult(error);
+        return result.addError(error);
       }
-    }
-  );
+    },
+  });
 };
