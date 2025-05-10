@@ -1,20 +1,17 @@
 import z from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ToolProps } from "./type";
-import type Context from "../context";
-import type Result from "../result";
+import type { RegisterToolsPropsType, ToolProps } from "../type";
 
-import * as generateCommitMessage from "./generateCommitMessage";
+import * as gitTools from "./git";
 
 const tools = {
-  ...generateCommitMessage,
+  ...gitTools,
 };
 
-export default function registerTools(
-  server: McpServer,
-  context: Context,
-  result: Result
-) {
+export default function registerTools({
+  server,
+  context,
+  result,
+}: RegisterToolsPropsType) {
   Object.values(tools).forEach((registerTool) => {
     const tool = <T extends z.ZodRawShape = z.ZodRawShape>({
       name,

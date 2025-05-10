@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import registerTools from "./tools";
 import Context from "./context";
 import Result from "./result";
+import { ProgramOptionsType } from "./type";
 
 async function main() {
   const packageJson = require("../package.json");
@@ -16,7 +17,7 @@ async function main() {
   const context = new Context();
   const result = new Result([], false);
 
-  registerTools(server, context, result);
+  registerTools({ server, context, result });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

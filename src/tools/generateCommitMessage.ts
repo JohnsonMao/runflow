@@ -1,8 +1,8 @@
 import { z } from "zod";
+import type { RegisterToolType } from "../type";
 
-import { RegisterToolType } from "./type";
-import { getMdFile } from "../utils/getMdFile";
 import { execCommand } from "../utils/execCommand";
+import { getMdFile } from "../utils/getMdFile";
 
 export const registerGetCommitMessage: RegisterToolType = ({
   tool,

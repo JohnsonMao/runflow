@@ -1,17 +1,4 @@
-import { CallToolResult } from "@modelcontextprotocol/sdk/types";
-
-export type CallToolResultContent = CallToolResult["content"][number];
-
-interface IResult {
-  content: CallToolResultContent[];
-  isError: boolean;
-  setIsError(isError: boolean): Result;
-  addText(text: string): Result;
-  addImage(data: string, mimeType: string): Result;
-  addError(error: unknown): Result;
-  getResult(): CallToolResult;
-  reset(): Result;
-}
+import { CallToolResultContent, IResult } from "./type";
 
 export default class Result implements IResult {
   public content: CallToolResultContent[];
@@ -22,31 +9,31 @@ export default class Result implements IResult {
     this.isError = isError;
   }
 
-  setIsError(isError: boolean): Result {
+  setIsError(isError: boolean) {
     return new Result(this.content, isError);
   }
 
-  addText(text: string): Result {
+  addText(text: string) {
     return new Result([...this.content, { type: "text", text }], this.isError);
   }
 
-  addImage(data: string, mimeType: string): Result {
+  addImage(data: string, mimeType: string) {
     return new Result(
       [...this.content, { type: "image", data, mimeType }],
       this.isError
     );
   }
 
-  addError(error: unknown): Result {
+  addError(error: unknown) {
     const text = error instanceof Error ? error.message : String(error);
     return new Result([...this.content, { type: "text", text }], true);
   }
 
-  getResult(): CallToolResult {
+  getResult() {
     return { content: this.content, isError: this.isError };
   }
 
-  reset(): Result {
+  reset() {
     return new Result([], false);
   }
 }

@@ -1,13 +1,4 @@
-interface IContext {
-  setItem<T>(key: string, value: T): void;
-  getItem<T>(key: string): T;
-  deleteItem(key: string): void;
-  clear(): void;
-}
-
-interface IContextOptions {
-  cacheDirectory?: string;
-}
+import { IContext, IContextOptions } from "./type";
 
 export default class Context implements IContext {
   private context: Map<string, any>;
@@ -18,19 +9,19 @@ export default class Context implements IContext {
     this.options = options;
   }
 
-  setItem<T>(key: string, value: T): void {
+  setItem<T>(key: string, value: T) {
     this.context.set(key, value);
   }
 
-  getItem<T>(key: string): T {
+  getItem<T>(key: string) {
     return this.context.get(key) as T;
   }
 
-  deleteItem(key: string): void {
+  deleteItem(key: string) {
     this.context.delete(key);
   }
 
-  clear(): void {
+  clear() {
     this.context.clear();
   }
 }
