@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 
 export function execCommand(command: string, args: string[], cwd: string) {
   return new Promise<string>((resolve, reject) => {
+    const commandString = `${command} ${args.join(" ")}`.trim();
     const gitDiffProcess = spawn(command, args, { cwd });
     let output = "";
     let errorOutput = "";
@@ -20,7 +21,7 @@ export function execCommand(command: string, args: string[], cwd: string) {
       } else {
         reject(
           new Error(
-            `git diff --staged process exited with code ${code} in ${cwd}: ${errorOutput}`
+            `${commandString} process exited with code ${code} in ${cwd}: ${errorOutput}`
           )
         );
       }
@@ -29,7 +30,7 @@ export function execCommand(command: string, args: string[], cwd: string) {
     gitDiffProcess.on("error", (err) => {
       reject(
         new Error(
-          `Failed to start git diff --staged process in ${cwd}: ${err.message}`
+          `Failed to start ${commandString} process in ${cwd}: ${err.message}`
         )
       );
     });
