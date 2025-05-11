@@ -3,6 +3,7 @@ import type { RegisterToolType } from "../type";
 
 import { execCommand } from "../utils/execCommand";
 import { getMdFile } from "../utils/getMdFile";
+import { joinLines } from "../utils/joinLines";
 
 export const registerGetCommitMessage: RegisterToolType = ({
   tool,
@@ -12,7 +13,10 @@ export const registerGetCommitMessage: RegisterToolType = ({
     workingDirectory: z
       .string()
       .describe(
-        "The absolute path of the project root directory, for example: /Users/yourname/projects/yourproject"
+        joinLines(
+          "The absolute path of the project root directory,",
+          "for example: /Users/yourname/projects/yourproject"
+        )
       ),
   });
 
@@ -30,13 +34,13 @@ export const registerGetCommitMessage: RegisterToolType = ({
           workingDirectory
         );
 
-        let gitDiffResult = "";
-
-        gitDiffResult += "Here is the result of `git diff --staged`:";
-        gitDiffResult += "```diff";
-        gitDiffResult += gitDiff;
-        gitDiffResult += "```";
-        gitDiffResult += "Generate commit message:";
+        const gitDiffResult = joinLines(
+          "Here is the result of `git diff --staged`:",
+          "```diff",
+          gitDiff,
+          "```",
+          "Generate commit message:"
+        );
 
         return result.addText(mdFileContent).addText(gitDiffResult);
       } catch (error) {
