@@ -24,9 +24,7 @@ export default function registerTools({
       handler,
     }: ToolProps<T>) => {
       if (capabilities && !capabilities.includes(capability)) return;
-
-      server.tool.call(
-        server,
+      server.tool(
         name,
         description,
         schema?.shape ?? {},

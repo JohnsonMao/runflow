@@ -9,7 +9,8 @@
     "copy-public": "shx test -d public && shx cp -r public/* dist/",
     "build": "npm run clean && npm run build-ts && npm run copy-public",
     "prepare": "npm run build",
-    "start": "tsc --watch"
+    "start": "tsc --watch",
+    "inspect": "npx @modelcontextprotocol/inspector node ./cli.js"
   },
   "keywords": [],
   "author": "",
