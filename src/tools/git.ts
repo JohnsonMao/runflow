@@ -5,6 +5,27 @@ import { execCommand } from "../utils/execCommand";
 import { getMdFile } from "../utils/getMdFile";
 import { joinLines } from "../utils/joinLines";
 
+const getGitDiffResult = async (workingDirectory: string) => {
+  const gitStagedDiff = await execCommand(
+    "git diff --staged",
+    workingDirectory
+  );
+
+  const useStaged = !!gitStagedDiff;
+  const diffContent = useStaged
+    ? gitStagedDiff
+    : await execCommand("git diff", workingDirectory);
+  const diffCommand = useStaged ? "git diff --staged" : "git diff";
+
+  return joinLines(
+    `Here is the result of \`${diffCommand}\`:`,
+    "```diff",
+    diffContent,
+    "```",
+    "Generate commit message:"
+  );
+};
+
 export const registerGetCommitMessage: RegisterToolType = ({
   tool,
   result,
@@ -15,7 +36,9 @@ export const registerGetCommitMessage: RegisterToolType = ({
       .describe(
         joinLines(
           "The absolute path of the project root directory,",
-          "for example: /Users/yourname/projects/yourproject"
+          "for example:",
+          "- (Mac/Linux) /Users/username/projects/my-project",
+          "- (Windows) C:\\Users\\username\\projects\\my-project"
         )
       ),
   });
@@ -28,19 +51,7 @@ export const registerGetCommitMessage: RegisterToolType = ({
     handler: async ({ workingDirectory }) => {
       try {
         const mdFileContent = await getMdFile("git-commit-message.md");
-        const gitDiff = await execCommand(
-          "git",
-          ["diff", "--staged"],
-          workingDirectory
-        );
-
-        const gitDiffResult = joinLines(
-          "Here is the result of `git diff --staged`:",
-          "```diff",
-          gitDiff,
-          "```",
-          "Generate commit message:"
-        );
+        const gitDiffResult = await getGitDiffResult(workingDirectory);
 
         return result.addText(mdFileContent).addText(gitDiffResult);
       } catch (error) {
