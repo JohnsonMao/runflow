@@ -3,7 +3,6 @@ import type { RegisterToolType } from "../type";
 
 import { execCommand } from "../utils/execCommand";
 import { getMdFile } from "../utils/getMdFile";
-import { joinLines } from "../utils/joinLines";
 
 const getGitDiffResult = async (workingDirectory: string) => {
   const gitStagedDiff = await execCommand(
@@ -17,13 +16,13 @@ const getGitDiffResult = async (workingDirectory: string) => {
     : await execCommand("git diff", workingDirectory);
   const diffCommand = useStaged ? "git diff --staged" : "git diff";
 
-  return joinLines(
+  return [
     `Here is the result of \`${diffCommand}\`:`,
     "```diff",
     diffContent,
     "```",
-    "Generate commit message:"
-  );
+    "Generate commit message:",
+  ].join("\n");
 };
 
 export const registerGetCommitMessage: RegisterToolType = ({
@@ -33,14 +32,7 @@ export const registerGetCommitMessage: RegisterToolType = ({
   const schema = z.object({
     workingDirectory: z
       .string()
-      .describe(
-        joinLines(
-          "The absolute path of the project root directory,",
-          "for example:",
-          "- (Mac/Linux) /Users/username/projects/my-project",
-          "- (Windows) C:\\Users\\username\\projects\\my-project"
-        )
-      ),
+      .describe("The absolute path of the project root directory"),
   });
 
   tool({
