@@ -13,11 +13,15 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+    "lint:fix": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
-    "type-check": {
+    "ts:check": {
       "dependsOn": ["^build"]
     },
     "clean": {
