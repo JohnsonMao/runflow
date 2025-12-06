@@ -39,8 +39,9 @@ For detailed documentation, see [packages/mcp/README.md](./packages/mcp/README.m
 
 Currently completed basic MCP Server with:
 
-- ✅ Tools (Tools) - `greet` and `echo`
+- ✅ Tools (Tools) - `greet`, `echo`, and `generate-image`
 - ✅ Resources (Resources) - `bricks://info`
+- ✅ Prompts (Prompts) - `greeting-prompt`
 - ✅ Standard MCP protocol connection support
 
 Next steps:

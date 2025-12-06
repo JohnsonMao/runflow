@@ -3,17 +3,23 @@
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "bricks": "./dist/index.js"
+    "bricks": "./dist/stdio.js"
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "rimraf dist && tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js",
+    "build": "tsc",
+    "dev": "tsx watch src/http.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "ts:check": "tsc --noEmit",
@@ -25,8 +31,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "@types/express": "catalog:",
     "@types/node": "catalog:",
     "rimraf": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:"
   }
 }

@@ -16,9 +16,33 @@ pnpm build
 
 ## Run
 
+### Stdio Mode (Default)
+
 ```bash
 pnpm start
+# or
+bricks stdio
 ```
+
+### HTTP Mode
+
+Start the server in HTTP mode for development:
+
+```bash
+pnpm dev
+# or directly run
+tsx src/http.ts
+```
+
+You can configure the server using environment variables:
+
+```bash
+MCP_PORT=3000 MCP_HOST=0.0.0.0 MCP_PATH=/mcp pnpm dev
+```
+
+The server will be available at:
+- MCP endpoint: `http://localhost:3000/mcp`
+- Health check: `http://localhost:3000/health`
 
 ## Development Mode
 
@@ -26,7 +50,34 @@ pnpm start
 pnpm dev
 ```
 
+## Transport Modes
+
+This MCP server supports two transport modes:
+
+1. **Stdio Mode** (default): Uses standard input/output for communication
+   - Suitable for local development and integration with MCP clients
+   - Used by Cursor, Claude Desktop, and other MCP clients
+
+2. **HTTP Mode**: Uses Streamable HTTP protocol
+   - Suitable for remote access and web integration
+   - Supports stateless request handling
+   - Can be accessed via HTTP clients
+
 ## Connection Methods
+
+### Connect via HTTP (for development/testing)
+
+You can connect to the HTTP server using any HTTP client:
+
+```bash
+# Health check
+curl http://localhost:3000/health
+
+# MCP request (example)
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
 
 ### Connect in Cursor
 
@@ -130,8 +181,25 @@ Echo back the input text
 Parameters:
 - `message` (string, required): The message to echo back
 
+### generate-image
+Generate a simple SVG image based on text description, returns base64 encoded
+
+Parameters:
+- `text` (string, required): The text to display in the image
+- `width` (number, optional): Image width (default: 400)
+- `height` (number, optional): Image height (default: 200)
+
 ## Available Resources
 
 ### bricks://info
 Basic information about Bricks MCP Server
+
+## Available Prompts
+
+### greeting-prompt
+Generate a personalized greeting message
+
+Parameters:
+- `name` (string, required): The user's name
+- `timeOfDay` (enum, optional): Time of day - "morning", "afternoon", or "evening"
 
