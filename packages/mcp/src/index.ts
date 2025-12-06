@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
+import logger from "./logger.js";
 
 /**
  * Bricks MCP Server
@@ -175,10 +176,10 @@ server.registerResource(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Bricks MCP Server 已啟動");
+  logger.info("Bricks MCP Server started");
 }
 
 main().catch((error) => {
-  console.error("Server 啟動失敗:", error);
+  logger.error("Server started failed:", error);
   process.exit(1);
 });
