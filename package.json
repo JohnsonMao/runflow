@@ -10,7 +10,7 @@
     "lint:fix": "turbo run lint:fix",
     "test": "turbo run test",
     "ts:check": "turbo run ts:check",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rimraf node_modules"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "rimraf": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:"
   }
