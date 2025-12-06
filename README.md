@@ -1,6 +1,6 @@
-# MCP Bricks
+# Bricks
 
-一個可以組合多個 MCP 的 MCP，也可以獨立運行的模組化 MCP 編排器。
+一個可以組合多個 MCP 的 MCP 編排器，整合了 Server 和 Client 功能，也可以獨立運行的模組化工作流平台。
 
 ## 快速開始
 
@@ -29,18 +29,18 @@ pnpm dev
 
 ## Packages
 
-### @mcp-bricks/server
+### @bricks/mcp
 
-基本的 MCP Server，提供工具和資源功能。
+基本的 MCP Server，整合了 Server 和 Client 功能，提供工具和資源功能。
 
-詳細說明請參考 [packages/server/README.md](./packages/server/README.md)
+詳細說明請參考 [packages/mcp/README.md](./packages/mcp/README.md)
 
 ## MVP 目標
 
 目前已完成基本的 MCP Server，可以：
 
 - ✅ 提供工具 (Tools) - `greet` 和 `echo`
-- ✅ 提供資源 (Resources) - `mcp-bricks://info`
+- ✅ 提供資源 (Resources) - `bricks://info`
 - ✅ 支援標準 MCP 協議連接
 
 下一步計劃：

@@ -9,9 +9,6 @@ catalogs:
     '@biomejs/biome':
       specifier: 2.3.5
       version: 2.3.5
-    '@modelcontextprotocol/sdk':
-      specifier: ^1.24.3
-      version: 1.24.3
     '@types/node':
       specifier: ^22.19.1
       version: 22.19.1
@@ -39,10 +36,10 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
-  packages/server:
+  packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: 'catalog:'
+        specifier: ^1.24.3
         version: 1.24.3(zod@4.1.13)
       zod:
         specifier: 'catalog:'

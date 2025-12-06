@@ -1,9 +1,16 @@
 {
-  "name": "@mcp-bricks/server",
+  "name": "@bricks/mcp",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "bricks": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -14,7 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "catalog:",
+    "@modelcontextprotocol/sdk": "^1.24.3",
     "zod": "catalog:"
   },
   "devDependencies": {

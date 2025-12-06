@@ -1,5 +1,5 @@
 {
-  "name": "mcp-bricks",
+  "name": "bricks",
   "version": "0.1.0",
   "private": true,
   "description": "Workflow automation platform similar to n8n with YAML workflow definitions, MCP integration, and custom node support",
