@@ -21,6 +21,8 @@ pnpm build
 ```bash
 pnpm start
 # or
+bricks
+# or explicitly
 bricks stdio
 ```
 
@@ -31,17 +33,30 @@ Start the server in HTTP mode for development:
 ```bash
 pnpm dev
 # or directly run
-tsx src/http.ts
+bricks http
 ```
 
-You can configure the server using environment variables:
+You can configure the server using command-line options:
 
 ```bash
-MCP_PORT=3000 MCP_HOST=0.0.0.0 MCP_PATH=/mcp pnpm dev
+# Basic usage
+bricks http
+
+# Custom port and host
+bricks http --port 3000 --host 0.0.0.0
+
+# Custom path
+bricks http --path /mcp
+
+# Security options
+bricks http --allowed-hosts localhost,127.0.0.1 --unguessable-url
+
+# All options
+bricks http --port 3000 --host 0.0.0.0 --path /mcp --allowed-hosts localhost --unguessable-url
 ```
 
 The server will be available at:
-- MCP endpoint: `http://localhost:3000/mcp`
+- MCP endpoint: `http://localhost:3000/mcp` (or custom path)
 - Health check: `http://localhost:3000/health`
 
 ## Development Mode
@@ -127,12 +142,25 @@ npm install -g @bricks/mcp
 
 #### Method 3: Local development (Direct path specification)
 
+**On Linux/macOS:**
 ```json
 {
   "mcpServers": {
     "bricks": {
       "command": "node",
-      "args": ["/path/to/bricks/packages/mcp/dist/index.js"]
+      "args": ["/path/to/bricks/packages/mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+**On Windows:**
+```json
+{
+  "mcpServers": {
+    "bricks": {
+      "command": "node",
+      "args": ["C:\\path\\to\\bricks\\packages\\mcp\\dist\\cli.js"]
     }
   }
 }
@@ -140,7 +168,11 @@ npm install -g @bricks/mcp
 
 ### Connect in Claude Desktop
 
-Add to Claude Desktop's configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json`):
+**On macOS:**
+Configuration file: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**On Windows:**
+Configuration file: `%APPDATA%\Claude\claude_desktop_config.json`
 
 **Using npx:**
 

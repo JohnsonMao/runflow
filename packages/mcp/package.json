@@ -11,7 +11,7 @@
     }
   },
   "bin": {
-    "bricks": "./dist/stdio.js"
+    "bricks": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/http.ts",
+    "dev": "tsx watch src/cli.ts http",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "ts:check": "tsc --noEmit",
@@ -27,11 +27,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.3",
+    "commander": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
-    "@types/express": "catalog:",
     "@types/node": "catalog:",
     "rimraf": "catalog:",
     "tsx": "catalog:",

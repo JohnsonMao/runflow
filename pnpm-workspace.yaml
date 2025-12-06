@@ -3,8 +3,8 @@ packages:
 
 catalog:
   '@biomejs/biome': 2.3.8
-  '@types/express': ^5.0.6
   '@types/node': ^22.19.1
+  commander: ^14.0.2
   rimraf: ^6.1.2
   turbo: ^2.6.3
   tsx: ^4.21.0
