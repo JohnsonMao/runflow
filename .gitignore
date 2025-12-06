@@ -58,3 +58,4 @@ coverage/
 .cursor/
 .specstory/
 .cursorindexingignore
+.cursorrules

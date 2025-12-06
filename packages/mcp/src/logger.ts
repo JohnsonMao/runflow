@@ -34,9 +34,7 @@ class McpLogger implements Logger {
   }
 
   private formatMessage(level: LogLevel, message: string): string {
-    const timestamp = this.enableTimestamp 
-      ? `[${new Date().toISOString()}] ` 
-      : "";
+    const timestamp = this.enableTimestamp ? `[${new Date().toISOString()}] ` : "";
     const levelTag = `[${level.toUpperCase()}]`;
     return `${timestamp}${levelTag} ${message}`;
   }
@@ -67,8 +65,6 @@ class McpLogger implements Logger {
 }
 
 /**
- * MCP Logger utility
- * 
  * All logs are output to stderr because MCP Server uses stdout for JSON-RPC communication.
  */
 const logger = McpLogger.getInstance();
@@ -76,4 +72,3 @@ const logger = McpLogger.getInstance();
 export default logger;
 
 export type { Logger, LogLevel };
-

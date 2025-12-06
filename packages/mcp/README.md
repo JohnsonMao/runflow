@@ -1,38 +1,38 @@
 # Bricks MCP
 
-一個可以組合多個 MCP 的 MCP Server，整合了 Server 和 Client 功能，也可以獨立運行。
+A composable MCP Server that integrates Server and Client capabilities, can also run independently.
 
-## 安裝
+## Installation
 
 ```bash
 pnpm install
 ```
 
-## 建置
+## Build
 
 ```bash
 pnpm build
 ```
 
-## 執行
+## Run
 
 ```bash
 pnpm start
 ```
 
-## 開發模式
+## Development Mode
 
 ```bash
 pnpm dev
 ```
 
-## 連接方式
+## Connection Methods
 
-### 在 Cursor 中連接
+### Connect in Cursor
 
-#### 方式 1：使用 npx（推薦，適合開發）
+#### Method 1: Using npx (Recommended for development)
 
-在 Cursor 的設定檔（例如 `~/.cursor/mcp.json`）中加入：
+Add to Cursor's configuration file (e.g., `~/.cursor/mcp.json`):
 
 ```json
 {
@@ -45,17 +45,17 @@ pnpm dev
 }
 ```
 
-**優點：**
-- ✅ 不需要全域安裝
-- ✅ 自動使用最新版本
-- ✅ 適合開發和測試
+**Advantages:**
+- ✅ No global installation required
+- ✅ Automatically uses the latest version
+- ✅ Suitable for development and testing
 
-#### 方式 2：全域安裝後使用（適合生產）
+#### Method 2: Use after global installation (Suitable for production)
 
 ```bash
-# 安裝
+# Install
 pnpm add -g @bricks/mcp
-# 或
+# or
 npm install -g @bricks/mcp
 ```
 
@@ -69,12 +69,12 @@ npm install -g @bricks/mcp
 }
 ```
 
-**優點：**
-- ✅ 執行速度快
-- ✅ 版本穩定
-- ✅ 適合生產環境
+**Advantages:**
+- ✅ Fast execution
+- ✅ Stable version
+- ✅ Suitable for production environment
 
-#### 方式 3：本地開發（直接指定路徑）
+#### Method 3: Local development (Direct path specification)
 
 ```json
 {
@@ -87,11 +87,11 @@ npm install -g @bricks/mcp
 }
 ```
 
-### 在 Claude Desktop 中連接
+### Connect in Claude Desktop
 
-在 Claude Desktop 的設定檔（例如 `~/Library/Application Support/Claude/claude_desktop_config.json`）中加入：
+Add to Claude Desktop's configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
-**使用 npx：**
+**Using npx:**
 
 ```json
 {
@@ -104,7 +104,7 @@ npm install -g @bricks/mcp
 }
 ```
 
-**或全域安裝後：**
+**Or after global installation:**
 
 ```json
 {
@@ -116,22 +116,22 @@ npm install -g @bricks/mcp
 }
 ```
 
-## 可用工具
+## Available Tools
 
 ### greet
-向使用者打招呼
+Greet the user
 
-參數：
-- `name` (string, 必填): 使用者的名稱
+Parameters:
+- `name` (string, required): The user's name
 
 ### echo
-回傳輸入的文字
+Echo back the input text
 
-參數：
-- `message` (string, 必填): 要回傳的訊息
+Parameters:
+- `message` (string, required): The message to echo back
 
-## 可用資源
+## Available Resources
 
 ### bricks://info
-Bricks MCP Server 的基本資訊
+Basic information about Bricks MCP Server
 

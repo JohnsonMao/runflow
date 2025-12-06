@@ -1,27 +1,27 @@
 # Bricks
 
-一個可以組合多個 MCP 的 MCP 編排器，整合了 Server 和 Client 功能，也可以獨立運行的模組化工作流平台。
+A composable MCP orchestrator that integrates Server and Client capabilities, a modular workflow platform that can also run independently.
 
-## 快速開始
+## Quick Start
 
-### 環境需求
+### Requirements
 
 - Node.js >= 20.0.0
 - pnpm >= 8.0.0
 
-### 安裝依賴
+### Install Dependencies
 
 ```bash
 pnpm install
 ```
 
-### 建置專案
+### Build Project
 
 ```bash
 pnpm build
 ```
 
-### 開發模式
+### Development Mode
 
 ```bash
 pnpm dev
@@ -31,19 +31,19 @@ pnpm dev
 
 ### @bricks/mcp
 
-基本的 MCP Server，整合了 Server 和 Client 功能，提供工具和資源功能。
+Basic MCP Server that integrates Server and Client capabilities, providing tools and resources functionality.
 
-詳細說明請參考 [packages/mcp/README.md](./packages/mcp/README.md)
+For detailed documentation, see [packages/mcp/README.md](./packages/mcp/README.md)
 
-## MVP 目標
+## MVP Goals
 
-目前已完成基本的 MCP Server，可以：
+Currently completed basic MCP Server with:
 
-- ✅ 提供工具 (Tools) - `greet` 和 `echo`
-- ✅ 提供資源 (Resources) - `bricks://info`
-- ✅ 支援標準 MCP 協議連接
+- ✅ Tools (Tools) - `greet` and `echo`
+- ✅ Resources (Resources) - `bricks://info`
+- ✅ Standard MCP protocol connection support
 
-下一步計劃：
-- [ ] 支援組合多個 MCP Server
-- [ ] 工作流編排功能
-- [ ] YAML 工作流定義
+Next steps:
+- [ ] Support for composing multiple MCP Servers
+- [ ] Workflow orchestration functionality
+- [ ] YAML workflow definitions
