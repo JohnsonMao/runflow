@@ -2,19 +2,21 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
 import type net from "node:net";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { McpConfigType } from "../utils";
 import { logger } from "../utils";
-import { createMcpServerInstance } from "./factory";
 
 export interface IHttpServerOptions {
+  server: McpServer;
   port: number;
   host?: string;
   path?: string;
   allowedHosts?: string[];
   unguessableUrl?: boolean;
-  config?: McpConfigType;
+  onShutdown?: () => Promise<void>;
 }
+
+const localhost = ["localhost", "127.0.0.1", "0.0.0.0", "[::]", "[::1]"];
 
 function httpAddressToString(address: string | net.AddressInfo | null): string {
   if (!address) {
@@ -25,7 +27,7 @@ function httpAddressToString(address: string | net.AddressInfo | null): string {
   }
   const resolvedPort = address.port;
   let resolvedHost = address.family === "IPv4" ? address.address : `[${address.address}]`;
-  if (resolvedHost === "0.0.0.0" || resolvedHost === "[::]") {
+  if (localhost.includes(resolvedHost)) {
     resolvedHost = "localhost";
   }
   return `http://${resolvedHost}:${resolvedPort}`;
@@ -49,45 +51,45 @@ function decorateServer(server: net.Server): void {
 }
 
 export async function startHttpServer(options: IHttpServerOptions): Promise<http.Server> {
-  const { port, host = "0.0.0.0", path, allowedHosts, unguessableUrl = false, config } = options;
+  const {
+    server,
+    port,
+    host = "0.0.0.0",
+    path,
+    allowedHosts,
+    unguessableUrl = false,
+    onShutdown,
+  } = options;
 
   const pathPrefix = unguessableUrl ? `/${crypto.randomUUID()}` : "";
-
-  const instance = await createMcpServerInstance({ config });
 
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   const httpServer = http.createServer();
+
   decorateServer(httpServer);
 
   let resolvedAllowedHosts: string[];
   if (allowedHosts) {
     resolvedAllowedHosts = allowedHosts.map((h) => h.toLowerCase());
-  } else if (host === "0.0.0.0" || host === "[::]") {
-    resolvedAllowedHosts = ["localhost", "127.0.0.1", "[::1]"];
+  } else if (localhost.includes(host.toLowerCase())) {
+    resolvedAllowedHosts = localhost;
   } else {
     resolvedAllowedHosts = [host.toLowerCase()];
   }
-  const allowAnyHost = resolvedAllowedHosts.includes("*");
 
   httpServer.on("request", async (req: IncomingMessage, res: ServerResponse) => {
-    if (!allowAnyHost) {
-      const requestHost = req.headers.host?.toLowerCase();
-      if (!requestHost) {
-        res.statusCode = 400;
-        return res.end("Missing host");
-      }
+    const requestHost = req.headers.host?.toLowerCase();
+    if (!requestHost) {
+      res.statusCode = 400;
+      return res.end("Missing host");
+    }
 
-      const requestHostWithoutPort = requestHost.split(":")[0];
-      const isAllowed = resolvedAllowedHosts.some((allowedHost) => {
-        const allowedHostWithoutPort = allowedHost.split(":")[0];
-        return requestHost === allowedHost || requestHostWithoutPort === allowedHostWithoutPort;
-      });
+    const isAllowed = resolvedAllowedHosts.some((allowedHost) => requestHost === allowedHost);
 
-      if (!isAllowed) {
-        res.statusCode = 403;
-        return res.end(`Access is only allowed at ${resolvedAllowedHosts.join(", ")}`);
-      }
+    if (!isAllowed) {
+      res.statusCode = 403;
+      return res.end("Forbidden");
     }
 
     if (!req.url?.startsWith(pathPrefix + path)) {
@@ -117,7 +119,7 @@ export async function startHttpServer(options: IHttpServerOptions): Promise<http
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: async (sessionId) => {
           logger.debug(`create http session: ${sessionId}`);
-          await instance.server.connect(transport);
+          await server.connect(transport);
           sessions.set(sessionId, transport);
         },
       });
@@ -155,9 +157,7 @@ export async function startHttpServer(options: IHttpServerOptions): Promise<http
 
   const shutdown = async () => {
     logger.info("Shutting down HTTP server...");
-    if (instance.clientManager) {
-      await instance.clientManager.disconnectAll();
-    }
+    await onShutdown?.();
     httpServer.close(() => {
       logger.info("HTTP server closed");
       sessions.clear();

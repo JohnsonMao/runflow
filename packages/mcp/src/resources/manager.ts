@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import type { McpClientManager } from "../client";
+import { ClientEvent, type IEventBus } from "../events";
 
 export type IResourceHandler = (clientManager?: McpClientManager) => Promise<ReadResourceResult>;
 
@@ -14,13 +15,19 @@ export class ResourceManager {
   private server: McpServer;
   private registeredResources: Map<string, IResourceHandler> = new Map();
   private clientManager?: McpClientManager;
+  private eventBus: IEventBus;
 
-  constructor(server: McpServer) {
+  constructor(server: McpServer, eventBus: IEventBus, clientManager: McpClientManager) {
     this.server = server;
+    this.eventBus = eventBus;
+    this.clientManager = clientManager;
+    this.setupEventListeners();
   }
 
-  setClientManager(clientManager?: McpClientManager): void {
-    this.clientManager = clientManager;
+  private setupEventListeners(): void {
+    this.eventBus.on(ClientEvent.CONNECTIONS_CHANGED, () => {
+      this.notifyResourceListChanged();
+    });
   }
 
   registerResource(

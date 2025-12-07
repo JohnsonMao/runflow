@@ -1,12 +1,7 @@
+import { ClientEvent, type IEventBus } from "../events";
 import type { McpConfigType } from "../utils";
 import { logger } from "../utils";
 import { createMcpClient, disconnectMcpClient, type IMcpClientConnection } from "./connection";
-
-export interface IConnectionChangeCallback {
-  onConnectionAdded?(name: string): void;
-  onConnectionRemoved?(name: string): void;
-  onConnectionsChanged?(): void;
-}
 
 export interface IServerStatus {
   name: string;
@@ -18,10 +13,10 @@ export class McpClientManager {
   private connections: Map<string, IMcpClientConnection> = new Map();
   private serverStatuses: Map<string, IServerStatus> = new Map();
   private config?: McpConfigType;
-  private changeCallback?: IConnectionChangeCallback;
+  private eventBus: IEventBus;
 
-  constructor(changeCallback?: IConnectionChangeCallback) {
-    this.changeCallback = changeCallback;
+  constructor(eventBus: IEventBus) {
+    this.eventBus = eventBus;
   }
 
   async connectAll(config: McpConfigType): Promise<void> {
@@ -36,7 +31,7 @@ export class McpClientManager {
             name,
             status: "connected",
           });
-          this.changeCallback?.onConnectionAdded?.(name);
+          this.eventBus.emit(ClientEvent.CONNECTION_ADDED, { name });
           return { name, success: true as const };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -64,7 +59,7 @@ export class McpClientManager {
     }
 
     if (successful > 0) {
-      this.changeCallback?.onConnectionsChanged?.();
+      this.eventBus.emit(ClientEvent.CONNECTIONS_CHANGED);
     }
   }
 
@@ -84,11 +79,11 @@ export class McpClientManager {
           status: "disconnected",
         });
       }
-      this.changeCallback?.onConnectionRemoved?.(name);
+      this.eventBus.emit(ClientEvent.CONNECTION_REMOVED, { name });
     }
 
     if (connectionNames.length > 0) {
-      this.changeCallback?.onConnectionsChanged?.();
+      this.eventBus.emit(ClientEvent.CONNECTIONS_CHANGED);
     }
   }
 

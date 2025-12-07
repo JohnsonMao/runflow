@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
 import { Command } from "commander";
 import packageJson from "../package.json";
+import { createMcpInstance } from "./main";
 import { startHttpServer, startStdioServer } from "./server";
 import { loadConfig, logger } from "./utils";
 
@@ -19,17 +19,8 @@ program
   .action(async (options: { config?: string }) => {
     try {
       const config = options.config ? loadConfig(options.config) : undefined;
-      const scriptPath =
-        typeof __filename !== "undefined"
-          ? resolve(__filename)
-          : process.argv[1]
-            ? resolve(process.argv[1])
-            : undefined;
-
-      await startStdioServer({
-        config,
-        scriptPath,
-      });
+      const { server } = createMcpInstance({ config });
+      await startStdioServer({ server });
     } catch (error) {
       logger.error("Server started failed:", error);
       process.exit(1);
@@ -69,13 +60,16 @@ program
 
         const config = options.config ? loadConfig(options.config) : undefined;
 
+        const { server, clientManager } = createMcpInstance({ config });
+
         await startHttpServer({
+          server,
           port,
           host: options.host,
           path: options.path,
           allowedHosts,
           unguessableUrl: options.unguessableUrl,
-          config,
+          onShutdown: () => clientManager.disconnectAll(),
         });
       } catch (error) {
         logger.error("Failed to start HTTP server:", error);
