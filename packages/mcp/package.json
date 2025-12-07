@@ -1,13 +1,12 @@
 {
   "name": "@bricks/mcp",
   "version": "0.1.0",
-  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "require": "./dist/index.js"
     }
   },
   "bin": {
@@ -18,7 +17,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "dev": "tsx watch src/cli.ts http",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

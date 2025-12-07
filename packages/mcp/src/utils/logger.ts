@@ -1,20 +1,20 @@
-interface Logger {
+interface ILogger {
   debug: (message: string, ...args: unknown[]) => void;
   info: (message: string, ...args: unknown[]) => void;
   warn: (message: string, ...args: unknown[]) => void;
   error: (message: string, ...args: unknown[]) => void;
 }
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevelType = "debug" | "info" | "warn" | "error";
 
-class McpLogger implements Logger {
+class McpLogger implements ILogger {
   private static instance: McpLogger | null = null;
-  private readonly logLevel: LogLevel;
+  private readonly logLevel: LogLevelType;
   private readonly enableTimestamp: boolean;
 
   private constructor() {
-    const envLogLevel = (process.env.MCP_LOG_LEVEL?.toLowerCase() || "info") as LogLevel;
-    const validLevels: LogLevel[] = ["debug", "info", "warn", "error"];
+    const envLogLevel = (process.env.MCP_LOG_LEVEL?.toLowerCase() || "info") as LogLevelType;
+    const validLevels: LogLevelType[] = ["debug", "info", "warn", "error"];
     this.logLevel = validLevels.includes(envLogLevel) ? envLogLevel : "info";
     this.enableTimestamp = process.env.MCP_LOG_TIMESTAMP !== "false";
   }
@@ -26,14 +26,14 @@ class McpLogger implements Logger {
     return McpLogger.instance;
   }
 
-  private shouldLog(level: LogLevel): boolean {
-    const levels: LogLevel[] = ["debug", "info", "warn", "error"];
+  private shouldLog(level: LogLevelType): boolean {
+    const levels: LogLevelType[] = ["debug", "info", "warn", "error"];
     const currentLevelIndex = levels.indexOf(this.logLevel);
     const messageLevelIndex = levels.indexOf(level);
     return messageLevelIndex >= currentLevelIndex;
   }
 
-  private formatMessage(level: LogLevel, message: string): string {
+  private formatMessage(level: LogLevelType, message: string): string {
     const timestamp = this.enableTimestamp ? `[${new Date().toISOString()}] ` : "";
     const levelTag = `[${level.toUpperCase()}]`;
     return `${timestamp}${levelTag} ${message}`;
@@ -67,8 +67,6 @@ class McpLogger implements Logger {
 /**
  * All logs are output to stderr because MCP Server uses stdout for JSON-RPC communication.
  */
-const logger = McpLogger.getInstance();
+export const logger = McpLogger.getInstance();
 
-export default logger;
-
-export type { Logger, LogLevel };
+export type { ILogger, LogLevelType };

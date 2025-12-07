@@ -3,15 +3,17 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
 import type net from "node:net";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import logger from "./logger.js";
-import { createMcpServer } from "./mcp-server.js";
+import type { McpConfigType } from "../utils";
+import { logger } from "../utils";
+import { createMcpServerInstance } from "./factory";
 
-interface HttpServerOptions {
+export interface IHttpServerOptions {
   port: number;
   host?: string;
   path?: string;
   allowedHosts?: string[];
   unguessableUrl?: boolean;
+  config?: McpConfigType;
 }
 
 function httpAddressToString(address: string | net.AddressInfo | null): string {
@@ -46,10 +48,13 @@ function decorateServer(server: net.Server): void {
   };
 }
 
-export async function startHttpServer(options: HttpServerOptions): Promise<http.Server> {
-  const { port, host = "0.0.0.0", path, allowedHosts, unguessableUrl = false } = options;
+export async function startHttpServer(options: IHttpServerOptions): Promise<http.Server> {
+  const { port, host = "0.0.0.0", path, allowedHosts, unguessableUrl = false, config } = options;
 
-  const mcpServer = createMcpServer();
+  const pathPrefix = unguessableUrl ? `/${crypto.randomUUID()}` : "";
+
+  const instance = await createMcpServerInstance({ config });
+
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   const httpServer = http.createServer();
@@ -64,7 +69,6 @@ export async function startHttpServer(options: HttpServerOptions): Promise<http.
     resolvedAllowedHosts = [host.toLowerCase()];
   }
   const allowAnyHost = resolvedAllowedHosts.includes("*");
-  const pathPrefix = unguessableUrl ? `/${crypto.randomUUID()}` : "";
 
   httpServer.on("request", async (req: IncomingMessage, res: ServerResponse) => {
     if (!allowAnyHost) {
@@ -75,14 +79,10 @@ export async function startHttpServer(options: HttpServerOptions): Promise<http.
       }
 
       const requestHostWithoutPort = requestHost.split(":")[0];
-      const isAllowed =
-        resolvedAllowedHosts.some((allowedHost) => {
-          const allowedHostWithoutPort = allowedHost.split(":")[0];
-          return (
-            requestHost === allowedHost ||
-            requestHostWithoutPort === allowedHostWithoutPort
-          );
-        });
+      const isAllowed = resolvedAllowedHosts.some((allowedHost) => {
+        const allowedHostWithoutPort = allowedHost.split(":")[0];
+        return requestHost === allowedHost || requestHostWithoutPort === allowedHostWithoutPort;
+      });
 
       if (!isAllowed) {
         res.statusCode = 403;
@@ -117,7 +117,7 @@ export async function startHttpServer(options: HttpServerOptions): Promise<http.
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: async (sessionId) => {
           logger.debug(`create http session: ${sessionId}`);
-          await mcpServer.connect(transport);
+          await instance.server.connect(transport);
           sessions.set(sessionId, transport);
         },
       });
@@ -147,12 +147,17 @@ export async function startHttpServer(options: HttpServerOptions): Promise<http.
   });
 
   const serverUrl = httpAddressToString(httpServer.address());
-  logger.info(`Bricks MCP Server started (HTTP mode)`);
-  logger.info(`Server listening on ${serverUrl}${pathPrefix}${path}`);
+  const fullServerUrl = `${serverUrl}${pathPrefix}${path}`;
+
+  logger.info("Bricks MCP Server started (HTTP mode)");
+  logger.info(`Server listening on ${fullServerUrl}`);
   logger.info(`Health check available at ${serverUrl}/health`);
 
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info("Shutting down HTTP server...");
+    if (instance.clientManager) {
+      await instance.clientManager.disconnectAll();
+    }
     httpServer.close(() => {
       logger.info("HTTP server closed");
       sessions.clear();

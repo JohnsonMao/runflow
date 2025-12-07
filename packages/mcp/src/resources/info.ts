@@ -1,8 +1,8 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import type { ResourceManager } from "./manager";
 
-export const registerInfoResource = (server: McpServer): void => {
-  server.registerResource(
+export const registerInfoResource = (resourceManager: ResourceManager): void => {
+  resourceManager.registerResource(
     "info",
     "bricks://info",
     {

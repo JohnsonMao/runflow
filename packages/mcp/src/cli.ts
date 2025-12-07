@@ -1,25 +1,35 @@
 #!/usr/bin/env node
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { resolve } from "node:path";
 import { Command } from "commander";
-import packageJson from "../package.json" with { type: "json" };
-import { startHttpServer } from "./http-server.js";
-import logger from "./logger.js";
-import { createMcpServer } from "./mcp-server.js";
+import packageJson from "../package.json";
+import { startHttpServer, startStdioServer } from "./server";
+import { loadConfig, logger } from "./utils";
 
 const program = new Command();
 
-program.name("bricks").description("Bricks MCP Server").version(packageJson.version);
-
 program
-  .command("stdio")
-  .description("Start MCP server in stdio mode (default)")
-  .action(async () => {
+  .name("bricks")
+  .description("Bricks MCP Server (default: stdio mode)")
+  .version(packageJson.version)
+  .option(
+    "--config <path>",
+    "Load MCP config file (mcp.json format) to connect to other MCP servers"
+  )
+  .action(async (options: { config?: string }) => {
     try {
-      const server = createMcpServer();
-      const transport = new StdioServerTransport();
-      await server.connect(transport);
-      logger.info("Bricks MCP Server started (stdio mode)");
+      const config = options.config ? loadConfig(options.config) : undefined;
+      const scriptPath =
+        typeof __filename !== "undefined"
+          ? resolve(__filename)
+          : process.argv[1]
+            ? resolve(process.argv[1])
+            : undefined;
+
+      await startStdioServer({
+        config,
+        scriptPath,
+      });
     } catch (error) {
       logger.error("Server started failed:", error);
       process.exit(1);
@@ -34,6 +44,10 @@ program
   .option("--path <path>", "MCP endpoint path", "/mcp")
   .option("--allowed-hosts <hosts>", "Comma-separated list of allowed hosts")
   .option("--unguessable-url", "Generate an unguessable URL path prefix for security", false)
+  .option(
+    "--config <path>",
+    "Load MCP config file (mcp.json format) to connect to other MCP servers"
+  )
   .action(
     async (options: {
       port: string;
@@ -41,6 +55,7 @@ program
       path: string;
       allowedHosts?: string;
       unguessableUrl: boolean;
+      config?: string;
     }) => {
       try {
         const port = parseInt(options.port, 10);
@@ -52,12 +67,15 @@ program
           ? options.allowedHosts.split(",").map((h: string) => h.trim())
           : undefined;
 
+        const config = options.config ? loadConfig(options.config) : undefined;
+
         await startHttpServer({
           port,
           host: options.host,
           path: options.path,
           allowedHosts,
           unguessableUrl: options.unguessableUrl,
+          config,
         });
       } catch (error) {
         logger.error("Failed to start HTTP server:", error);
@@ -66,16 +84,4 @@ program
     }
   );
 
-const args = process.argv.slice(2);
-
-if (args.length === 0) {
-  const server = createMcpServer();
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch((error) => {
-    logger.error("Server started failed:", error);
-    process.exit(1);
-  });
-  logger.info("Bricks MCP Server started (stdio mode)");
-} else {
-  program.parse();
-}
+program.parse();
