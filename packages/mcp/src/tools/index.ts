@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerGreetTool } from "./greet";
+import type { McpClientManager } from "../client";
+import { registerDiscoverTool } from "./discover";
 
-export const registerTools = (server: McpServer): void => {
-  registerGreetTool(server);
+export const registerTools = (server: McpServer, clientManager: McpClientManager): void => {
+  registerDiscoverTool(server, clientManager);
 };

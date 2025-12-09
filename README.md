@@ -39,7 +39,7 @@ For detailed documentation, see [packages/mcp/README.md](./packages/mcp/README.m
 
 Currently completed basic MCP Server with:
 
-- ✅ Tools (Tools) - `greet`, `echo`, and `generate-image`
+- ✅ Tools (Tools) - `discover` (search tools and workflows)
 - ✅ Resources (Resources) - `bricks://info`
 - ✅ Prompts (Prompts) - `greeting-prompt`
 - ✅ Standard MCP protocol connection support
@@ -48,3 +48,4 @@ Next steps:
 - [ ] Support for composing multiple MCP Servers
 - [ ] Workflow orchestration functionality
 - [ ] YAML workflow definitions
+- [ ] Extend `discover` to include workflows

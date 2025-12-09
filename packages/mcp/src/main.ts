@@ -39,7 +39,7 @@ export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServer
       });
   }
 
-  registerTools(server);
+  registerTools(server, clientManager);
   registerResources(server, eventBus, clientManager);
   registerPrompts(server);
 
