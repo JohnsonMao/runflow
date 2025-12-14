@@ -26,14 +26,15 @@ export const registerMcpStatusResource = (resourceManager: ResourceManager): voi
 
       const serverStatuses = currentClientManager.getAllServerStatuses();
 
-      const serversText = serverStatuses.length > 0
-        ? serverStatuses
-            .map((s) => {
-              const statusLine = `- ${s.name}: ${s.status}`;
-              return s.error ? `${statusLine} (${s.error})` : statusLine;
-            })
-            .join("\n")
-        : "(none)";
+      const serversText =
+        serverStatuses.length > 0
+          ? serverStatuses
+              .map((s) => {
+                const statusLine = `- ${s.name}: ${s.status}`;
+                return s.error ? `${statusLine} (${s.error})` : statusLine;
+              })
+              .join("\n")
+          : "(none)";
 
       return {
         contents: [
