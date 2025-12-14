@@ -11,12 +11,13 @@ interface ToolInfo {
 
 interface ServerToolsResult {
   serverName: string;
-  tools: ToolInfo[];
+  tools: Array<ToolInfo & { relevanceScore?: number }>;
 }
 
 interface CapabilityItem {
   serverName: string;
   tool: ToolInfo;
+  relevanceScore?: number;
 }
 
 interface PaginationInfo {
@@ -33,28 +34,128 @@ interface DiscoverArgs {
   offset: number;
 }
 
-const filterToolsByKeyword = (tools: ToolInfo[], keyword: string): ToolInfo[] => {
-  const lowerKeyword = keyword.toLowerCase();
-  return tools.filter(
-    (tool) =>
-      tool.name.toLowerCase().includes(lowerKeyword) ||
-      tool.description?.toLowerCase().includes(lowerKeyword)
-  );
+const tokenizeKeyword = (keyword: string): string[] => {
+  return keyword
+    .toLowerCase()
+    .trim()
+    .split(/[\s,]+/)
+    .filter((token) => token.length > 0);
 };
 
-const flattenServerTools = (results: ServerToolsResult[]): CapabilityItem[] => {
-  const capabilities: CapabilityItem[] = [];
+const calculateRelevanceScore = (tool: ToolInfo, keywords: string[]): number => {
+  const toolName = tool.name.toLowerCase();
+  const toolDescription = (tool.description || "").toLowerCase();
+  let score = 0;
+  let matchedKeywords = 0;
 
-  for (const result of results) {
-    for (const tool of result.tools) {
-      capabilities.push({
-        serverName: result.serverName,
-        tool,
-      });
+  if (keywords.length === 0) return 0;
+
+  const firstKeyword = keywords[0];
+  if (!firstKeyword) return 0;
+
+  for (let i = 0; i < keywords.length; i++) {
+    const keyword = keywords[i];
+    if (!keyword) continue;
+
+    const nameScore = calculateMatchScore(toolName, keyword);
+    const descriptionScore = calculateMatchScore(toolDescription, keyword);
+
+    if (nameScore > 0 || descriptionScore > 0) {
+      matchedKeywords++;
+      const keywordWeight = i === 0 ? 1.5 : 1.0;
+      score += nameScore * 3 * keywordWeight;
+      score += descriptionScore * 1 * keywordWeight;
     }
   }
 
-  return capabilities;
+  if (matchedKeywords === 0) return 0;
+
+  if (toolName.startsWith(firstKeyword)) {
+    score += 10;
+  }
+
+  if (toolDescription.includes(firstKeyword)) {
+    score += 5;
+  }
+
+  const matchRatio = matchedKeywords / keywords.length;
+  const bonusScore = Math.floor(score * matchRatio * 0.3);
+
+  return score + bonusScore;
+};
+
+const calculateMatchScore = (text: string, keyword: string): number => {
+  if (!text || !keyword) return 0;
+
+  const exactMatch = text === keyword;
+  if (exactMatch) return 100;
+
+  const startsWith = text.startsWith(keyword);
+  if (startsWith) return 50;
+
+  const includes = text.includes(keyword);
+  if (includes) return 30;
+
+  const wordBoundaryMatch = new RegExp(
+    `\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    "i"
+  ).test(text);
+  if (wordBoundaryMatch) return 20;
+
+  const fuzzyScore = calculateFuzzyScore(text, keyword);
+  return fuzzyScore;
+};
+
+const calculateFuzzyScore = (text: string, keyword: string): number => {
+  const keywordChars = keyword.split("");
+  let matchedChars = 0;
+  let textIndex = 0;
+
+  for (const char of keywordChars) {
+    const foundIndex = text.indexOf(char, textIndex);
+    if (foundIndex !== -1) {
+      matchedChars++;
+      textIndex = foundIndex + 1;
+    }
+  }
+
+  if (matchedChars === 0) return 0;
+
+  const ratio = matchedChars / keywordChars.length;
+  return Math.floor(ratio * 10);
+};
+
+const filterAndRankToolsByKeyword = (
+  tools: ToolInfo[],
+  keyword: string,
+  minScore: number = 1
+): Array<ToolInfo & { relevanceScore: number }> => {
+  const keywords = tokenizeKeyword(keyword);
+  if (keywords.length === 0) {
+    return [];
+  }
+
+  const scoredTools = tools
+    .map((tool) => ({
+      ...tool,
+      relevanceScore: calculateRelevanceScore(tool, keywords),
+    }))
+    .filter((tool) => tool.relevanceScore >= minScore)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  return scoredTools;
+};
+
+const flattenServerTools = (results: ServerToolsResult[]): CapabilityItem[] => {
+  const items: CapabilityItem[] = results.flatMap((result) =>
+    result.tools.map((tool) => ({
+      serverName: result.serverName,
+      tool,
+      relevanceScore: tool.relevanceScore,
+    }))
+  );
+
+  return items.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
 };
 
 const calculatePagination = (totalFound: number, limit: number, offset: number): PaginationInfo => {
@@ -79,10 +180,80 @@ const formatCapabilityDescription = (description?: string): string => {
   return description.split("\n")[0]?.trim() ?? "";
 };
 
+const extractParametersFromSchema = (inputSchema: unknown): string => {
+  if (!inputSchema || typeof inputSchema !== "object") {
+    return "";
+  }
+
+  const schema = inputSchema as Record<string, unknown>;
+  const properties = schema.properties as Record<string, unknown> | undefined;
+  const required = (schema.required as string[] | undefined) || [];
+
+  if (!properties || Object.keys(properties).length === 0) {
+    return "";
+  }
+
+  const paramDescriptions: string[] = [];
+
+  for (const [paramName, paramSchema] of Object.entries(properties)) {
+    if (typeof paramSchema !== "object" || paramSchema === null) {
+      continue;
+    }
+
+    const param = paramSchema as Record<string, unknown>;
+    const isRequired = required.includes(paramName);
+    const paramType = getParameterType(param);
+    const description = typeof param.description === "string" ? param.description : "";
+    const defaultValue =
+      param.default !== undefined ? ` (default: ${JSON.stringify(param.default)})` : "";
+
+    const requiredMark = isRequired ? "[required] " : "";
+    const paramInfo = description
+      ? `${requiredMark}${paramName}: ${paramType}${defaultValue} - ${description}`
+      : `${requiredMark}${paramName}: ${paramType}${defaultValue}`;
+
+    paramDescriptions.push(paramInfo);
+  }
+
+  if (paramDescriptions.length === 0) {
+    return "";
+  }
+
+  return `\n  Parameters:\n    ${paramDescriptions.join("\n    ")}`;
+};
+
+const getParameterType = (param: Record<string, unknown>): string => {
+  if (param.type) {
+    return String(param.type);
+  }
+  if (Array.isArray(param.anyOf)) {
+    return param.anyOf
+      .map((item: unknown) => {
+        if (typeof item === "object" && item !== null && "type" in item) {
+          return (item as Record<string, unknown>).type;
+        }
+        return "unknown";
+      })
+      .join(" | ");
+  }
+  if (Array.isArray(param.oneOf)) {
+    return param.oneOf
+      .map((item: unknown) => {
+        if (typeof item === "object" && item !== null && "type" in item) {
+          return (item as Record<string, unknown>).type;
+        }
+        return "unknown";
+      })
+      .join(" | ");
+  }
+  return "unknown";
+};
+
 const formatCapabilityItem = (item: CapabilityItem): string => {
   const description = formatCapabilityDescription(item.tool.description);
   const descriptionText = description ? ` - ${description}` : "";
-  return `• ${item.serverName}:${item.tool.name}${descriptionText}`;
+  const parameters = extractParametersFromSchema(item.tool.inputSchema);
+  return `• ${item.serverName}:${item.tool.name}${descriptionText}${parameters}`;
 };
 
 const formatToolsAsText = (
@@ -95,7 +266,7 @@ const formatToolsAsText = (
   const pagination = calculatePagination(allCapabilities.length, limit, offset);
   const paginatedCapabilities = allCapabilities.slice(pagination.startIndex, pagination.endIndex);
 
-  let text = `🔍 Search Results for "${keyword}"\n`;
+  let text = `Search Results for "${keyword}"\n`;
   text += `Found ${pagination.totalFound} capability(ies) | Page ${pagination.currentPage}/${pagination.totalPages} | Showing ${pagination.startIndex + 1}-${pagination.endIndex}\n\n`;
 
   if (paginatedCapabilities.length === 0) {
@@ -132,26 +303,25 @@ const discoverFromConnections = async (
   keyword: string
 ): Promise<ServerToolsResult[]> => {
   const connections = clientManager.getAllConnections();
-  const results: ServerToolsResult[] = [];
 
-  for (const connection of connections) {
+  const queryPromises = connections.map(async (connection) => {
     try {
       const toolsResult = await connection.client.listTools();
       const normalizedTools = toolsResult.tools.map(normalizeToolInfo);
-      const filteredTools = filterToolsByKeyword(normalizedTools, keyword);
+      const filteredTools = filterAndRankToolsByKeyword(normalizedTools, keyword);
 
-      if (filteredTools.length > 0) {
-        results.push({
-          serverName: connection.name,
-          tools: filteredTools,
-        });
-      }
+      return {
+        serverName: connection.name,
+        tools: filteredTools,
+      };
     } catch (error) {
       logger.error(`Error searching capabilities from ${connection.name}:`, error);
+      return null;
     }
-  }
+  });
 
-  return results;
+  const results = await Promise.all(queryPromises);
+  return results.filter((result) => result !== null);
 };
 
 export const registerDiscoverTool = (server: McpServer, clientManager: McpClientManager): void => {
@@ -166,7 +336,9 @@ export const registerDiscoverTool = (server: McpServer, clientManager: McpClient
           .string()
           .min(1)
           .trim()
-          .describe("Keyword to search for capabilities by name or description"),
+          .describe(
+            "Keyword(s) to search for capabilities by name or description. Multiple keywords can be separated by comma or space (e.g., 'read,file' or 'read file')"
+          ),
         limit: z
           .number()
           .int()

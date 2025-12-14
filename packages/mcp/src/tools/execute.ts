@@ -20,7 +20,7 @@ const formatToolResult = (
       content: [
         {
           type: "text",
-          text: `❌ Error executing tool "${toolName}" on server "${serverName}":\n\nTool returned undefined result.`,
+          text: `Error executing tool "${toolName}" on server "${serverName}":\n\nTool returned undefined result.`,
         },
       ],
       isError: true,
@@ -38,7 +38,7 @@ const formatToolResult = (
       content: [
         {
           type: "text",
-          text: `❌ Error executing tool "${toolName}" on server "${serverName}":\n\n${errorText}`,
+          text: `Error executing tool "${toolName}" on server "${serverName}":\n\n${errorText}`,
         },
       ],
       isError: true,
@@ -50,7 +50,7 @@ const formatToolResult = (
       content: [
         {
           type: "text",
-          text: `✅ Tool "${toolName}" executed successfully, but returned no content.`,
+          text: `Tool "${toolName}" executed successfully, but returned no content.`,
         },
       ],
     };
@@ -103,7 +103,7 @@ const executeToolFromConnection = async (
       content: [
         {
           type: "text" as const,
-          text: `❌ Failed to execute tool "${toolName}" on server "${serverName}":\n\n${errorMessage}`,
+          text: `Failed to execute tool "${toolName}" on server "${serverName}":\n\n${errorMessage}`,
         },
       ],
     };
