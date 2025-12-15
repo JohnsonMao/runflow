@@ -48,6 +48,24 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/core:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 'catalog:'
+        version: 2.3.8
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.1
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':

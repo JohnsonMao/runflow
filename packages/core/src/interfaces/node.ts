@@ -1,0 +1,38 @@
+import type { IExecutionContext } from "./context";
+import type { IExpressionEvaluator } from "./evaluator";
+
+export interface INode {
+  id: string;
+  name: string;
+  type: string;
+  parameters: Record<string, unknown>;
+  position?: [number, number];
+  typeVersion?: string;
+  credentials?: {
+    credentialType: {
+      id: string;
+      name: string;
+    };
+  };
+  executeOnce?: boolean;
+  retryOnFail?: boolean;
+  notes?: string;
+  notesInFlow?: boolean;
+}
+
+export interface INodeExecutionResult {
+  json: Record<string, unknown>;
+  error?: Error;
+}
+
+export interface INodeExecutionContext {
+  node: INode;
+  context: IExecutionContext;
+  evaluator: IExpressionEvaluator;
+  input: Array<Record<string, unknown>>;
+}
+
+export interface INodeExecutor {
+  readonly type: string;
+  execute(ctx: INodeExecutionContext): Promise<INodeExecutionResult | INodeExecutionResult[]>;
+}
