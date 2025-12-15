@@ -1,5 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
+import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types";
 import type { McpClientManager } from "../client";
 import { ClientEvent, type IEventBus } from "../events";
 

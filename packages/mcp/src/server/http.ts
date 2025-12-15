@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
 import type net from "node:net";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
 import { logger } from "../utils";
 
 export interface IHttpServerOptions {
