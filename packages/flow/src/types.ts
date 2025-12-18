@@ -87,7 +87,6 @@ export const NodeSchema = z.object({
   type: z.string(),
   position: NodePositionSchema,
   parameters: z.record(z.string(), z.unknown()),
-  typeVersion: z.string().optional(),
   credentials: NodeCredentialsSchema.optional(),
   executeOnce: z.boolean().optional(),
   retryOnFail: z.boolean().optional(),

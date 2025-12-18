@@ -7,7 +7,6 @@ export interface INode {
   type: string;
   parameters: Record<string, unknown>;
   position?: [number, number];
-  typeVersion?: string;
   credentials?: {
     credentialType: {
       id: string;

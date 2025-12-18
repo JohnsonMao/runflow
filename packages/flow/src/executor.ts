@@ -64,7 +64,6 @@ export class FlowExecutor {
           type: node.type,
           parameters: node.parameters,
           position: node.position,
-          typeVersion: node.typeVersion,
         },
         context: this.context,
         evaluator: this.evaluator,
