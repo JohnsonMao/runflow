@@ -25,6 +25,7 @@
     "clean": "rimraf dist tsconfig.tsbuildinfo node_modules"
   },
   "dependencies": {
+    "@bricks/flow": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "commander": "catalog:",
     "zod": "catalog:"

@@ -48,4 +48,4 @@ Next steps:
 - [ ] Support for composing multiple MCP Servers
 - [ ] Workflow orchestration functionality
 - [ ] YAML workflow definitions
-- [ ] Extend `discover` to include workflows
+- [x] Extend `discover` to include workflows

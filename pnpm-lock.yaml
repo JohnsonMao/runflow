@@ -102,6 +102,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@bricks/flow':
+        specifier: workspace:*
+        version: link:../flow
       '@modelcontextprotocol/sdk':
         specifier: ^1.24.3
         version: 1.24.3(zod@4.1.13)

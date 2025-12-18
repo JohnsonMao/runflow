@@ -1,6 +1,22 @@
 import { z } from "zod";
 
+type AnySchema = z.ZodTypeAny;
+type ZodRawShapeCompat = Record<string, AnySchema>;
+
 export const NodePositionSchema = z.tuple([z.number(), z.number()]);
+
+const InputSchemaSchema = z.custom<AnySchema | ZodRawShapeCompat | undefined>((val) => {
+  if (val === undefined) {
+    return true;
+  }
+  if (val === null) {
+    return false;
+  }
+  if (typeof val === "object") {
+    return true;
+  }
+  return false;
+}, "inputSchema must be a Zod schema (AnySchema), a ZodRawShapeCompat object, or undefined");
 
 export const TriggerScheduleRuleSchema = z.object({
   interval: z
@@ -48,7 +64,7 @@ export const TriggerMcpToolSchema = z.object({
   parameters: z.object({
     title: z.string(),
     description: z.string(),
-    inputSchema: z.record(z.string(), z.unknown()),
+    inputSchema: InputSchemaSchema.optional(),
   }),
 });
 

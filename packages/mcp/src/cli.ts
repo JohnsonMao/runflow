@@ -16,10 +16,14 @@ program
     "--config <path>",
     "Load MCP config file (mcp.json format) to connect to other MCP servers"
   )
-  .action(async (options: { config?: string }) => {
+  .option("--flows <path>", "Load flows from directory (YAML files) and register as MCP tools")
+  .action(async (options: { config?: string; flows?: string }) => {
     try {
       const config = options.config ? loadConfig(options.config) : undefined;
-      const { server } = createMcpInstance({ config });
+      const { server } = createMcpInstance({
+        config,
+        flowsPath: options.flows,
+      });
       await startStdioServer({ server });
     } catch (error) {
       logger.error("Server started failed:", error);
@@ -39,6 +43,7 @@ program
     "--config <path>",
     "Load MCP config file (mcp.json format) to connect to other MCP servers"
   )
+  .option("--flows <path>", "Load flows from directory (YAML files) and register as MCP tools")
   .action(
     async (options: {
       port: string;
@@ -47,6 +52,7 @@ program
       allowedHosts?: string;
       unguessableUrl: boolean;
       config?: string;
+      flows?: string;
     }) => {
       try {
         const port = parseInt(options.port, 10);
@@ -60,7 +66,10 @@ program
 
         const config = options.config ? loadConfig(options.config) : undefined;
 
-        const { server, clientManager } = createMcpInstance({ config });
+        const { server, clientManager } = createMcpInstance({
+          config,
+          flowsPath: options.flows,
+        });
 
         await startHttpServer({
           server,

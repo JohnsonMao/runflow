@@ -7,6 +7,7 @@ import { registerResources } from "./resources";
 import { registerTools } from "./tools";
 import type { McpConfigType } from "./utils";
 import { logger } from "./utils";
+import { registerWorkflows } from "./workflow";
 
 export interface IMcpServerInstance {
   server: McpServer;
@@ -15,6 +16,7 @@ export interface IMcpServerInstance {
 
 export interface ICreateMcpServerOptions {
   config?: McpConfigType;
+  flowsPath?: string;
 }
 
 export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServerInstance {
@@ -42,6 +44,10 @@ export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServer
   registerTools(server, clientManager);
   registerResources(server, clientManager, eventBus);
   registerPrompts(server);
+  registerWorkflows(server, {
+    flowsPath: options?.flowsPath,
+    clientManager,
+  });
 
   return {
     server,

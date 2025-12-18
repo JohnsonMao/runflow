@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import z from "zod";
 import type { McpClientManager } from "../client";
 import { logger } from "../utils";
+import { getRegisteredFlows } from "../workflow";
 
 interface ToolInfo {
   name: string;
@@ -253,7 +254,10 @@ const formatCapabilityItem = (item: CapabilityItem): string => {
   const description = formatCapabilityDescription(item.tool.description);
   const descriptionText = description ? ` - ${description}` : "";
   const parameters = extractParametersFromSchema(item.tool.inputSchema);
-  return `• ${item.serverName}:${item.tool.name}${descriptionText}${parameters}`;
+  const isFlow = item.tool.name.startsWith("flow:");
+  const typeLabel = isFlow ? " [flow]" : "";
+  const serverPrefix = item.serverName ? `${item.serverName}:` : "";
+  return `• ${serverPrefix}${item.tool.name}${typeLabel}${descriptionText}${parameters}`;
 };
 
 const formatToolsAsText = (
@@ -303,6 +307,7 @@ const discoverFromConnections = async (
   keyword: string
 ): Promise<ServerToolsResult[]> => {
   const connections = clientManager.getAllConnections();
+  const results: ServerToolsResult[] = [];
 
   const queryPromises = connections.map(async (connection) => {
     try {
@@ -320,8 +325,26 @@ const discoverFromConnections = async (
     }
   });
 
-  const results = await Promise.all(queryPromises);
-  return results.filter((result) => result !== null);
+  const connectionResults = await Promise.all(queryPromises);
+  results.push(...connectionResults.filter((result) => result !== null));
+
+  const registeredFlows = getRegisteredFlows();
+  if (registeredFlows.length > 0) {
+    const flowTools = registeredFlows.map((registeredFlow) => ({
+      name: registeredFlow.toolName,
+      description: registeredFlow.description,
+      inputSchema: registeredFlow.inputSchema,
+    }));
+    const filteredFlows = filterAndRankToolsByKeyword(flowTools, keyword);
+    if (filteredFlows.length > 0) {
+      results.push({
+        serverName: "",
+        tools: filteredFlows,
+      });
+    }
+  }
+
+  return results;
 };
 
 export const registerDiscoverTool = (server: McpServer, clientManager: McpClientManager): void => {
