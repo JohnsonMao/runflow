@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import z from "zod";
 import type { McpClientManager } from "../client";
 import { logger } from "../utils";
+import { executeFlow, getFlowRegistry } from "../workflow";
 
 interface ExecuteArgs {
   serverName: string;
@@ -65,6 +66,17 @@ const executeToolFromConnection = async (
   toolName: string,
   args: Record<string, unknown>
 ) => {
+  if (!serverName || serverName.trim() === "") {
+    const registeredFlow = getFlowRegistry().getByToolName(toolName);
+    if (registeredFlow) {
+      return await executeFlow(registeredFlow.flow, args, clientManager);
+    }
+
+    throw new Error(
+      `Flow "${toolName}" not found. Use discover tool to find available flows.`
+    );
+  }
+
   const connection = clientManager.getConnection(serverName);
 
   if (!connection) {
@@ -116,14 +128,14 @@ export const registerExecuteTool = (server: McpServer, clientManager: McpClientM
     {
       title: "Execute",
       description:
-        "Execute a tool (workflow) from a connected MCP Client Server. Requires server name, tool name, and tool arguments.",
+        "Execute a tool from a connected MCP Client Server or a local workflow. Leave serverName empty to execute a local flow.",
       inputSchema: {
         serverName: z
           .string()
-          .min(1)
           .trim()
-          .describe("Name of the MCP server where the tool is located"),
-        toolName: z.string().min(1).trim().describe("Name of the tool to execute"),
+          .default("")
+          .describe("Name of the MCP server where the tool is located. Leave empty to execute a local flow."),
+        toolName: z.string().min(1).trim().describe("Name of the tool or flow to execute"),
         arguments: z
           .record(z.string(), z.unknown())
           .default({})

@@ -1,5 +1,4 @@
 import {
-  convertJsonSchemaToZod,
   createFlowLoader,
   createNodeRegistry,
   type Flow,
@@ -53,8 +52,7 @@ class FlowRegistry {
   }
 
   getByFlowId(flowId: string): RegisteredFlow | undefined {
-    const toolName = `flow:${flowId}`;
-    return this.flows.get(toolName);
+    return this.flows.get(flowId);
   }
 }
 
@@ -89,8 +87,8 @@ function isMcpToolTrigger(trigger: unknown): trigger is TriggerMcpTool {
   );
 }
 
-export function registerWorkflows(server: McpServer, options: IWorkflowOptions): void {
-  const { flowsPath, clientManager } = options;
+export function registerWorkflows(_server: McpServer, options: IWorkflowOptions): void {
+  const { flowsPath } = options;
 
   if (!flowsPath) {
     return;
@@ -119,29 +117,14 @@ export function registerWorkflows(server: McpServer, options: IWorkflowOptions):
             continue;
           }
 
-          const toolName = `flow:${flow.id}`;
+          const toolName = flow.id;
           const title = trigger.parameters.title || flow.name;
           const description = trigger.parameters.description || flow.description || "";
           const jsonSchema = trigger.parameters.inputSchema;
-          const inputSchema = jsonSchema ? convertJsonSchemaToZod(jsonSchema) : undefined;
 
           registry.register(flow, toolName, title, description, jsonSchema);
 
-          server.registerTool(
-            toolName,
-            {
-              title,
-              description,
-              inputSchema,
-            },
-            async (args: unknown) => {
-              const inputArgs =
-                args && typeof args === "object" ? (args as Record<string, unknown>) : {};
-              return await executeFlow(flow, inputArgs, clientManager);
-            }
-          );
-
-          logger.info(`Registered flow "${flow.name}" as tool "${toolName}"`);
+          logger.info(`Loaded flow "${flow.name}" as tool "${toolName}"`);
         }
       })
       .catch((error) => {
@@ -152,7 +135,7 @@ export function registerWorkflows(server: McpServer, options: IWorkflowOptions):
   }
 }
 
-async function executeFlow(
+export async function executeFlow(
   flow: Flow,
   inputArgs: Record<string, unknown>,
   clientManager: McpClientManager
