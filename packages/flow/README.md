@@ -13,9 +13,9 @@ pnpm add @bricks/flow
 ### Loading Flows
 
 ```typescript
-import { createFlowLoader } from "@bricks/flow";
+import { FlowLoader } from "@bricks/flow";
 
-const loader = createFlowLoader("./flows", { recursive: true });
+const loader = new FlowLoader("./flows", { recursive: true });
 const flows = await loader.loadAll();
 ```
 

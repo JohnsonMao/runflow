@@ -92,7 +92,3 @@ export class FlowLoader {
     return files;
   }
 }
-
-export function createFlowLoader(basePath: string, options?: LoadOptions): FlowLoader {
-  return new FlowLoader(basePath, options);
-}

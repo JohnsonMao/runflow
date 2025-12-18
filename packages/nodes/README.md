@@ -15,7 +15,7 @@ import { NodeRegistry, BaseNodeExecutor } from "@bricks/nodes";
 import type { INodeExecutionContext, INodeExecutionResult } from "@bricks/core";
 
 // Create a registry
-const registry = createNodeRegistry();
+const registry = new NodeRegistry();
 
 // Register custom node executor
 class MyCustomNode extends BaseNodeExecutor {

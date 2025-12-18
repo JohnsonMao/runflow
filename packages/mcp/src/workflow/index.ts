@@ -1,9 +1,9 @@
 import {
-  createFlowLoader,
-  createNodeRegistry,
   type Flow,
   FlowExecutor,
+  FlowLoader,
   McpToolNodeExecutor,
+  NodeRegistry,
   type TriggerMcpTool,
 } from "@bricks/flow";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -97,7 +97,7 @@ export function registerWorkflows(_server: McpServer, options: IWorkflowOptions)
   const registry = getFlowRegistry();
 
   try {
-    const loader = createFlowLoader(flowsPath, {
+    const loader = new FlowLoader(flowsPath, {
       recursive: false,
       extensions: [".yaml", ".yml"],
     });
@@ -143,7 +143,7 @@ export async function executeFlow(
   try {
     logger.info(`Executing flow "${flow.name}" (${flow.id})`);
 
-    const nodeRegistry = createNodeRegistry();
+    const nodeRegistry = new NodeRegistry();
     nodeRegistry.register(
       "mcpTool",
       new McpToolNodeExecutor({

@@ -72,9 +72,7 @@ const executeToolFromConnection = async (
       return await executeFlow(registeredFlow.flow, args, clientManager);
     }
 
-    throw new Error(
-      `Flow "${toolName}" not found. Use discover tool to find available flows.`
-    );
+    throw new Error(`Flow "${toolName}" not found. Use discover tool to find available flows.`);
   }
 
   const connection = clientManager.getConnection(serverName);
@@ -134,7 +132,9 @@ export const registerExecuteTool = (server: McpServer, clientManager: McpClientM
           .string()
           .trim()
           .default("")
-          .describe("Name of the MCP server where the tool is located. Leave empty to execute a local flow."),
+          .describe(
+            "Name of the MCP server where the tool is located. Leave empty to execute a local flow."
+          ),
         toolName: z.string().min(1).trim().describe("Name of the tool or flow to execute"),
         arguments: z
           .record(z.string(), z.unknown())

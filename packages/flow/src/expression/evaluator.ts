@@ -163,7 +163,3 @@ export class ExpressionEvaluator implements IExpressionEvaluator {
     return String(value);
   }
 }
-
-export function createExpressionEvaluator(options?: EvaluationOptions): ExpressionEvaluator {
-  return new ExpressionEvaluator(options);
-}

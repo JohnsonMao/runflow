@@ -28,7 +28,3 @@ export class NodeRegistry {
     this.register("if", new IfNodeExecutor());
   }
 }
-
-export function createNodeRegistry(): NodeRegistry {
-  return new NodeRegistry();
-}
