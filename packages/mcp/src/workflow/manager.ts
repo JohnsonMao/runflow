@@ -1,5 +1,11 @@
 import type { Flow } from "@bricks/flow";
-import { FlowExecutor, FlowLoader, McpToolNodeExecutor, NodeRegistry, type TriggerMcpTool } from "@bricks/flow";
+import {
+  FlowExecutor,
+  FlowLoader,
+  McpToolNodeExecutor,
+  NodeRegistry,
+  type TriggerMcpTool,
+} from "@bricks/flow";
 import type { McpClientManager } from "../client";
 import { logger } from "../utils";
 
@@ -100,7 +106,10 @@ export class WorkflowManager {
     }
   }
 
-  async execute(toolName: string, inputArgs: Record<string, unknown>): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  async execute(
+    toolName: string,
+    inputArgs: Record<string, unknown>
+  ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
     const registeredFlow = this.getFlowByToolName(toolName);
     if (!registeredFlow) {
       throw new Error(`Flow "${toolName}" not found`);

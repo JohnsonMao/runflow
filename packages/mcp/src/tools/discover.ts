@@ -260,12 +260,14 @@ const formatCapabilityItem = (item: CapabilityItem): string => {
   return `• ${serverPrefix}${item.tool.name}${typeLabel}${descriptionText}${parameters}`;
 };
 
-const formatToolsAsText = (
-  results: ServerToolsResult[],
-  keyword: string,
-  limit: number,
-  offset: number
-): string => {
+interface FormatToolsOptions {
+  keyword: string;
+  limit: number;
+  offset: number;
+}
+
+const formatToolsAsText = (results: ServerToolsResult[], options: FormatToolsOptions): string => {
+  const { keyword, limit, offset } = options;
   const allCapabilities = flattenServerTools(results);
   const pagination = calculatePagination(allCapabilities.length, limit, offset);
   const paginatedCapabilities = allCapabilities.slice(pagination.startIndex, pagination.endIndex);
@@ -384,7 +386,11 @@ export const registerDiscoverTool = (
     },
     async (args: DiscoverArgs) => {
       const results = await discoverFromConnections(clientManager, workflowManager, args.keyword);
-      const text = formatToolsAsText(results, args.keyword, args.limit, args.offset);
+      const text = formatToolsAsText(results, {
+        keyword: args.keyword,
+        limit: args.limit,
+        offset: args.offset,
+      });
 
       return {
         content: [

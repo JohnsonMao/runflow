@@ -60,13 +60,19 @@ const formatToolResult = (
   return result;
 };
 
+interface ExecuteToolOptions {
+  serverName: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
 const executeToolFromConnection = async (
   clientManager: McpClientManager,
   workflowManager: WorkflowManager,
-  serverName: string,
-  toolName: string,
-  args: Record<string, unknown>
+  options: ExecuteToolOptions
 ) => {
+  const { serverName, toolName, args } = options;
+
   if (!serverName || serverName.trim() === "") {
     return await workflowManager.execute(toolName, args);
   }
@@ -143,13 +149,11 @@ export const registerExecuteTool = (
       },
     },
     async (args: ExecuteArgs) => {
-      return await executeToolFromConnection(
-        clientManager,
-        workflowManager,
-        args.serverName,
-        args.toolName,
-        args.arguments
-      );
+      return await executeToolFromConnection(clientManager, workflowManager, {
+        serverName: args.serverName,
+        toolName: args.toolName,
+        args: args.arguments,
+      });
     }
   );
 };
