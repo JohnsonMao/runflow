@@ -27,6 +27,7 @@
   "dependencies": {
     "@bricks/flow": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.24.3",
+    "chokidar": "^5.0.0",
     "commander": "catalog:",
     "zod": "catalog:"
   },

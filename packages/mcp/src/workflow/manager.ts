@@ -20,6 +20,7 @@ export interface IRegisteredFlow {
 export interface ICreateWorkflowManagerOptions {
   flowsPath?: string;
   clientManager: McpClientManager;
+  watch?: boolean;
 }
 
 function isMcpToolTrigger(trigger: unknown): trigger is TriggerMcpTool {
@@ -39,6 +40,9 @@ function isMcpToolTrigger(trigger: unknown): trigger is TriggerMcpTool {
 export class WorkflowManager {
   private flows: Map<string, IRegisteredFlow> = new Map();
   private clientManager: McpClientManager;
+  private flowsPath?: string;
+  private watcher?: ReturnType<typeof import("chokidar")["default"]["watch"]>;
+  private reloadDebounceTimer?: NodeJS.Timeout;
 
   constructor(clientManager: McpClientManager) {
     this.clientManager = clientManager;
@@ -60,15 +64,30 @@ export class WorkflowManager {
     return this.flows.get(flowId);
   }
 
-  async load(options: { flowsPath?: string }): Promise<void> {
-    const { flowsPath } = options;
+  async load(options: { flowsPath?: string; watch?: boolean }): Promise<void> {
+    const { flowsPath, watch = false } = options;
 
     if (!flowsPath) {
       return;
     }
 
+    this.flowsPath = flowsPath;
+    await this.reloadFlows();
+
+    if (watch && !this.watcher) {
+      await this.startWatching();
+    }
+  }
+
+  private async reloadFlows(): Promise<void> {
+    if (!this.flowsPath) {
+      return;
+    }
+
     try {
-      const loader = new FlowLoader(flowsPath, {
+      this.flows.clear();
+
+      const loader = new FlowLoader(this.flowsPath, {
         recursive: false,
         extensions: [".yaml", ".yml"],
       });
@@ -102,7 +121,54 @@ export class WorkflowManager {
         logger.info(`Loaded flow "${flow.name}" as tool "${toolName}"`);
       }
     } catch (error) {
-      logger.error("Failed to initialize flow loader:", error);
+      logger.error("Failed to reload flows:", error);
+    }
+  }
+
+  private async startWatching(): Promise<void> {
+    if (!this.flowsPath) {
+      return;
+    }
+
+    const chokidar = await import("chokidar");
+    this.watcher = chokidar.watch(this.flowsPath, {
+      ignored: /(^|[\/\\])\../,
+      persistent: true,
+      ignoreInitial: true,
+    });
+
+    this.watcher.on("all", (event: string, path: string) => {
+      if (event === "add" || event === "change" || event === "unlink") {
+        const ext = path.slice(path.lastIndexOf("."));
+        if (ext === ".yaml" || ext === ".yml") {
+          this.handleFileChange();
+        }
+      }
+    });
+
+    logger.info(`Watching for flow file changes in: ${this.flowsPath}`);
+  }
+
+  private handleFileChange(): void {
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+    }
+
+    this.reloadDebounceTimer = setTimeout(async () => {
+      logger.info("Flow files changed, reloading...");
+      await this.reloadFlows();
+      logger.info("Flows reloaded successfully");
+    }, 300);
+  }
+
+  dispose(): void {
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+    }
+
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = undefined;
     }
   }
 
@@ -189,7 +255,7 @@ export class WorkflowManager {
 
   static async create(options: ICreateWorkflowManagerOptions): Promise<WorkflowManager> {
     const manager = new WorkflowManager(options.clientManager);
-    await manager.load({ flowsPath: options.flowsPath });
+    await manager.load({ flowsPath: options.flowsPath, watch: options.watch });
     return manager;
   }
 }

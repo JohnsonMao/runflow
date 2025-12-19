@@ -13,11 +13,13 @@ import { WorkflowManager } from "./workflow";
 export interface IMcpServerInstance {
   server: McpServer;
   clientManager: McpClientManager;
+  workflowManager: WorkflowManager;
 }
 
 export interface ICreateMcpServerOptions {
   config?: McpConfigType;
   workspacePath?: string;
+  watch?: boolean;
 }
 
 function resolveWorkspacePath(workspacePath: string, subPath: string): string {
@@ -43,6 +45,7 @@ export async function createMcpInstance(
   const workflowManager = await WorkflowManager.create({
     flowsPath,
     clientManager,
+    watch: options?.watch,
   });
 
   const registeredFlows = workflowManager.getAllFlows();
@@ -66,5 +69,6 @@ export async function createMcpInstance(
   return {
     server,
     clientManager,
+    workflowManager,
   };
 }

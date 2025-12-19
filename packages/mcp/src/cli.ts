@@ -20,13 +20,26 @@ program
     "--workspace <path>",
     "Load workspace directory containing flows, tools, prompts, resources, and nodes subdirectories"
   )
-  .action(async (options: { config?: string; workspace?: string }) => {
+  .option(
+    "--watch",
+    "Enable file watching and hot reload for workspace flow files"
+  )
+  .action(async (options: { config?: string; workspace?: string; watch?: boolean }) => {
     try {
       const config = options.config ? loadConfig(options.config) : undefined;
-      const { server } = await createMcpInstance({
+      const { server, workflowManager } = await createMcpInstance({
         config,
         workspacePath: options.workspace,
+        watch: options.watch,
       });
+
+      const shutdown = () => {
+        workflowManager.dispose();
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
       await startStdioServer({ server });
     } catch (error) {
       logger.error("Server started failed:", error);
@@ -50,6 +63,10 @@ program
     "--workspace <path>",
     "Load workspace directory containing flows, tools, prompts, resources, and nodes subdirectories"
   )
+  .option(
+    "--watch",
+    "Enable file watching and hot reload for workspace flow files"
+  )
   .action(
     async (options: {
       port: string;
@@ -59,6 +76,7 @@ program
       unguessableUrl: boolean;
       config?: string;
       workspace?: string;
+      watch?: boolean;
     }) => {
       try {
         const globalOptions = program.opts();
@@ -78,9 +96,11 @@ program
             ? loadConfig((options.config || globalOptions.config)!)
             : undefined;
 
-        const { server, clientManager } = await createMcpInstance({
+        const globalWatch = globalOptions.watch as boolean | undefined;
+        const { server, clientManager, workflowManager } = await createMcpInstance({
           config,
           workspacePath,
+          watch: options.watch || globalWatch,
         });
 
         await startHttpServer({
@@ -90,7 +110,10 @@ program
           path: options.path,
           allowedHosts,
           unguessableUrl: options.unguessableUrl,
-          onShutdown: () => clientManager.disconnectAll(),
+          onShutdown: async () => {
+            workflowManager.dispose();
+            clientManager.disconnectAll();
+          },
         });
       } catch (error) {
         logger.error("Failed to start HTTP server:", error);
