@@ -7,7 +7,7 @@ import { registerResources } from "./resources";
 import { registerTools } from "./tools";
 import type { McpConfigType } from "./utils";
 import { logger } from "./utils";
-import { registerWorkflows } from "./workflow";
+import { WorkflowManager } from "./workflow";
 
 export interface IMcpServerInstance {
   server: McpServer;
@@ -19,7 +19,9 @@ export interface ICreateMcpServerOptions {
   flowsPath?: string;
 }
 
-export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServerInstance {
+export async function createMcpInstance(
+  options?: ICreateMcpServerOptions
+): Promise<IMcpServerInstance> {
   const eventBus = EventBus.getInstance();
 
   const server = new McpServer({
@@ -28,6 +30,10 @@ export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServer
   });
 
   const clientManager = new McpClientManager(eventBus);
+  const workflowManager = await WorkflowManager.create({
+    flowsPath: options?.flowsPath,
+    clientManager,
+  });
 
   if (options?.config) {
     clientManager
@@ -40,14 +46,9 @@ export function createMcpInstance(options?: ICreateMcpServerOptions): IMcpServer
         logger.error("Failed to initialize client connections:", error);
       });
   }
-
-  registerTools(server, clientManager);
+  registerTools(server, clientManager, workflowManager);
   registerResources(server, clientManager, eventBus);
   registerPrompts(server);
-  registerWorkflows(server, {
-    flowsPath: options?.flowsPath,
-    clientManager,
-  });
 
   return {
     server,

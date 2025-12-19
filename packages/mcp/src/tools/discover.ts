@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import z from "zod";
 import type { McpClientManager } from "../client";
 import { logger } from "../utils";
-import { getRegisteredFlows } from "../workflow";
+import type { WorkflowManager } from "../workflow";
 
 interface ToolInfo {
   name: string;
@@ -304,6 +304,7 @@ const normalizeToolInfo = (tool: {
 
 const discoverFromConnections = async (
   clientManager: McpClientManager,
+  workflowManager: WorkflowManager,
   keyword: string
 ): Promise<ServerToolsResult[]> => {
   const connections = clientManager.getAllConnections();
@@ -328,7 +329,7 @@ const discoverFromConnections = async (
   const connectionResults = await Promise.all(queryPromises);
   results.push(...connectionResults.filter((result) => result !== null));
 
-  const registeredFlows = getRegisteredFlows();
+  const registeredFlows = workflowManager.getAllFlows();
   if (registeredFlows.length > 0) {
     const flowTools = registeredFlows.map((registeredFlow) => ({
       name: registeredFlow.toolName,
@@ -347,7 +348,11 @@ const discoverFromConnections = async (
   return results;
 };
 
-export const registerDiscoverTool = (server: McpServer, clientManager: McpClientManager): void => {
+export const registerDiscoverTool = (
+  server: McpServer,
+  clientManager: McpClientManager,
+  workflowManager: WorkflowManager
+): void => {
   server.registerTool(
     "discover",
     {
@@ -378,7 +383,7 @@ export const registerDiscoverTool = (server: McpServer, clientManager: McpClient
       },
     },
     async (args: DiscoverArgs) => {
-      const results = await discoverFromConnections(clientManager, args.keyword);
+      const results = await discoverFromConnections(clientManager, workflowManager, args.keyword);
       const text = formatToolsAsText(results, args.keyword, args.limit, args.offset);
 
       return {

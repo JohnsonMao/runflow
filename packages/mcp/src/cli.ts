@@ -20,7 +20,7 @@ program
   .action(async (options: { config?: string; flows?: string }) => {
     try {
       const config = options.config ? loadConfig(options.config) : undefined;
-      const { server } = createMcpInstance({
+      const { server } = await createMcpInstance({
         config,
         flowsPath: options.flows,
       });
@@ -66,7 +66,7 @@ program
 
         const config = options.config ? loadConfig(options.config) : undefined;
 
-        const { server, clientManager } = createMcpInstance({
+        const { server, clientManager } = await createMcpInstance({
           config,
           flowsPath: options.flows,
         });

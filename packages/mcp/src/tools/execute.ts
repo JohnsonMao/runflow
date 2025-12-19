@@ -3,7 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import z from "zod";
 import type { McpClientManager } from "../client";
 import { logger } from "../utils";
-import { executeFlow, getFlowRegistry } from "../workflow";
+import type { WorkflowManager } from "../workflow";
 
 interface ExecuteArgs {
   serverName: string;
@@ -62,17 +62,13 @@ const formatToolResult = (
 
 const executeToolFromConnection = async (
   clientManager: McpClientManager,
+  workflowManager: WorkflowManager,
   serverName: string,
   toolName: string,
   args: Record<string, unknown>
 ) => {
   if (!serverName || serverName.trim() === "") {
-    const registeredFlow = getFlowRegistry().getByToolName(toolName);
-    if (registeredFlow) {
-      return await executeFlow(registeredFlow.flow, args, clientManager);
-    }
-
-    throw new Error(`Flow "${toolName}" not found. Use discover tool to find available flows.`);
+    return await workflowManager.execute(toolName, args);
   }
 
   const connection = clientManager.getConnection(serverName);
@@ -120,7 +116,11 @@ const executeToolFromConnection = async (
   }
 };
 
-export const registerExecuteTool = (server: McpServer, clientManager: McpClientManager): void => {
+export const registerExecuteTool = (
+  server: McpServer,
+  clientManager: McpClientManager,
+  workflowManager: WorkflowManager
+): void => {
   server.registerTool(
     "execute",
     {
@@ -145,6 +145,7 @@ export const registerExecuteTool = (server: McpServer, clientManager: McpClientM
     async (args: ExecuteArgs) => {
       return await executeToolFromConnection(
         clientManager,
+        workflowManager,
         args.serverName,
         args.toolName,
         args.arguments
