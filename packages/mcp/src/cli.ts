@@ -16,13 +16,16 @@ program
     "--config <path>",
     "Load MCP config file (mcp.json format) to connect to other MCP servers"
   )
-  .option("--flows <path>", "Load flows from directory (YAML files) and register as MCP tools")
-  .action(async (options: { config?: string; flows?: string }) => {
+  .option(
+    "--workspace <path>",
+    "Load workspace directory containing flows, tools, prompts, resources, and nodes subdirectories"
+  )
+  .action(async (options: { config?: string; workspace?: string }) => {
     try {
       const config = options.config ? loadConfig(options.config) : undefined;
       const { server } = await createMcpInstance({
         config,
-        flowsPath: options.flows,
+        workspacePath: options.workspace,
       });
       await startStdioServer({ server });
     } catch (error) {
@@ -43,7 +46,10 @@ program
     "--config <path>",
     "Load MCP config file (mcp.json format) to connect to other MCP servers"
   )
-  .option("--flows <path>", "Load flows from directory (YAML files) and register as MCP tools")
+  .option(
+    "--workspace <path>",
+    "Load workspace directory containing flows, tools, prompts, resources, and nodes subdirectories"
+  )
   .action(
     async (options: {
       port: string;
@@ -52,9 +58,12 @@ program
       allowedHosts?: string;
       unguessableUrl: boolean;
       config?: string;
-      flows?: string;
+      workspace?: string;
     }) => {
       try {
+        const globalOptions = program.opts();
+        const workspacePath = options.workspace || globalOptions.workspace;
+
         const port = parseInt(options.port, 10);
         if (Number.isNaN(port) || port < 1 || port > 65535) {
           throw new Error(`Invalid port: ${options.port}`);
@@ -64,11 +73,14 @@ program
           ? options.allowedHosts.split(",").map((h: string) => h.trim())
           : undefined;
 
-        const config = options.config ? loadConfig(options.config) : undefined;
+        const config =
+          options.config || globalOptions.config
+            ? loadConfig((options.config || globalOptions.config)!)
+            : undefined;
 
         const { server, clientManager } = await createMcpInstance({
           config,
-          flowsPath: options.flows,
+          workspacePath,
         });
 
         await startHttpServer({

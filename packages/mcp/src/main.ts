@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { join, resolve } from "path";
 import packageJson from "../package.json";
 import { McpClientManager } from "./client";
 import { EventBus } from "./events";
@@ -16,7 +17,12 @@ export interface IMcpServerInstance {
 
 export interface ICreateMcpServerOptions {
   config?: McpConfigType;
-  flowsPath?: string;
+  workspacePath?: string;
+}
+
+function resolveWorkspacePath(workspacePath: string, subPath: string): string {
+  const resolvedWorkspace = resolve(workspacePath);
+  return join(resolvedWorkspace, subPath);
 }
 
 export async function createMcpInstance(
@@ -30,10 +36,17 @@ export async function createMcpInstance(
   });
 
   const clientManager = new McpClientManager(eventBus);
+
+  const flowsPath = options?.workspacePath
+    ? resolveWorkspacePath(options.workspacePath, "flows")
+    : undefined;
   const workflowManager = await WorkflowManager.create({
-    flowsPath: options?.flowsPath,
+    flowsPath,
     clientManager,
   });
+
+  const registeredFlows = workflowManager.getAllFlows();
+  logger.info(`Registered ${registeredFlows.length} flow(s) as MCP tools`);
 
   if (options?.config) {
     clientManager
