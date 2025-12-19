@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
 import type net from "node:net";
+import { URL } from "node:url";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { logger } from "../utils";
@@ -17,6 +18,79 @@ export interface IHttpServerOptions {
 }
 
 const localhost = ["localhost", "127.0.0.1", "0.0.0.0", "[::]", "[::1]"];
+
+function extractHostname(host: string): string {
+  try {
+    const url = new URL(`http://${host}`);
+    const hostname = url.hostname;
+    if (hostname.includes(":")) {
+      return `[${hostname}]`;
+    }
+    return hostname;
+  } catch {
+    if (host.startsWith("[")) {
+      const closingBracket = host.indexOf("]");
+      if (closingBracket !== -1) {
+        return host.substring(0, closingBracket + 1);
+      }
+    }
+    const colonIndex = host.indexOf(":");
+    return colonIndex !== -1 ? host.substring(0, colonIndex) : host;
+  }
+}
+
+function getHostnameVariants(hostname: string): string[] {
+  const variants = [hostname];
+  if (hostname.startsWith("[")) {
+    variants.push(hostname.slice(1, -1));
+  } else if (hostname.includes(":")) {
+    variants.push(`[${hostname}]`);
+  }
+  return variants;
+}
+
+function isHostAllowed(requestHost: string, allowedHosts: string[]): boolean {
+  const requestHostname = extractHostname(requestHost);
+  const requestVariants = getHostnameVariants(requestHostname);
+
+  return allowedHosts.some((allowedHost) => {
+    if (requestHost === allowedHost) {
+      return true;
+    }
+    const allowedVariants = getHostnameVariants(allowedHost);
+    return requestVariants.some((variant) => allowedVariants.includes(variant));
+  });
+}
+
+function handleHealthCheck(res: ServerResponse): void {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ status: "ok", service: "bricks-mcp" }));
+}
+
+function createTransport(
+  server: McpServer,
+  sessions: Map<string, StreamableHTTPServerTransport>
+): StreamableHTTPServerTransport {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID(),
+    onsessioninitialized: async (sessionId) => {
+      logger.debug(`create http session: ${sessionId}`);
+      await server.connect(transport);
+      sessions.set(sessionId, transport);
+    },
+  });
+
+  transport.onclose = () => {
+    if (!transport.sessionId) {
+      return;
+    }
+    sessions.delete(transport.sessionId);
+    logger.debug(`delete http session: ${transport.sessionId}`);
+  };
+
+  return transport;
+}
 
 function httpAddressToString(address: string | net.AddressInfo | null): string {
   if (!address) {
@@ -85,18 +159,16 @@ export async function startHttpServer(options: IHttpServerOptions): Promise<http
       return res.end("Missing host");
     }
 
-    const isAllowed = resolvedAllowedHosts.some((allowedHost) => requestHost === allowedHost);
-
-    if (!isAllowed) {
+    if (!isHostAllowed(requestHost, resolvedAllowedHosts)) {
       res.statusCode = 403;
       return res.end("Forbidden");
     }
 
-    if (!req.url?.startsWith(pathPrefix + path)) {
+    const mcpPath = pathPrefix + path;
+    if (!req.url?.startsWith(mcpPath)) {
       if (req.url === "/health") {
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "application/json");
-        return res.end(JSON.stringify({ status: "ok", service: "bricks-mcp" }));
+        handleHealthCheck(res);
+        return;
       }
       res.statusCode = 404;
       return res.end("Not found");
@@ -115,23 +187,7 @@ export async function startHttpServer(options: IHttpServerOptions): Promise<http
     }
 
     if (req.method === "POST") {
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        onsessioninitialized: async (sessionId) => {
-          logger.debug(`create http session: ${sessionId}`);
-          await server.connect(transport);
-          sessions.set(sessionId, transport);
-        },
-      });
-
-      transport.onclose = () => {
-        if (!transport.sessionId) {
-          return;
-        }
-        sessions.delete(transport.sessionId);
-        logger.debug(`delete http session: ${transport.sessionId}`);
-      };
-
+      const transport = createTransport(server, sessions);
       await transport.handleRequest(req, res);
       return;
     }
