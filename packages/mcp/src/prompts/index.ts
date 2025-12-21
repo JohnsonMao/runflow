@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerGreetingPrompt } from "./greeting";
+import { registerCreateFlowPrompt } from "./create-flow";
 
 export const registerPrompts = (server: McpServer): void => {
-  registerGreetingPrompt(server);
+  registerCreateFlowPrompt(server);
 };
