@@ -1,4 +1,4 @@
-import type { INodeExecutionContext, INodeExecutionResult, INodeExecutor } from "@bricks/core";
+import type { INodeExecutionContext, INodeExecutionResult, INodeExecutor } from "./interfaces";
 
 export abstract class BaseNodeExecutor implements INodeExecutor {
   abstract readonly type: string;
@@ -25,3 +25,4 @@ export abstract class BaseNodeExecutor implements INodeExecutor {
     return this.evaluateValue(value, ctx) as T;
   }
 }
+

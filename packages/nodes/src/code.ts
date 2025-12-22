@@ -1,5 +1,5 @@
 import type { INodeExecutionContext, INodeExecutionResult } from "@bricks/core";
-import { BaseNodeExecutor } from "./base";
+import { BaseNodeExecutor } from "@bricks/core";
 
 export class CodeNodeExecutor extends BaseNodeExecutor {
   readonly type = "code";

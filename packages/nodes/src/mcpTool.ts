@@ -1,5 +1,5 @@
 import type { INodeExecutionContext, INodeExecutionResult } from "@bricks/core";
-import { BaseNodeExecutor } from "./base";
+import { BaseNodeExecutor } from "@bricks/core";
 
 export interface McpToolExecutorOptions {
   callTool: (server: string, tool: string, args: Record<string, unknown>) => Promise<unknown>;

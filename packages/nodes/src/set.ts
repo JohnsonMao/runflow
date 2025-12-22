@@ -1,5 +1,5 @@
 import type { INodeExecutionContext, INodeExecutionResult } from "@bricks/core";
-import { BaseNodeExecutor } from "./base";
+import { BaseNodeExecutor } from "@bricks/core";
 
 export class SetNodeExecutor extends BaseNodeExecutor {
   readonly type = "set";

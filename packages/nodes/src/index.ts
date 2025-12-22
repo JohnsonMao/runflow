@@ -1,4 +1,3 @@
-export * from "./base";
 export * from "./code";
 export * from "./if";
 export * from "./mcpTool";
