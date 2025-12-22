@@ -89,13 +89,13 @@ export class FlowExecutor {
       }
 
       if (node.type === "if") {
-        const hasTrueBranch = results.length > 0 && !results[0]?.error;
+        const hasTrueBranch = results.length > 0 && !results[0]?.error && results[0]?.json?.result === true;
         const outputIndex = hasTrueBranch ? 0 : 1;
         const nextNodes = getNextNodes(nodeName, outputIndex);
         for (const nextNodeName of nextNodes) {
           await executeNodeRecursive(
             nextNodeName,
-            hasTrueBranch ? results.map((r) => r.json) : inputData
+            hasTrueBranch ? inputData : inputData
           );
         }
       } else {
@@ -103,7 +103,7 @@ export class FlowExecutor {
         for (const nextNodeName of nextNodes) {
           await executeNodeRecursive(
             nextNodeName,
-            results.map((r) => r.json)
+            results.map((r) => ({ json: r.json }))
           );
         }
       }

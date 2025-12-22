@@ -1,0 +1,93 @@
+id: "test-nodes-flow"
+name: "Test Nodes Flow"
+description: "Simple test flow for set, if, and code nodes"
+version: "1.0.0"
+active: true
+
+triggers:
+  - id: "mcp-tool-trigger-1"
+    name: "MCP Tool Trigger"
+    type: "mcpTool"
+    parameters:
+      title: "Test Nodes Flow"
+      description: "Simple test flow for set, if, and code nodes"
+
+nodes:
+  - id: "set-node-1"
+    name: "Set Variables"
+    type: "set"
+    position: [100, 200]
+    parameters:
+      assignments:
+        assignments:
+          - name: "testValue"
+            type: "string"
+            value: "hello"
+          - name: "numberValue"
+            type: "number"
+            value: 42
+
+  - id: "if-node-1"
+    name: "Check Condition"
+    type: "if"
+    position: [400, 200]
+    parameters:
+      conditions:
+        combinator: "and"
+        conditions:
+          - leftValue: "={{ $json.testValue }}"
+            operator:
+              type: "string"
+              operation: "equals"
+            rightValue: "hell"
+
+  - id: "code-node-1"
+    name: "Execute Code"
+    type: "code"
+    position: [700, 200]
+    parameters:
+      language: "javascript"
+      code: |
+        const value = $input.first().json.testValue;
+        const number = $input.first().json.numberValue;
+        return {
+          json: {
+            message: `Value is ${value}, number is ${number}`,
+            success: true
+          }
+        };
+
+  - id: "code-node-2"
+    name: "Execute Code (False Branch)"
+    type: "code"
+    position: [700, 400]
+    parameters:
+      language: "javascript"
+      code: |
+        const value = $input.first().json.testValue;
+        const number = $input.first().json.numberValue;
+        return {
+          json: {
+            message: `Condition was false! Value is ${value}, number is ${number}`,
+            success: true,
+            branch: "false",
+            executed: true,
+            result: "false-branch-executed"
+          }
+        };
+
+connections:
+  Set Variables:
+    main:
+      - - node: "Check Condition"
+          type: "main"
+          index: 0
+  Check Condition:
+    main:
+      - - node: "Execute Code"
+          type: "main"
+          index: 0
+      - - node: "Execute Code (False Branch)"
+          type: "main"
+          index: 0
+
