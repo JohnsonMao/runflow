@@ -35,29 +35,26 @@ export class McpToolNodeExecutor extends BaseNodeExecutor {
           .map((item) => item.text)
           .join("\n");
 
-        return {
-          json: {
-            result,
-            text,
-            success: true,
-          },
-        };
+        return this.createResult({
+          result,
+          text,
+          success: true,
+        });
       }
 
-      return {
-        json: {
-          result,
-          success: true,
-        },
-      };
+      return this.createResult({
+        result,
+        success: true,
+      });
     } catch (error) {
-      return {
-        json: {
+      return this.createResult(
+        {
           success: false,
           error: error instanceof Error ? error.message : String(error),
         },
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
+        { outputIndex: 0 },
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
   }
 }

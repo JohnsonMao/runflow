@@ -10,7 +10,7 @@ export class SetNodeExecutor extends BaseNodeExecutor {
     }>("assignments", ctx);
 
     if (!assignments || !assignments.assignments) {
-      return { json: {} };
+      return this.createResult({});
     }
 
     const result: Record<string, unknown> = {};
@@ -20,6 +20,6 @@ export class SetNodeExecutor extends BaseNodeExecutor {
       result[assignment.name] = value;
     }
 
-    return { json: result };
+    return this.createResult(result);
   }
 }

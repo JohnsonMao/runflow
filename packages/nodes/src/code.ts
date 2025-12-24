@@ -22,13 +22,14 @@ export class CodeNodeExecutor extends BaseNodeExecutor {
       const result = this.executeJavaScript(code, ctx);
       return result;
     } catch (error) {
-      return {
-        json: {
+      return this.createResult(
+        {
           error: error instanceof Error ? error.message : String(error),
           success: false,
         },
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
+        { outputIndex: 0 },
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
   }
 
@@ -55,16 +56,16 @@ export class CodeNodeExecutor extends BaseNodeExecutor {
     if (Array.isArray(result)) {
       return result.map((item) => {
         if (item && typeof item === "object" && "json" in item) {
-          return { json: item.json as Record<string, unknown> };
+          return this.createResult(item.json as Record<string, unknown>);
         }
-        return { json: { result: item } };
+        return this.createResult({ result: item });
       });
     }
 
     if (result && typeof result === "object" && "json" in result) {
-      return { json: result.json as Record<string, unknown> };
+      return this.createResult(result.json as Record<string, unknown>);
     }
 
-    return { json: { result } };
+    return this.createResult({ result });
   }
 }

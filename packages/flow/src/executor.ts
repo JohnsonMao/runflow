@@ -82,29 +82,21 @@ export class FlowExecutor {
       inputData: Array<Record<string, unknown>>
     ): Promise<void> => {
       const results = await executeNode(nodeName, inputData);
+      const resultsArray = Array.isArray(results) ? results : [results];
 
-      const node = getNodeByName(nodeName);
-      if (!node) {
-        return;
-      }
-
-      if (node.type === "if") {
-        const hasTrueBranch = results.length > 0 && !results[0]?.error && results[0]?.json?.result === true;
-        const outputIndex = hasTrueBranch ? 0 : 1;
-        const nextNodes = getNextNodes(nodeName, outputIndex);
-        for (const nextNodeName of nextNodes) {
-          await executeNodeRecursive(
-            nextNodeName,
-            hasTrueBranch ? inputData : inputData
-          );
+      for (const result of resultsArray) {
+        if (result.error) {
+          continue;
         }
-      } else {
-        const nextNodes = getNextNodes(nodeName, 0);
+
+        const outputIndex = result.routing.outputIndex;
+        const nextNodes = getNextNodes(nodeName, outputIndex);
+
+        const nextInputData =
+          result.routing.inputData ?? resultsArray.map((r) => ({ json: r.json }));
+
         for (const nextNodeName of nextNodes) {
-          await executeNodeRecursive(
-            nextNodeName,
-            results.map((r) => ({ json: r.json }))
-          );
+          await executeNodeRecursive(nextNodeName, nextInputData);
         }
       }
     };

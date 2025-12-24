@@ -1,4 +1,9 @@
-import type { INodeExecutionContext, INodeExecutionResult, INodeExecutor } from "./interfaces";
+import type {
+  INodeExecutionContext,
+  INodeExecutionResult,
+  INodeExecutor,
+  NodeRouting,
+} from "./interfaces";
 
 export abstract class BaseNodeExecutor implements INodeExecutor {
   abstract readonly type: string;
@@ -23,6 +28,21 @@ export abstract class BaseNodeExecutor implements INodeExecutor {
     const params = ctx.node.parameters as Record<string, unknown>;
     const value = params[key] ?? defaultValue;
     return this.evaluateValue(value, ctx) as T;
+  }
+
+  protected createResult(
+    json: Record<string, unknown>,
+    routing?: Partial<NodeRouting>,
+    error?: Error
+  ): INodeExecutionResult {
+    return {
+      json,
+      error,
+      routing: {
+        outputIndex: routing?.outputIndex ?? 0,
+        inputData: routing?.inputData,
+      },
+    };
   }
 }
 

@@ -19,9 +19,15 @@ export interface INode {
   notesInFlow?: boolean;
 }
 
+export interface NodeRouting {
+  outputIndex: number;
+  inputData?: Array<Record<string, unknown>>;
+}
+
 export interface INodeExecutionResult {
   json: Record<string, unknown>;
   error?: Error;
+  routing: NodeRouting;
 }
 
 export interface INodeExecutionContext {

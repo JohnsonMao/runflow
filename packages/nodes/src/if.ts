@@ -15,7 +15,7 @@ export class IfNodeExecutor extends BaseNodeExecutor {
     }>("conditions", ctx);
 
     if (!conditions || !conditions.conditions || conditions.conditions.length === 0) {
-      return { json: { result: false } };
+      return this.createResult({ result: false }, { outputIndex: 1 });
     }
 
     const results = conditions.conditions.map((condition) => {
@@ -31,7 +31,12 @@ export class IfNodeExecutor extends BaseNodeExecutor {
       result = results.some((r) => r === true);
     }
 
-    return { json: { result } };
+    return this.createResult(
+      { result },
+      {
+        outputIndex: result ? 0 : 1,
+      }
+    );
   }
 
   private evaluateCondition(left: unknown, operation: string, right: unknown): boolean {
