@@ -29,6 +29,11 @@ metadata:
 - **Explicit return types**: Declare return types explicitly when possible
 - **Avoid complex inline types**: Extract complex types into dedicated `type` or `interface` declarations
 
+### Control flow and expressions
+
+- **Avoid nested ternary operators**: Prefer `switch`, early returns, or a lookup map for multi-branch choices; keep ternaries to a single level when used
+- **Avoid IIFEs when avoidable**: Prefer named functions or top-level logic; use IIFE only when lexical scope is required and no simpler option fits
+
 ### Comments
 
 - **Avoid unnecessary comments**: Code should be self-explanatory

@@ -1,6 +1,10 @@
 import type { FlowDefinition } from './types'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { run } from './executor'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 describe('run', () => {
   it('dryRun returns success without executing', () => {
@@ -165,5 +169,75 @@ describe('run', () => {
     expect(result.steps[0].outputs).toBeUndefined()
     expect(result.steps[1].outputs).toBeUndefined()
     expect(result.steps[2].outputs).toBeUndefined()
+  })
+
+  it('flow with params declaration: run with valid params passes validation and steps see context', () => {
+    const flow: FlowDefinition = {
+      name: 'decl',
+      params: [{ name: 'a', type: 'string', required: true }],
+      steps: [
+        { id: 'j1', type: 'js', run: 'return { seen: params.a }' },
+      ],
+    }
+    const result = run(flow, { params: { a: 'x' } })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ seen: 'x' })
+  })
+
+  it('run with missing required param: validation fails before any step', () => {
+    const flow: FlowDefinition = {
+      name: 'decl',
+      params: [{ name: 'a', type: 'string', required: true }],
+      steps: [{ id: 's1', type: 'command', run: 'echo hi' }],
+    }
+    const result = run(flow, {})
+    expect(result.success).toBe(false)
+    expect(result.steps).toHaveLength(0)
+    expect(result.error).toBeDefined()
+    expect(result.error).toContain('a')
+  })
+
+  it('command step: template substitution for {{ a }}, {{ obj.b }}, {{ arr[0] }}', () => {
+    const flow: FlowDefinition = {
+      name: 'subst',
+      steps: [
+        {
+          id: 'c1',
+          type: 'command',
+          run: 'echo "{{ a }} {{ obj.b }} {{ arr[0] }}"',
+        },
+      ],
+    }
+    const result = run(flow, {
+      params: { a: 'x', obj: { b: 'y' }, arr: ['z'] },
+    })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].stdout.trim()).toBe('x y z')
+  })
+
+  it('js step with file: loads and runs file, outputs merged into context', () => {
+    const flowFilePath = path.join(__dirname, 'fixtures', 'flow.yaml')
+    const flow: FlowDefinition = {
+      name: 'file-js',
+      steps: [
+        { id: 'j1', type: 'js', run: '', file: 'step.js' },
+      ],
+    }
+    const result = run(flow, { flowFilePath })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ fromFile: true })
+  })
+
+  it('js step with file but no flowFilePath: step fails', () => {
+    const flow: FlowDefinition = {
+      name: 'no-path',
+      steps: [
+        { id: 'j1', type: 'js', run: '', file: 'step.js' },
+      ],
+    }
+    const result = run(flow, {})
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toContain('flowFilePath')
   })
 })

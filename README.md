@@ -38,6 +38,10 @@ Options:
 
 - `--dry-run` – Parse and validate only; do not execute steps.
 - `--verbose` – Print per-step stdout/stderr.
+- `--param <key=value>` – Pass a parameter (repeatable). Merged into initial context.
+- `--params-file <path>` / `-f` – Load params from a JSON file (object). Merged with `--param`; `--param` overrides same keys.
+
+To list parameters declared by a flow: `flow params <file>` (shows name, type, required, default, enum, description).
 
 ## YAML flow format
 
@@ -57,7 +61,10 @@ steps:
 
 - `name` – Flow name (for logs and errors).
 - `steps` – Ordered steps; each has `id`, `type`, and type-specific fields (e.g. `run` for `command`).
-- Supported step type: `command` (runs a shell command).
+- `params` (optional) – Top-level parameter declaration: array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. When present, run-time params are validated (e.g. with Zod) before execution.
+- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process).
+- **Command steps** support template substitution in `run`: `{{ key }}`, `{{ obj.nested }}`, `{{ arr[0] }}`. Object/array values are JSON-stringified; undefined/null → empty string.
+- **JS steps** may use `run: "<inline code>"` or `file: "./script.js"` (path relative to the flow file). Only `.js` is supported; `.ts` is rejected.
 
 ## Scripts
 

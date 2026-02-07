@@ -1,0 +1,9 @@
+name: js-file-flow
+description: JS step loads code from file
+steps:
+  - id: from-file
+    type: js
+    file: ./step.js
+  - id: echo
+    type: command
+    run: echo "Step above ran {{ fromExample }} from file"

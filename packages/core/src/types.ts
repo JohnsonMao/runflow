@@ -1,3 +1,16 @@
+export type ParamType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+
+export interface ParamDeclaration {
+  name: string
+  type: ParamType
+  required?: boolean
+  default?: unknown
+  enum?: unknown[]
+  description?: string
+  schema?: Record<string, ParamDeclaration>
+  items?: ParamDeclaration
+}
+
 export interface FlowStepCommand {
   id: string
   type: 'command'
@@ -8,6 +21,7 @@ export interface FlowStepJs {
   id: string
   type: 'js'
   run: string
+  file?: string
 }
 
 export type FlowStep = FlowStepCommand | FlowStepJs
@@ -15,6 +29,7 @@ export type FlowStep = FlowStepCommand | FlowStepJs
 export interface FlowDefinition {
   name: string
   description?: string
+  params?: ParamDeclaration[]
   steps: FlowStep[]
 }
 
@@ -29,7 +44,8 @@ export interface StepResult {
 
 export interface RunOptions {
   dryRun?: boolean
-  params?: Record<string, string>
+  params?: Record<string, unknown>
+  flowFilePath?: string
 }
 
 export interface RunResult {

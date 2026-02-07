@@ -12,7 +12,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -21,7 +23,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "yaml": "catalog:prod"
+    "yaml": "catalog:prod",
+    "zod": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",

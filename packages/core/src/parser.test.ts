@@ -107,4 +107,64 @@ steps:
 `
     expect(parse(yaml)).toBeNull()
   })
+
+  it('parses flow with top-level params array', () => {
+    const yaml = `
+name: param-flow
+params:
+  - name: who
+    type: string
+    required: true
+  - name: count
+    type: number
+    default: 1
+steps:
+  - id: s1
+    type: command
+    run: echo hi
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.params).toHaveLength(2)
+    expect(flow?.params?.[0]).toMatchObject({ name: 'who', type: 'string', required: true })
+    expect(flow?.params?.[1]).toMatchObject({ name: 'count', type: 'number', default: 1 })
+  })
+
+  it('parses js step with file', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: js1
+    type: js
+    file: ./scripts/step.js
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toEqual({ id: 'js1', type: 'js', run: '', file: './scripts/step.js' })
+  })
+
+  it('returns null when js step has file ending in .ts', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: js1
+    type: js
+    file: ./script.ts
+`
+    expect(parse(yaml)).toBeNull()
+  })
+
+  it('parses js step with both file and run (file wins)', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: js1
+    type: js
+    file: ./step.js
+    run: return 1
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './step.js' })
+  })
 })

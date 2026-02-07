@@ -1,5 +1,6 @@
 // @env node
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import path from 'node:path'
 import { loadFromFile, run } from '@runflow/core'
 import { createCommand } from 'commander'
 
@@ -23,13 +24,32 @@ function parseParamPairs(pairs: string[]): Record<string, string> {
   return params
 }
 
+function loadParamsFile(filePath: string): Record<string, unknown> {
+  try {
+    const content = readFileSync(filePath, 'utf-8')
+    const data = JSON.parse(content)
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      console.error(`Error: params file must be a JSON object: ${filePath}`)
+      process.exit(1)
+    }
+    return data
+  }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`Error: Failed to read params file: ${msg}`)
+    process.exit(1)
+  }
+}
+
 program
   .command('run <file>')
   .description('Execute a flow from a YAML file')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
-  .action((file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[] }) => {
+  .option('--params-file <path>', 'Load params from a JSON file', undefined)
+  .option('-f <path>', 'Short for --params-file', undefined)
+  .action((file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string }) => {
     if (!existsSync(file) || !statSync(file).isFile()) {
       console.error(`Error: File not found or not a regular file: ${file}`)
       process.exit(1)
@@ -39,8 +59,14 @@ program
       console.error('Error: Invalid or unreadable flow file.')
       process.exit(1)
     }
-    const params = options.param?.length ? parseParamPairs(options.param) : undefined
-    const result = run(flow, { dryRun: options.dryRun, params })
+    const paramsPath = options.paramsFile ?? options.f
+    let params: Record<string, unknown> = paramsPath ? loadParamsFile(paramsPath) : {}
+    if (options.param?.length) {
+      const cliParams = parseParamPairs(options.param)
+      params = { ...params, ...cliParams }
+    }
+    const flowFilePath = path.resolve(file)
+    const result = run(flow, { dryRun: options.dryRun, params: Object.keys(params).length ? params : undefined, flowFilePath })
     if (options.verbose) {
       for (const step of result.steps) {
         if (step.stdout)
@@ -52,8 +78,40 @@ program
       }
     }
     if (!result.success) {
+      if (result.error)
+        console.error(`Error: ${result.error}`)
       console.error(`Flow "${result.flowName}" failed.`)
       process.exit(1)
+    }
+  })
+
+program
+  .command('params <file>')
+  .description('List parameters declared by a flow (name, type, required, enum, description)')
+  .action((file: string) => {
+    if (!existsSync(file) || !statSync(file).isFile()) {
+      console.error(`Error: File not found or not a regular file: ${file}`)
+      process.exit(1)
+    }
+    const flow = loadFromFile(file)
+    if (!flow) {
+      console.error('Error: Invalid or unreadable flow file.')
+      process.exit(1)
+    }
+    if (!flow.params?.length) {
+      console.log('No params declared.')
+      return
+    }
+    for (const p of flow.params) {
+      const parts = [
+        `  ${p.name}:`,
+        `    type: ${p.type}`,
+        p.required === true ? '    required: true' : null,
+        p.default !== undefined ? `    default: ${JSON.stringify(p.default)}` : null,
+        p.enum?.length ? `    enum: [${p.enum.map(v => JSON.stringify(v)).join(', ')}]` : null,
+        p.description ? `    description: ${p.description}` : null,
+      ].filter(Boolean)
+      console.log(parts.join('\n'))
     }
   })
 
