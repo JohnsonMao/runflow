@@ -1,0 +1,8 @@
+{
+  "yaml.schemas": {
+    "packages/core/dist/flow.schema.json": [
+      "**/flow.yaml",
+      "**/*-flow.yaml"
+    ]
+  }
+}

@@ -16,8 +16,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && pnpm run generate:schema",
     "dev": "tsup --watch",
+    "generate:schema": "tsx scripts/generate-flow-schema.ts",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -30,7 +31,10 @@
     "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
     "eslint": "catalog:dev",
+    "glob": "catalog:dev",
+    "ts-json-schema-generator": "catalog:dev",
     "tsup": "catalog:dev",
+    "tsx": "catalog:dev",
     "typescript": "catalog:dev",
     "vitest": "catalog:dev"
   }

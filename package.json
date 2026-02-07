@@ -6,6 +6,7 @@
     "build": "turbo run build",
     "check": "turbo run typecheck lint test",
     "dev": "turbo run dev",
+    "generate:schema": "pnpm --filter @runflow/core generate:schema",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint -- --fix",
     "prepare": "npx simple-git-hooks",
