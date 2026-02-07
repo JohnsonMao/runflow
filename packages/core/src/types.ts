@@ -24,7 +24,18 @@ export interface FlowStepJs {
   file?: string
 }
 
-export type FlowStep = FlowStepCommand | FlowStepJs
+export interface FlowStepHttp {
+  id: string
+  type: 'http'
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  output?: string
+  allowErrorStatus?: boolean
+}
+
+export type FlowStep = FlowStepCommand | FlowStepJs | FlowStepHttp
 
 export interface FlowDefinition {
   name: string

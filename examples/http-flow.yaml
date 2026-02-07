@@ -1,0 +1,23 @@
+# 示範：HTTP 步驟、可配置 output、allowErrorStatus
+# 執行：flow run http-flow.yaml
+# 或帶參數：flow run http-flow.yaml --param path=json
+name: http-flow
+description: Flow with http step, optional output key and allowErrorStatus
+params:
+  - name: path
+    type: string
+    default: json
+steps:
+  - id: fetch
+    type: http
+    url: https://httpbin.org/{{ path }}
+    output: api
+  - id: echo
+    type: command
+    run: echo "Status {{ api.statusCode }}"
+  # 若需在 4xx/5xx 時仍取得 response，可設 allowErrorStatus: true
+  # - id: maybeFail
+  #   type: http
+  #   url: https://httpbin.org/status/404
+  #   allowErrorStatus: true
+  #   output: errResp

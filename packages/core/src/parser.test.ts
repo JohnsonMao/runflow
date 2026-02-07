@@ -71,7 +71,7 @@ steps:
     expect(flow?.name).toBe('my-flow')
     expect(flow?.description).toBe('optional')
     expect(flow?.steps).toHaveLength(2)
-    expect(flow?.steps[1].run).toBe('node -e "console.log(1+1)"')
+    expect(flow?.steps[1]).toMatchObject({ type: 'command', run: 'node -e "console.log(1+1)"' })
   })
 
   it('returns null when command step missing run', () => {
@@ -166,5 +166,81 @@ steps:
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './step.js' })
+  })
+
+  it('parses http step with required url', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: fetch
+    type: http
+    url: https://api.example.com/users
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toEqual({ id: 'fetch', type: 'http', url: 'https://api.example.com/users' })
+  })
+
+  it('parses http step with optional method, headers, body, output, allowErrorStatus', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: post
+    type: http
+    url: https://api.example.com/post
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer token
+    body: '{"x":1}'
+    output: apiResult
+    allowErrorStatus: true
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({
+      id: 'post',
+      type: 'http',
+      url: 'https://api.example.com/post',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer token' },
+      body: '{"x":1}',
+      output: 'apiResult',
+      allowErrorStatus: true,
+    })
+  })
+
+  it('returns null when http step missing url', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: fetch
+    type: http
+`
+    expect(parse(yaml)).toBeNull()
+  })
+
+  it('returns null when http step url is not string', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: fetch
+    type: http
+    url: 123
+`
+    expect(parse(yaml)).toBeNull()
+  })
+
+  it('returns null when http step headers value is not string', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: fetch
+    type: http
+    url: https://example.com
+    headers:
+      X-Foo: 42
+`
+    expect(parse(yaml)).toBeNull()
   })
 })

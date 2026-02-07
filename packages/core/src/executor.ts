@@ -11,6 +11,82 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+async function runHttpStep(
+  stepId: string,
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: string | undefined,
+  outputKey: string,
+  allowErrorStatus: boolean,
+): Promise<StepResult> {
+  try {
+    const init: RequestInit = {
+      method: method || 'GET',
+      headers: Object.keys(headers).length ? headers : undefined,
+      body: body !== undefined && body !== '' ? body : undefined,
+    }
+    const response = await fetch(url, init)
+    const statusCode = response.status
+    const headersObj: Record<string, string> = {}
+    response.headers.forEach((value, key) => {
+      headersObj[key] = value
+    })
+    const contentType = response.headers.get('content-type') ?? ''
+    let bodyValue: unknown
+    if (contentType.includes('application/json')) {
+      const text = await response.text()
+      try {
+        bodyValue = text ? JSON.parse(text) : null
+      }
+      catch {
+        bodyValue = text
+      }
+    }
+    else {
+      bodyValue = await response.text()
+    }
+    const responseObject = { statusCode, headers: headersObj, body: bodyValue }
+    const is2xx = statusCode >= 200 && statusCode < 300
+    if (is2xx) {
+      return {
+        stepId,
+        success: true,
+        stdout: '',
+        stderr: '',
+        outputs: { [outputKey]: responseObject },
+      }
+    }
+    if (allowErrorStatus) {
+      return {
+        stepId,
+        success: false,
+        stdout: '',
+        stderr: '',
+        error: `HTTP ${statusCode}`,
+        outputs: { [outputKey]: responseObject },
+      }
+    }
+    return {
+      stepId,
+      success: false,
+      stdout: '',
+      stderr: '',
+      error: `HTTP ${statusCode}`,
+    }
+  }
+  catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return {
+      stepId,
+      success: false,
+      stdout: '',
+      stderr: '',
+      error: message,
+    }
+  }
+}
+
 function runJsStep(stepId: string, code: string, params: Record<string, unknown>): StepResult {
   const out: string[] = []
   const err: string[] = []
@@ -83,7 +159,7 @@ function runCommandStep(stepId: string, run: string): StepResult {
   }
 }
 
-export function run(flow: FlowDefinition, options: RunOptions = {}): RunResult {
+export async function run(flow: FlowDefinition, options: RunOptions = {}): Promise<RunResult> {
   const steps: StepResult[] = []
   let initialParams: Record<string, unknown> = { ...(options.params ?? {}) }
 
@@ -125,6 +201,31 @@ export function run(flow: FlowDefinition, options: RunOptions = {}): RunResult {
       const runCmd = substitute(step.run, context)
       const result = runCommandStep(step.id, runCmd)
       steps.push(result)
+      if (!result.success)
+        success = false
+    }
+    else if (step.type === 'http') {
+      const outputKey = step.output ?? step.id
+      const url = substitute(step.url, context)
+      const method = substitute(step.method ?? 'GET', context)
+      const headers: Record<string, string> = {}
+      if (step.headers) {
+        for (const [k, v] of Object.entries(step.headers))
+          headers[k] = substitute(v, context)
+      }
+      const body = step.body !== undefined ? substitute(step.body, context) : undefined
+      const result = await runHttpStep(
+        step.id,
+        url,
+        method,
+        headers,
+        body,
+        outputKey,
+        step.allowErrorStatus ?? false,
+      )
+      steps.push(result)
+      if (result.outputs && isPlainObject(result.outputs))
+        context = { ...context, ...result.outputs }
       if (!result.success)
         success = false
     }

@@ -62,9 +62,10 @@ steps:
 - `name` – Flow name (for logs and errors).
 - `steps` – Ordered steps; each has `id`, `type`, and type-specific fields (e.g. `run` for `command`).
 - `params` (optional) – Top-level parameter declaration: array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. When present, run-time params are validated (e.g. with Zod) before execution.
-- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process).
+- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process), `http` (sends an HTTP request).
 - **Command steps** support template substitution in `run`: `{{ key }}`, `{{ obj.nested }}`, `{{ arr[0] }}`. Object/array values are JSON-stringified; undefined/null → empty string.
 - **JS steps** may use `run: "<inline code>"` or `file: "./script.js"` (path relative to the flow file). Only `.js` is supported; `.ts` is rejected.
+- **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `output` (context key for the response), `allowErrorStatus` (if true, 4xx/5xx still write response to context). All string fields support `{{ key }}` substitution. Response is `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Example: `examples/http-flow.yaml`.
 
 ## Scripts
 

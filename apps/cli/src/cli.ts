@@ -49,7 +49,7 @@ program
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
-  .action((file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string }) => {
+  .action(async (file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string }) => {
     if (!existsSync(file) || !statSync(file).isFile()) {
       console.error(`Error: File not found or not a regular file: ${file}`)
       process.exit(1)
@@ -66,7 +66,7 @@ program
       params = { ...params, ...cliParams }
     }
     const flowFilePath = path.resolve(file)
-    const result = run(flow, { dryRun: options.dryRun, params: Object.keys(params).length ? params : undefined, flowFilePath })
+    const result = await run(flow, { dryRun: options.dryRun, params: Object.keys(params).length ? params : undefined, flowFilePath })
     if (options.verbose) {
       for (const step of result.steps) {
         if (step.stdout)

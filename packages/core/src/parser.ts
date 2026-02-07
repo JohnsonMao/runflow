@@ -1,6 +1,6 @@
-import type { FlowDefinition, FlowStep, ParamDeclaration } from './types'
+import type { FlowDefinition, FlowStep, FlowStepHttp, ParamDeclaration } from './types'
 import { parse as parseYaml } from 'yaml'
-import { STEP_TYPE_COMMAND, STEP_TYPE_JS } from './constants'
+import { STEP_TYPE_COMMAND, STEP_TYPE_HTTP, STEP_TYPE_JS } from './constants'
 import { isParamType } from './paramsSchema'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,10 +56,22 @@ function parseParams(raw: unknown): ParamDeclaration[] | null {
   return out
 }
 
+function parseHeaders(raw: unknown): Record<string, string> | null {
+  if (!isRecord(raw))
+    return null
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v !== 'string')
+      return null
+    out[k] = v
+  }
+  return out
+}
+
 function parseStep(raw: unknown): FlowStep | null {
   if (!isRecord(raw))
     return null
-  const { id, type, run, file } = raw
+  const { id, type, run, file, url, method, headers, body, output, allowErrorStatus } = raw
   if (typeof id !== 'string' || typeof type !== 'string')
     return null
   if (type === STEP_TYPE_COMMAND) {
@@ -78,6 +90,25 @@ function parseStep(raw: unknown): FlowStep | null {
     if (hasRun)
       return { id, type: 'js', run }
     return null
+  }
+  if (type === STEP_TYPE_HTTP) {
+    if (typeof url !== 'string')
+      return null
+    const step: FlowStepHttp = { id, type: 'http', url }
+    if (typeof method === 'string')
+      step.method = method
+    const parsedHeaders = headers !== undefined ? parseHeaders(headers) : null
+    if (headers !== undefined && parsedHeaders === null)
+      return null
+    if (parsedHeaders)
+      step.headers = parsedHeaders
+    if (typeof body === 'string')
+      step.body = body
+    if (typeof output === 'string')
+      step.output = output
+    if (typeof allowErrorStatus === 'boolean')
+      step.allowErrorStatus = allowErrorStatus
+    return step
   }
   return null
 }
