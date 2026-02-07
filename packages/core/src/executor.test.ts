@@ -1,4 +1,4 @@
-import type { FlowDefinition } from './types'
+import type { FlowDefinition, FlowStep } from './types'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -337,5 +337,106 @@ describe('run', () => {
     const result = await run(flow)
     expect(result.success).toBe(true)
     expect(result.steps[2].outputs).toEqual({ status: 200, hasBody: true })
+  })
+
+  it('unknown step type: returns error result and continues', async () => {
+    const flow: FlowDefinition = {
+      name: 'unknown-type',
+      steps: [
+        { id: 's1', type: 'customType', run: 'echo hi' },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps).toHaveLength(1)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toContain('Unknown step type')
+    expect(result.steps[0].error).toContain('customType')
+  })
+
+  it('handler that throws: executor catches and returns error result', async () => {
+    const flow: FlowDefinition = {
+      name: 'throw-flow',
+      steps: [
+        { id: 's1', type: 'command', run: 'echo ok' },
+        { id: 's2', type: 'willThrow', run: 'x' },
+      ],
+    }
+    const defaultReg = (await import('./registry')).createDefaultRegistry()
+    const registry = {
+      ...defaultReg,
+      willThrow: {
+        run: async () => {
+          throw new Error('handler threw')
+        },
+      },
+    }
+    const result = await run(flow, { registry })
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(true)
+    expect(result.steps[1].success).toBe(false)
+    expect(result.steps[1].error).toContain('handler threw')
+  })
+
+  it('registry merge: default handlers remain when passing custom registry', async () => {
+    const flow: FlowDefinition = {
+      name: 'merged',
+      steps: [
+        { id: 'c1', type: 'command', run: 'echo from-default' },
+        { id: 's1', type: 'custom', payload: 'hi' },
+      ],
+    }
+    const customOnly = {
+      custom: {
+        run: async (step: FlowStep) => ({
+          stepId: step.id,
+          success: true,
+          stdout: '',
+          stderr: '',
+          outputs: { v: (step.payload as string) ?? '' },
+        }),
+      },
+    }
+    const result = await run(flow, { registry: customOnly })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].stdout.trim()).toBe('from-default')
+    expect(result.steps[1].outputs).toEqual({ v: 'hi' })
+  })
+
+  it('handler validate: command step without run fails with validation message', async () => {
+    const flow: FlowDefinition = {
+      name: 'no-run',
+      steps: [
+        { id: 's1', type: 'command' },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps[0].error).toContain('command step requires run')
+  })
+
+  it('custom registry: custom handler is used when passed', async () => {
+    const flow: FlowDefinition = {
+      name: 'custom-reg',
+      steps: [
+        { id: 's1', type: 'custom', payload: 'hello' },
+      ],
+    }
+    const defaultRegistry = (await import('./registry')).createDefaultRegistry()
+    const registry = {
+      ...defaultRegistry,
+      custom: {
+        run: async (step: FlowStep) => ({
+          stepId: step.id,
+          success: true,
+          stdout: '',
+          stderr: '',
+          outputs: { value: (step.payload as string) ?? '' },
+        }),
+      },
+    }
+    const result = await run(flow, { registry })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ value: 'hello' })
   })
 })

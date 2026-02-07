@@ -1,10 +1,6 @@
-# js-step-type Specification
+# js-step-type Delta (add-custom-node-registry)
 
-## Purpose
-
-定義 flow 支援步驟型別 `js`：以字串 `run` 承載 JavaScript，在引擎同 process 內執行，產出與 command 步驟相同的 `StepResult`（success/stdout/stderr），並可與 command 步驟混用。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Flows MUST support steps with type `js` running JavaScript in-process
 

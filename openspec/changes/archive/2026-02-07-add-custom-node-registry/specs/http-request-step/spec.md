@@ -1,10 +1,6 @@
-# http-request-step Specification
+# http-request-step Delta (add-custom-node-registry)
 
-## Purpose
-
-定義 flow 支援步驟型別 `http`：以宣告式欄位（url、method、headers、body）發送 HTTP 請求；所有字串欄位支援與現有 context 一致的模板替換；回應可透過可配置的 output key 寫入 context；並支援 `allowErrorStatus` 以在非 2xx 時仍將 response 寫入 context 供後續步驟使用。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Flows MUST support steps with type `http`
 

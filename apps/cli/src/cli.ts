@@ -1,8 +1,16 @@
 // @env node
+import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
-import { loadFromFile, run } from '@runflow/core'
+import { pathToFileURL } from 'node:url'
+import { createDefaultRegistry, loadFromFile, registerStepHandler, run } from '@runflow/core'
 import { createCommand } from 'commander'
+
+const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js']
+
+interface RunflowConfig {
+  handlers?: Record<string, string>
+}
 
 const program = createCommand()
 
@@ -41,6 +49,59 @@ function loadParamsFile(filePath: string): Record<string, unknown> {
   }
 }
 
+async function loadConfig(configPath: string): Promise<RunflowConfig | null> {
+  if (!existsSync(configPath) || !statSync(configPath).isFile())
+    return null
+  try {
+    const mod = await import(pathToFileURL(configPath).href) as { default?: RunflowConfig }
+    return mod.default ?? null
+  }
+  catch {
+    return null
+  }
+}
+
+function findConfigFile(cwd: string): string | null {
+  for (const name of CONFIG_NAMES) {
+    const p = path.join(cwd, name)
+    if (existsSync(p) && statSync(p).isFile())
+      return p
+  }
+  return null
+}
+
+async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry> {
+  const config = await loadConfig(configPath)
+  const registry = createDefaultRegistry()
+  if (!config?.handlers || typeof config.handlers !== 'object')
+    return registry
+  const configDir = path.dirname(configPath)
+  for (const [type, modulePath] of Object.entries(config.handlers)) {
+    if (typeof modulePath !== 'string')
+      continue
+    const resolved = path.resolve(configDir, modulePath)
+    if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+      console.error(`Error: Handler module not found for type "${type}": ${resolved}`)
+      process.exit(1)
+    }
+    try {
+      const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+      const handler = mod.default
+      if (!handler || typeof handler.run !== 'function') {
+        console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
+        process.exit(1)
+      }
+      registerStepHandler(registry, type, handler)
+    }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`Error: Failed to load handler "${type}": ${msg}`)
+      process.exit(1)
+    }
+  }
+  return registry
+}
+
 program
   .command('run <file>')
   .description('Execute a flow from a YAML file')
@@ -49,7 +110,9 @@ program
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
-  .action(async (file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string }) => {
+  .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
+  .option('--registry <path>', 'Path to a JS/ESM module that exports default (StepRegistry); merged after config handlers', undefined)
+  .action(async (file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
     if (!existsSync(file) || !statSync(file).isFile()) {
       console.error(`Error: File not found or not a regular file: ${file}`)
       process.exit(1)
@@ -66,7 +129,45 @@ program
       params = { ...params, ...cliParams }
     }
     const flowFilePath = path.resolve(file)
-    const result = await run(flow, { dryRun: options.dryRun, params: Object.keys(params).length ? params : undefined, flowFilePath })
+    const cwd = process.cwd()
+    let registry: StepRegistry
+    const configPath = options.config
+      ? path.resolve(cwd, options.config)
+      : findConfigFile(cwd)
+    if (configPath) {
+      registry = await buildRegistryFromConfig(configPath)
+    }
+    else {
+      registry = createDefaultRegistry()
+    }
+    if (options.registry) {
+      const resolved = path.resolve(cwd, options.registry)
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        console.error(`Error: Registry file not found: ${resolved}`)
+        process.exit(1)
+      }
+      try {
+        const mod = await import(pathToFileURL(resolved).href) as { default?: StepRegistry }
+        const extra = mod.default
+        if (extra && typeof extra === 'object') {
+          for (const [type, handler] of Object.entries(extra)) {
+            if (handler && typeof (handler as IStepHandler).run === 'function')
+              registerStepHandler(registry, type, handler as IStepHandler)
+          }
+        }
+      }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`Error: Failed to load registry: ${msg}`)
+        process.exit(1)
+      }
+    }
+    const result = await run(flow, {
+      dryRun: options.dryRun,
+      params: Object.keys(params).length ? params : undefined,
+      flowFilePath,
+      registry,
+    })
     if (options.verbose) {
       for (const step of result.steps) {
         if (step.stdout)

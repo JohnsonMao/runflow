@@ -28,7 +28,7 @@ steps: not-an-array
     expect(parse(yaml)).toBeNull()
   })
 
-  it('returns null when step has invalid type', () => {
+  it('parses step with unknown type as generic step', () => {
     const yaml = `
 name: my-flow
 steps:
@@ -36,7 +36,9 @@ steps:
     type: unknown
     run: echo hi
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'unknown', run: 'echo hi' })
   })
 
   it('parses minimal valid flow', () => {
@@ -74,14 +76,16 @@ steps:
     expect(flow?.steps[1]).toMatchObject({ type: 'command', run: 'node -e "console.log(1+1)"' })
   })
 
-  it('returns null when command step missing run', () => {
+  it('parses command step without run (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
   - id: s1
     type: command
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'command' })
   })
 
   it('parses js step with run string', () => {
@@ -98,14 +102,16 @@ steps:
     expect(flow?.steps[0]).toEqual({ id: 'js1', type: 'js', run: 'return 1 + 1' })
   })
 
-  it('returns null when js step missing run', () => {
+  it('parses js step without run (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
   - id: js1
     type: js
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js' })
   })
 
   it('parses flow with top-level params array', () => {
@@ -140,10 +146,10 @@ steps:
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toEqual({ id: 'js1', type: 'js', run: '', file: './scripts/step.js' })
+    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './scripts/step.js' })
   })
 
-  it('returns null when js step has file ending in .ts', () => {
+  it('parses js step with file ending in .ts (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
@@ -151,7 +157,9 @@ steps:
     type: js
     file: ./script.ts
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './script.ts' })
   })
 
   it('parses js step with both file and run (file wins)', () => {
@@ -210,17 +218,19 @@ steps:
     })
   })
 
-  it('returns null when http step missing url', () => {
+  it('parses http step without url (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
   - id: fetch
     type: http
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http' })
   })
 
-  it('returns null when http step url is not string', () => {
+  it('parses http step with url as number (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
@@ -228,10 +238,12 @@ steps:
     type: http
     url: 123
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http', url: 123 })
   })
 
-  it('returns null when http step headers value is not string', () => {
+  it('parses http step with non-string header value (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
@@ -241,6 +253,8 @@ steps:
     headers:
       X-Foo: 42
 `
-    expect(parse(yaml)).toBeNull()
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http', url: 'https://example.com', headers: { 'X-Foo': 42 } })
   })
 })

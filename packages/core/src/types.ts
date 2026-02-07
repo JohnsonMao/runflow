@@ -11,31 +11,19 @@ export interface ParamDeclaration {
   items?: ParamDeclaration
 }
 
-export interface FlowStepCommand {
+/** Generic step shape: id and type required, rest preserved for the handler. */
+export interface FlowStep {
   id: string
-  type: 'command'
-  run: string
+  type: string
+  [key: string]: unknown
 }
 
-export interface FlowStepJs {
-  id: string
-  type: 'js'
-  run: string
-  file?: string
+/** Context passed to each step handler (params + previous outputs, flowFilePath). */
+export interface StepContext {
+  params: Record<string, unknown>
+  flowFilePath?: string
+  flowName?: string
 }
-
-export interface FlowStepHttp {
-  id: string
-  type: 'http'
-  url: string
-  method?: string
-  headers?: Record<string, string>
-  body?: string
-  output?: string
-  allowErrorStatus?: boolean
-}
-
-export type FlowStep = FlowStepCommand | FlowStepJs | FlowStepHttp
 
 export interface FlowDefinition {
   name: string
@@ -53,10 +41,20 @@ export interface StepResult {
   outputs?: Record<string, unknown>
 }
 
+/** Interface for step handlers. Implement via class. */
+export interface IStepHandler {
+  run: (step: FlowStep, context: StepContext) => Promise<StepResult>
+  validate?: (step: FlowStep) => true | string
+}
+
+/** Registry: step type -> IStepHandler. Merged with default (default first, then options.registry). */
+export type StepRegistry = Record<string, IStepHandler>
+
 export interface RunOptions {
   dryRun?: boolean
   params?: Record<string, unknown>
   flowFilePath?: string
+  registry?: StepRegistry
 }
 
 export interface RunResult {

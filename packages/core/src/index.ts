@@ -1,4 +1,5 @@
 export { run } from './executor'
 export { loadFromFile } from './loader'
 export { parse } from './parser'
-export type { FlowDefinition, FlowStep, FlowStepHttp, FlowStepJs, ParamDeclaration, ParamType, RunOptions, RunResult, StepResult } from './types'
+export { createDefaultRegistry, registerStepHandler } from './registry'
+export type { FlowDefinition, FlowStep, IStepHandler, ParamDeclaration, ParamType, RunOptions, RunResult, StepContext, StepRegistry, StepResult } from './types'

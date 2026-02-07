@@ -1,14 +1,10 @@
-import type { FlowDefinition, FlowStep, FlowStepHttp, ParamDeclaration } from './types'
+import type { FlowDefinition, FlowStep, ParamDeclaration } from './types'
 import { parse as parseYaml } from 'yaml'
-import { STEP_TYPE_COMMAND, STEP_TYPE_HTTP, STEP_TYPE_JS } from './constants'
 import { isParamType } from './paramsSchema'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
+import { isPlainObject } from './utils'
 
 function parseParamDeclaration(raw: unknown): ParamDeclaration | null {
-  if (!isRecord(raw) || typeof raw.name !== 'string' || typeof raw.type !== 'string')
+  if (!isPlainObject(raw) || typeof raw.name !== 'string' || typeof raw.type !== 'string')
     return null
   if (!isParamType(raw.type))
     return null
@@ -24,7 +20,7 @@ function parseParamDeclaration(raw: unknown): ParamDeclaration | null {
     decl.enum = raw.enum
   if (typeof raw.description === 'string')
     decl.description = raw.description
-  if (raw.type === 'object' && isRecord(raw.schema)) {
+  if (raw.type === 'object' && isPlainObject(raw.schema)) {
     const schema: Record<string, ParamDeclaration> = {}
     for (const [k, v] of Object.entries(raw.schema)) {
       const nested = parseParamDeclaration(v)
@@ -56,61 +52,18 @@ function parseParams(raw: unknown): ParamDeclaration[] | null {
   return out
 }
 
-function parseHeaders(raw: unknown): Record<string, string> | null {
-  if (!isRecord(raw))
-    return null
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof v !== 'string')
-      return null
-    out[k] = v
-  }
-  return out
-}
-
 function parseStep(raw: unknown): FlowStep | null {
-  if (!isRecord(raw))
+  if (!isPlainObject(raw))
     return null
-  const { id, type, run, file, url, method, headers, body, output, allowErrorStatus } = raw
+  const { id, type } = raw
   if (typeof id !== 'string' || typeof type !== 'string')
     return null
-  if (type === STEP_TYPE_COMMAND) {
-    if (typeof run !== 'string')
-      return null
-    return { id, type: 'command', run }
+  const step: FlowStep = { id, type }
+  for (const k of Object.keys(raw)) {
+    if (k !== 'id' && k !== 'type')
+      step[k] = raw[k]
   }
-  if (type === STEP_TYPE_JS) {
-    const hasFile = typeof file === 'string'
-    const hasRun = typeof run === 'string'
-    if (hasFile) {
-      if (file.endsWith('.ts'))
-        return null
-      return { id, type: 'js', run: hasRun ? run : '', file }
-    }
-    if (hasRun)
-      return { id, type: 'js', run }
-    return null
-  }
-  if (type === STEP_TYPE_HTTP) {
-    if (typeof url !== 'string')
-      return null
-    const step: FlowStepHttp = { id, type: 'http', url }
-    if (typeof method === 'string')
-      step.method = method
-    const parsedHeaders = headers !== undefined ? parseHeaders(headers) : null
-    if (headers !== undefined && parsedHeaders === null)
-      return null
-    if (parsedHeaders)
-      step.headers = parsedHeaders
-    if (typeof body === 'string')
-      step.body = body
-    if (typeof output === 'string')
-      step.output = output
-    if (typeof allowErrorStatus === 'boolean')
-      step.allowErrorStatus = allowErrorStatus
-    return step
-  }
-  return null
+  return step
 }
 
 export function parse(yamlContent: string): FlowDefinition | null {
@@ -121,7 +74,7 @@ export function parse(yamlContent: string): FlowDefinition | null {
   catch {
     return null
   }
-  if (!isRecord(parsed))
+  if (!isPlainObject(parsed))
     return null
   const { name, description, steps, params } = parsed
   if (typeof name !== 'string')
