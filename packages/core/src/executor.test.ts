@@ -97,4 +97,73 @@ describe('run', () => {
     expect(result.steps[0].stdout.trim()).toBe('from-shell')
     expect(result.steps[1].stdout.trim()).toBe('from-js')
   })
+
+  it('run with params: first step (js) sees params.a', () => {
+    const flow: FlowDefinition = {
+      name: 'params-flow',
+      steps: [
+        { id: 'j1', type: 'js', run: 'return { seen: params.a }' },
+      ],
+    }
+    const result = run(flow, { params: { a: '1' } })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ seen: '1' })
+  })
+
+  it('js step returns object → StepResult.outputs set and next step context includes it', () => {
+    const flow: FlowDefinition = {
+      name: 'output-flow',
+      steps: [
+        { id: 'j1', type: 'js', run: 'return { x: 1 }' },
+        { id: 'j2', type: 'js', run: 'return { y: params.x }' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ x: 1 })
+    expect(result.steps[1].outputs).toEqual({ y: 1 })
+  })
+
+  it('context accumulation: step1 returns, step2 sees it and returns, step3 sees both', () => {
+    const flow: FlowDefinition = {
+      name: 'accum-flow',
+      steps: [
+        { id: 'j1', type: 'js', run: 'return { a: "s1" }' },
+        { id: 'j2', type: 'js', run: 'return { b: "s2", from1: params.a }' },
+        { id: 'j3', type: 'js', run: 'return { from1: params.a, from2: params.b }' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[1].outputs).toEqual({ b: 's2', from1: 's1' })
+    expect(result.steps[2].outputs).toEqual({ from1: 's1', from2: 's2' })
+  })
+
+  it('run without params: context empty, existing behavior unchanged', () => {
+    const flow: FlowDefinition = {
+      name: 'no-params',
+      steps: [
+        { id: 'j1', type: 'js', run: 'return typeof params !== "undefined" && Object.keys(params).length === 0 ? { ok: true } : {}' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ ok: true })
+  })
+
+  it('js step returns non-object or no return: no outputs', () => {
+    const flow: FlowDefinition = {
+      name: 'no-outputs',
+      steps: [
+        { id: 'j1', type: 'js', run: 'return 42' },
+        { id: 'j2', type: 'js', run: 'console.log("no return")' },
+        { id: 'j3', type: 'js', run: 'return params.x' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toBeUndefined()
+    expect(result.steps[1].outputs).toBeUndefined()
+    expect(result.steps[2].outputs).toBeUndefined()
+  })
 })

@@ -1,8 +1,11 @@
 # js-step-type Specification
 
 ## Purpose
-TBD - created by archiving change loader-resilience-and-js-step. Update Purpose after archive.
+
+定義 flow 支援步驟型別 `js`：以字串 `run` 承載 JavaScript，在引擎同 process 內執行，產出與 command 步驟相同的 `StepResult`（success/stdout/stderr），並可與 command 步驟混用。
+
 ## Requirements
+
 ### Requirement: Flows MUST support steps with type `js` running JavaScript in-process
 
 A flow step MUST be allowed to have `type: 'js'` and a `run` string containing JavaScript code. The engine MUST execute this code in-process (within the same Node process) and produce a `StepResult` with success/failure and optional stdout/stderr.
@@ -31,4 +34,3 @@ A flow step MUST be allowed to have `type: 'js'` and a `run` string containing J
 - **WHEN** a flow has steps of both `type: command` and `type: js`
 - **THEN** the executor runs each step in order according to its type
 - **AND** the run result contains one StepResult per step in the same order
-

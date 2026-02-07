@@ -24,6 +24,12 @@ export interface StepResult {
   stdout: string
   stderr: string
   error?: string
+  outputs?: Record<string, unknown>
+}
+
+export interface RunOptions {
+  dryRun?: boolean
+  params?: Record<string, string>
 }
 
 export interface RunResult {

@@ -1,8 +1,11 @@
 # loader-resilience Specification
 
 ## Purpose
-TBD - created by archiving change loader-resilience-and-js-step. Update Purpose after archive.
+
+定義 `loadFromFile` 在檔案無法讀取（不存在、權限、I/O 錯誤）或內容非合法 YAML/flow 時回傳 `null`、不拋錯，讓呼叫端能一致處理失敗。
+
 ## Requirements
+
 ### Requirement: loadFromFile SHALL return null on file errors
 
 `loadFromFile(filePath)` MUST NOT throw. When the file cannot be read (missing, permission, or other I/O error), or when the file content is not valid YAML/flow, it must return `null` so callers can handle failure uniformly.
@@ -24,4 +27,3 @@ TBD - created by archiving change loader-resilience-and-js-step. Update Purpose 
 - **WHEN** `loadFromFile(path)` is called with a path to a file whose content is not valid flow (e.g. invalid YAML or missing required fields)
 - **THEN** the function returns `null`
 - **AND** no exception is thrown
-

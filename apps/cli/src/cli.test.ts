@@ -58,4 +58,21 @@ steps:
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
   })
+
+  it('passes --param to flow: js step receives params', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, `
+name: param-flow
+steps:
+  - id: j1
+    type: js
+    run: console.log(JSON.stringify(params))
+`)
+    const result = runFlow(['run', flowPath, '--param', 'a=1', '--param', 'b=2', '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('"a":"1"')
+    expect(result.stdout).toContain('"b":"2"')
+  })
 })

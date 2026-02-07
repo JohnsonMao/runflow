@@ -1,0 +1,15 @@
+name: params-flow
+description: Example flow using --param and step outputs
+steps:
+  - id: step1
+    type: js
+    run: |
+      return { received: params.a, out1: 'from-step1' }
+  - id: step2
+    type: js
+    run: |
+      return { out2: 'from-step2', seen1: params.out1 }
+  - id: step3
+    type: js
+    run: |
+      return { seen1: params.out1, seen2: params.out2, initial: params.a }

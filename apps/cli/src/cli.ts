@@ -10,12 +10,26 @@ program
   .description('Run YAML-defined flows')
   .version('0.0.0')
 
+function parseParamPairs(pairs: string[]): Record<string, string> {
+  const params: Record<string, string> = {}
+  for (const pair of pairs) {
+    const eq = pair.indexOf('=')
+    if (eq === -1)
+      continue
+    const key = pair.slice(0, eq)
+    const value = pair.slice(eq + 1)
+    params[key] = value
+  }
+  return params
+}
+
 program
   .command('run <file>')
   .description('Execute a flow from a YAML file')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
-  .action((file: string, options: { dryRun?: boolean, verbose?: boolean }) => {
+  .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
+  .action((file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[] }) => {
     if (!existsSync(file) || !statSync(file).isFile()) {
       console.error(`Error: File not found or not a regular file: ${file}`)
       process.exit(1)
@@ -25,7 +39,8 @@ program
       console.error('Error: Invalid or unreadable flow file.')
       process.exit(1)
     }
-    const result = run(flow, { dryRun: options.dryRun })
+    const params = options.param?.length ? parseParamPairs(options.param) : undefined
+    const result = run(flow, { dryRun: options.dryRun, params })
     if (options.verbose) {
       for (const step of result.steps) {
         if (step.stdout)

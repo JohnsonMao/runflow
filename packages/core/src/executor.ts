@@ -1,9 +1,13 @@
-import type { FlowDefinition, RunResult, StepResult } from './types'
 // @env node
+import type { FlowDefinition, RunOptions, RunResult, StepResult } from './types'
 import { execSync } from 'node:child_process'
 import { runInNewContext } from 'node:vm'
 
-function runJsStep(stepId: string, code: string): StepResult {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function runJsStep(stepId: string, code: string, params: Record<string, unknown>): StepResult {
   const out: string[] = []
   const err: string[] = []
   const vmConsole = {
@@ -12,18 +16,25 @@ function runJsStep(stepId: string, code: string): StepResult {
     warn: (...args: unknown[]) => { err.push(args.map(String).join(' ')) },
     error: (...args: unknown[]) => { err.push(args.map(String).join(' ')) },
   }
+  const vmContext = {
+    console: vmConsole,
+    params: { ...params },
+  }
   try {
-    runInNewContext(
+    const ret = runInNewContext(
       `(function(){ ${code} })()`,
-      { console: vmConsole },
+      vmContext,
       { timeout: 10_000 },
     )
-    return {
+    const result: StepResult = {
       stepId,
       success: true,
       stdout: out.join('\n'),
       stderr: err.join('\n'),
     }
+    if (isPlainObject(ret))
+      result.outputs = ret
+    return result
   }
   catch (e) {
     const message = e instanceof Error ? e.message : String(e)
@@ -68,8 +79,9 @@ function runCommandStep(stepId: string, run: string): StepResult {
   }
 }
 
-export function run(flow: FlowDefinition, options: { dryRun?: boolean } = {}): RunResult {
+export function run(flow: FlowDefinition, options: RunOptions = {}): RunResult {
   const steps: StepResult[] = []
+  const initialParams = options.params ?? {}
   if (options.dryRun) {
     for (const step of flow.steps) {
       steps.push({
@@ -85,6 +97,7 @@ export function run(flow: FlowDefinition, options: { dryRun?: boolean } = {}): R
       steps,
     }
   }
+  let context: Record<string, unknown> = { ...initialParams }
   let success = true
   for (const step of flow.steps) {
     if (step.type === 'command') {
@@ -94,8 +107,10 @@ export function run(flow: FlowDefinition, options: { dryRun?: boolean } = {}): R
         success = false
     }
     else if (step.type === 'js') {
-      const result = runJsStep(step.id, step.run)
+      const result = runJsStep(step.id, step.run, context)
       steps.push(result)
+      if (result.outputs && isPlainObject(result.outputs))
+        context = { ...context, ...result.outputs }
       if (!result.success)
         success = false
     }
