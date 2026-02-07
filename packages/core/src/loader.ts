@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs'
 import { parse } from './parser'
 
 export function loadFromFile(filePath: string): FlowDefinition | null {
-  const content = readFileSync(filePath, 'utf-8')
-  return parse(content)
+  try {
+    const content = readFileSync(filePath, 'utf-8')
+    return parse(content)
+  }
+  catch {
+    return null
+  }
 }

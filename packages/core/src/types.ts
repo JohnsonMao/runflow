@@ -4,7 +4,13 @@ export interface FlowStepCommand {
   run: string
 }
 
-export type FlowStep = FlowStepCommand
+export interface FlowStepJs {
+  id: string
+  type: 'js'
+  run: string
+}
+
+export type FlowStep = FlowStepCommand | FlowStepJs
 
 export interface FlowDefinition {
   name: string

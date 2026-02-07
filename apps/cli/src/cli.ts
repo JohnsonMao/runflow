@@ -1,5 +1,6 @@
-import { loadFromFile, run } from '@runflow/core'
 // @env node
+import { existsSync, statSync } from 'node:fs'
+import { loadFromFile, run } from '@runflow/core'
 import { createCommand } from 'commander'
 
 const program = createCommand()
@@ -15,6 +16,10 @@ program
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
   .action((file: string, options: { dryRun?: boolean, verbose?: boolean }) => {
+    if (!existsSync(file) || !statSync(file).isFile()) {
+      console.error(`Error: File not found or not a regular file: ${file}`)
+      process.exit(1)
+    }
     const flow = loadFromFile(file)
     if (!flow) {
       console.error('Error: Invalid or unreadable flow file.')

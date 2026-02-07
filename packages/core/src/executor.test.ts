@@ -57,4 +57,44 @@ describe('run', () => {
     expect(result.steps[0].stdout.trim()).toBe('first')
     expect(result.steps[1].stdout.trim()).toBe('second')
   })
+
+  it('runs js step and captures console.log', () => {
+    const flow: FlowDefinition = {
+      name: 'js-flow',
+      steps: [
+        { id: 'j1', type: 'js', run: 'console.log(1 + 1)' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[0].success).toBe(true)
+    expect(result.steps[0].stdout.trim()).toBe('2')
+  })
+
+  it('reports failure when js step throws', () => {
+    const flow: FlowDefinition = {
+      name: 'js-fail',
+      steps: [
+        { id: 'j1', type: 'js', run: 'throw new Error("expected")' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toContain('expected')
+  })
+
+  it('runs mixed command and js steps in order', () => {
+    const flow: FlowDefinition = {
+      name: 'mixed',
+      steps: [
+        { id: 'c1', type: 'command', run: 'echo from-shell' },
+        { id: 'j1', type: 'js', run: 'console.log("from-js")' },
+      ],
+    }
+    const result = run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[0].stdout.trim()).toBe('from-shell')
+    expect(result.steps[1].stdout.trim()).toBe('from-js')
+  })
 })

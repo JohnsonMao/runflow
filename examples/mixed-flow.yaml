@@ -1,0 +1,9 @@
+name: mixed-flow
+description: Example with command and js steps
+steps:
+  - id: shell
+    type: command
+    run: echo "from shell"
+  - id: js
+    type: js
+    run: console.log("from js:", 1 + 1)

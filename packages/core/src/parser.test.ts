@@ -83,4 +83,28 @@ steps:
 `
     expect(parse(yaml)).toBeNull()
   })
+
+  it('parses js step with run string', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: js1
+    type: js
+    run: return 1 + 1
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps).toHaveLength(1)
+    expect(flow?.steps[0]).toEqual({ id: 'js1', type: 'js', run: 'return 1 + 1' })
+  })
+
+  it('returns null when js step missing run', () => {
+    const yaml = `
+name: my-flow
+steps:
+  - id: js1
+    type: js
+`
+    expect(parse(yaml)).toBeNull()
+  })
 })

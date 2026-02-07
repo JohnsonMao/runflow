@@ -1,6 +1,6 @@
 import type { FlowDefinition, FlowStep } from './types'
 import { parse as parseYaml } from 'yaml'
-import { STEP_TYPE_COMMAND } from './constants'
+import { STEP_TYPE_COMMAND, STEP_TYPE_JS } from './constants'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -16,6 +16,11 @@ function parseStep(raw: unknown): FlowStep | null {
     if (typeof run !== 'string')
       return null
     return { id, type: 'command', run }
+  }
+  if (type === STEP_TYPE_JS) {
+    if (typeof run !== 'string')
+      return null
+    return { id, type: 'js', run }
   }
   return null
 }
