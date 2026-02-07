@@ -1,14 +1,12 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "rootDir": "./",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "noEmit": true,
+    "outDir": "./dist"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vitest.config.ts", "tsup.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

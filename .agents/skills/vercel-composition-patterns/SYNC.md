@@ -1,0 +1,5 @@
+# Sync Info
+
+- **Source:** `vendor/web-design-guidelines/skills/composition-patterns`
+- **Git SHA:** `e23951b8cad2f4b1e7e176c5731127c1263fe86f`
+- **Synced:** 2026-02-06

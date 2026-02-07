@@ -1,0 +1,30 @@
+{
+  "name": "@runflow/cli",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "flow": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@runflow/core": "workspace:*",
+    "commander": "catalog:prod",
+    "yaml": "catalog:prod"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "eslint": "catalog:dev",
+    "tsup": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:dev"
+  }
+}
