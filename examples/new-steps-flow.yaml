@@ -1,0 +1,34 @@
+# Example flow using sleep, set, and loop steps.
+# Run: flow run new-steps-flow.yaml
+name: new-steps-demo
+description: Sleep, set, and loop step types
+steps:
+  - id: init
+    type: set
+    set:
+      items: [1, 2, 3]
+      delay: 0
+    depends-on: []
+
+  - id: wait
+    type: sleep
+    ms: 0
+    depends-on: [init]
+
+  - id: double
+    type: loop
+    items: "{{ items }}"
+    body: [doubleOne]
+    done: [done]
+    depends-on: [wait]
+
+  - id: doubleOne
+    type: js
+    run: "return (params.results || []).concat(params.item * 2)"
+    output-key: results
+    depends-on: [double]
+
+  - id: done
+    type: js
+    run: "return { results: params.results, last: params.item }"
+    depends-on: [double]

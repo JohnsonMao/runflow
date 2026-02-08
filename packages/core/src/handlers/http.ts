@@ -1,23 +1,38 @@
 // @env node
 import type { FlowStep, IStepHandler, StepContext, StepResult } from '../types'
+import { Buffer } from 'node:buffer'
 import { isPlainObject } from '../utils'
 
 export class HttpHandler implements IStepHandler {
+  private abortController: AbortController | null = null
+
   validate(step: FlowStep): true | string {
     return typeof step.url === 'string' ? true : 'http step requires url (string)'
   }
 
+  kill(): void {
+    if (this.abortController) {
+      this.abortController.abort()
+      this.abortController = null
+    }
+  }
+
   async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
-    const url = step.url
-    if (typeof url !== 'string') {
+    const valid = this.validate(step)
+    if (valid !== true) {
       return {
         stepId: step.id,
         success: false,
         stdout: '',
         stderr: '',
-        error: 'http step requires url (string)',
+        error: valid,
       }
     }
+    const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
+    return this.doRequest(step, step.url as string, outputKey)
+  }
+
+  private async doRequest(step: FlowStep, url: string, outputKey: string): Promise<StepResult> {
     const method = (typeof step.method === 'string' ? step.method : 'GET')
     const headers: Record<string, string> = {}
     if (step.headers !== undefined && isPlainObject(step.headers)) {
@@ -27,14 +42,17 @@ export class HttpHandler implements IStepHandler {
       }
     }
     const body = typeof step.body === 'string' ? step.body : undefined
-    const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
+    this.abortController = new AbortController()
+    const signal = this.abortController.signal
     try {
       const init: RequestInit = {
         method: method || 'GET',
         headers: Object.keys(headers).length ? headers : undefined,
         body: body !== undefined && body !== '' ? body : undefined,
+        signal,
       }
       const response = await fetch(url, init)
+      this.abortController = null
       const statusCode = response.status
       const headersObj: Record<string, string> = {}
       response.headers.forEach((value, key) => {
@@ -42,7 +60,11 @@ export class HttpHandler implements IStepHandler {
       })
       const contentType = response.headers.get('content-type') ?? ''
       let bodyValue: unknown
-      if (contentType.includes('application/json')) {
+      if (/^image\//.test(contentType) || contentType.includes('application/octet-stream')) {
+        const buf = await response.arrayBuffer()
+        bodyValue = Buffer.from(buf).toString('base64')
+      }
+      else if (contentType.includes('application/json')) {
         const text = await response.text()
         try {
           bodyValue = text ? JSON.parse(text) : null
@@ -55,32 +77,24 @@ export class HttpHandler implements IStepHandler {
         bodyValue = await response.text()
       }
       const responseObject = { statusCode, headers: headersObj, body: bodyValue }
-      const is2xx = statusCode >= 200 && statusCode < 300
-      if (is2xx) {
-        return {
-          stepId: step.id,
-          success: true,
-          stdout: '',
-          stderr: '',
-          outputs: { [outputKey]: responseObject },
-        }
-      }
       return {
         stepId: step.id,
-        success: false,
+        success: true,
         stdout: '',
         stderr: '',
-        error: `HTTP ${statusCode}`,
+        outputs: { [outputKey]: responseObject },
       }
     }
     catch (e) {
+      this.abortController = null
       const message = e instanceof Error ? e.message : String(e)
+      const isAbort = e instanceof Error && e.name === 'AbortError'
       return {
         stepId: step.id,
         success: false,
         stdout: '',
         stderr: '',
-        error: message,
+        error: isAbort ? 'request aborted' : message,
       }
     }
   }

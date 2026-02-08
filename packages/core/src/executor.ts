@@ -1,10 +1,60 @@
 // @env node
-import type { FlowDefinition, FlowStep, RunOptions, RunResult, StepContext, StepResult } from './types'
+import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepResult } from './types'
+import { runInNewContext } from 'node:vm'
 import { topologicalSort, validateDAG } from './dag'
 import { paramsDeclarationToZodSchema } from './paramsSchema'
 import { createDefaultRegistry } from './registry'
 import { substitute } from './substitute'
 import { isPlainObject } from './utils'
+
+/** Evaluate step-level when (skip condition). Returns false to skip, true to run. */
+function evaluateWhen(step: FlowStep, context: Record<string, unknown>): boolean {
+  const when = step.when
+  if (when === undefined || when === null)
+    return true
+  if (typeof when !== 'string')
+    return true
+  try {
+    const value = runInNewContext(
+      `(function(params){ return Boolean(${when}); })(params)`,
+      { params: context },
+      { timeout: 2000 },
+    )
+    return Boolean(value)
+  }
+  catch {
+    return true
+  }
+}
+
+/** Default step timeout in seconds when step.timeout is not set. */
+const DEFAULT_STEP_TIMEOUT_SEC = 60
+
+/** Run handler with step-level timeout; on timeout calls handler.kill?() then fails. */
+async function runWithTimeout(
+  step: FlowStep,
+  handler: IStepHandler,
+  runFn: () => Promise<StepResult>,
+): Promise<StepResult> {
+  const timeoutSec = typeof step.timeout === 'number' && step.timeout > 0
+    ? step.timeout
+    : DEFAULT_STEP_TIMEOUT_SEC
+  const timeoutMs = timeoutSec * 1000
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<StepResult>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      handler.kill?.()
+      reject(new Error(`step timeout after ${timeoutSec}s`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([runFn(), timeoutPromise])
+  }
+  finally {
+    if (timeoutId !== undefined)
+      clearTimeout(timeoutId)
+  }
+}
 
 /** Substitute all string values in step (and nested objects) using context. Executor calls this before invoking the handler. */
 function substituteValue(value: unknown, context: Record<string, unknown>): unknown {
@@ -141,13 +191,108 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
 
   let context: Record<string, unknown> = { ...initialParams }
   let success = true
-  const stepContext: StepContext = {
+  const completed = new Set<string>()
+  const stepNextSteps: Record<string, string[]> = {}
+
+  let stepContext: StepContext
+
+  /** Run a single step by id with given context; returns result and new context. Used by runSubFlow. */
+  const runStepById = async (targetStepId: string, ctx: Record<string, unknown>): Promise<{ result: StepResult, newContext: Record<string, unknown> }> => {
+    const st = stepByIdMap.get(targetStepId)
+    if (!st) {
+      return {
+        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: `Step not found: ${targetStepId}` },
+        newContext: ctx,
+      }
+    }
+    const sub = substituteStep(st, ctx)
+    const ent = registry[st.type]
+    if (!ent) {
+      return {
+        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: `Unknown step type: ${st.type}` },
+        newContext: ctx,
+      }
+    }
+    if (ent.validate) {
+      const valid = ent.validate(sub)
+      if (valid !== true) {
+        return {
+          result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: valid },
+          newContext: ctx,
+        }
+      }
+    }
+    if (!evaluateWhen(sub, ctx)) {
+      return {
+        result: { stepId: targetStepId, success: true, stdout: '', stderr: '' },
+        newContext: ctx,
+      }
+    }
+    const tempStepContext: StepContext = {
+      params: ctx,
+      flowFilePath: options.flowFilePath,
+      flowName: flow.name,
+      runSubFlow: stepContext.runSubFlow,
+    }
+    try {
+      const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
+      const result = res ?? { stepId: targetStepId, success: false, stdout: '', stderr: '', error: 'Handler returned no result' }
+      const newContext = result.outputs && isPlainObject(result.outputs) ? { ...ctx, ...result.outputs } : ctx
+      return { result, newContext }
+    }
+    catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      return {
+        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: message },
+        newContext: ctx,
+      }
+    }
+  }
+
+  /** Run body steps as sub-flow (DAG order, when/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
+  const runSubFlow: RunSubFlowFn = async (
+    bodyStepIds: string[],
+    ctx: Record<string, unknown>,
+  ) => {
+    const scopeSet = new Set(bodyStepIds)
+    const subCompleted = new Set<string>()
+    for (const id of stepByIdMap.keys()) {
+      if (!scopeSet.has(id))
+        subCompleted.add(id)
+    }
+    const subNextSteps: Record<string, string[]> = {}
+    const results: StepResult[] = []
+    let currentCtx = ctx
+    while (true) {
+      const runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
+      if (runnable.length === 0)
+        break
+      for (const stepId of runnable) {
+        const { result, newContext } = await runStepById(stepId, currentCtx)
+        results.push(result)
+        steps.push(result)
+        currentCtx = newContext
+        if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
+          return {
+            results,
+            newContext: currentCtx,
+            earlyExit: { nextSteps: result.nextSteps },
+          }
+        }
+        subCompleted.add(stepId)
+        if (result.nextSteps !== undefined && Array.isArray(result.nextSteps))
+          subNextSteps[stepId] = result.nextSteps
+      }
+    }
+    return { results, newContext: currentCtx }
+  }
+
+  stepContext = {
     params: context,
     flowFilePath: options.flowFilePath,
     flowName: flow.name,
+    runSubFlow,
   }
-  const completed = new Set<string>()
-  const stepNextSteps: Record<string, string[]> = {}
 
   while (true) {
     const runnable = getRunnable(dagOrder, completed, stepByIdMap, stepNextSteps)
@@ -184,16 +329,38 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
           continue
         }
       }
-      try {
-        const result = await entry.run(substitutedStep, stepContext)
-        steps.push(result)
+      if (!evaluateWhen(substitutedStep, context)) {
+        steps.push({
+          stepId,
+          success: true,
+          stdout: '',
+          stderr: '',
+        })
         completed.add(stepId)
-        if (result.nextSteps !== undefined && Array.isArray(result.nextSteps))
-          stepNextSteps[stepId] = result.nextSteps
-        if (result.outputs && isPlainObject(result.outputs))
-          context = { ...context, ...result.outputs }
+        continue
+      }
+
+      try {
+        const maxAttempts = Math.max(1, (Number(substitutedStep.retry) ?? 0) + 1)
+        const runOne = (): Promise<StepResult> =>
+          runWithTimeout(substitutedStep, entry, () => entry.run(substitutedStep, stepContext))
+        let toPush: StepResult = await runOne() ?? {
+          stepId,
+          success: false,
+          stdout: '',
+          stderr: '',
+          error: 'Handler returned no result',
+        }
+        for (let attempt = 1; attempt < maxAttempts && !toPush.success; attempt++)
+          toPush = await runOne() ?? toPush
+        steps.push(toPush)
+        completed.add(stepId)
+        if (toPush.nextSteps !== undefined && Array.isArray(toPush.nextSteps))
+          stepNextSteps[stepId] = toPush.nextSteps
+        if (toPush.outputs && isPlainObject(toPush.outputs))
+          context = { ...context, ...toPush.outputs }
         stepContext.params = context
-        if (!result.success)
+        if (!toPush.success)
           success = false
       }
       catch (e) {

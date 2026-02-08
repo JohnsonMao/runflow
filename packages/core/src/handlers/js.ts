@@ -3,7 +3,8 @@ import type { FlowStep, IStepHandler, StepContext, StepResult } from '../types'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { runInNewContext } from 'node:vm'
-import { isPlainObject } from '../utils'
+
+const DEFAULT_JS_TIMEOUT_MS = 10_000
 
 export class JsHandler implements IStepHandler {
   validate(step: FlowStep): true | string {
@@ -61,24 +62,27 @@ export class JsHandler implements IStepHandler {
       warn: (...args: unknown[]) => { err.push(args.map(String).join(' ')) },
       error: (...args: unknown[]) => { err.push(args.map(String).join(' ')) },
     }
+    const timeoutMs = typeof step.timeout === 'number' && step.timeout > 0 ? step.timeout : DEFAULT_JS_TIMEOUT_MS
+    const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
     const vmContext = {
       console: vmConsole,
       params: { ...context.params },
+      Promise,
     }
     try {
       const ret = runInNewContext(
-        `(function(){ ${code} })()`,
+        `(async function(){ ${code} })()`,
         vmContext,
-        { timeout: 10_000 },
+        { timeout: timeoutMs },
       )
+      const resolved = await Promise.resolve(ret)
       const result: StepResult = {
         stepId: step.id,
         success: true,
         stdout: out.join('\n'),
         stderr: err.join('\n'),
+        outputs: { [outputKey]: resolved },
       }
-      if (isPlainObject(ret))
-        result.outputs = ret
       return result
     }
     catch (e) {

@@ -1,14 +1,24 @@
 // @env node
 import type { FlowStep, IStepHandler, StepContext, StepResult } from '../types'
-import { execSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { isPlainObject } from '../utils'
 
 export class CommandHandler implements IStepHandler {
+  private currentChild: ReturnType<typeof spawn> | null = null
+
   validate(step: FlowStep): true | string {
     return typeof step.run === 'string' ? true : 'command step requires run (string)'
   }
 
+  kill(): void {
+    if (this.currentChild) {
+      this.currentChild.kill('SIGTERM')
+      this.currentChild = null
+    }
+  }
+
   async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
-    const run = step.run
+    const run = step.run as string | undefined
     if (typeof run !== 'string') {
       return {
         stepId: step.id,
@@ -18,33 +28,51 @@ export class CommandHandler implements IStepHandler {
         error: 'command step requires run (string)',
       }
     }
-    try {
-      const result = execSync(run, {
-        encoding: 'utf-8',
-        maxBuffer: 1024 * 1024,
+    const cwd = step.cwd !== undefined && step.cwd !== null && step.cwd !== ''
+      ? (typeof step.cwd === 'string' ? step.cwd : String(step.cwd))
+      : undefined
+    const env = step.env !== undefined && isPlainObject(step.env)
+      ? { ...process.env, ...step.env as Record<string, string> }
+      : undefined
+    return this.runSpawn(step.id, run, cwd, env)
+  }
+
+  private runSpawn(stepId: string, run: string, cwd?: string, env?: NodeJS.ProcessEnv): Promise<StepResult> {
+    const child = spawn(run, [], {
+      shell: true,
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    this.currentChild = child
+    const chunks: { out: string[], err: string[] } = { out: [], err: [] }
+    child.stdout?.setEncoding('utf-8')
+    child.stderr?.setEncoding('utf-8')
+    child.stdout?.on('data', (chunk: string) => chunks.out.push(chunk))
+    child.stderr?.on('data', (chunk: string) => chunks.err.push(chunk))
+    return new Promise((resolve) => {
+      child.on('close', (code, signal) => {
+        this.currentChild = null
+        const stdout = chunks.out.join('')
+        const stderr = chunks.err.join('')
+        if (code === 0 && !signal) {
+          resolve({ stepId, success: true, stdout, stderr })
+        }
+        else {
+          const reason = signal ? `killed by signal ${signal}` : `exit code ${code}`
+          resolve({ stepId, success: false, stdout, stderr, error: reason })
+        }
       })
-      return {
-        stepId: step.id,
-        success: true,
-        stdout: result,
-        stderr: '',
-      }
-    }
-    catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      const stdout = err && typeof err === 'object' && 'stdout' in err && typeof (err as { stdout: unknown }).stdout === 'string'
-        ? (err as { stdout: string }).stdout
-        : ''
-      const stderr = err && typeof err === 'object' && 'stderr' in err && typeof (err as { stderr: unknown }).stderr === 'string'
-        ? (err as { stderr: string }).stderr
-        : ''
-      return {
-        stepId: step.id,
-        success: false,
-        stdout,
-        stderr,
-        error: message,
-      }
-    }
+      child.on('error', (err) => {
+        this.currentChild = null
+        resolve({
+          stepId,
+          success: false,
+          stdout: chunks.out.join(''),
+          stderr: chunks.err.join(''),
+          error: err.message,
+        })
+      })
+    })
   }
 }
