@@ -189,7 +189,7 @@ steps:
     expect(flow?.steps[0]).toEqual({ id: 'fetch', type: 'http', url: 'https://api.example.com/users' })
   })
 
-  it('parses http step with optional method, headers, body, output, allowErrorStatus', () => {
+  it('parses http step with optional method, headers, body, output-key', () => {
     const yaml = `
 name: my-flow
 steps:
@@ -201,8 +201,7 @@ steps:
       Content-Type: application/json
       Authorization: Bearer token
     body: '{"x":1}'
-    output: apiResult
-    allowErrorStatus: true
+    output-key: apiResult
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
@@ -213,8 +212,7 @@ steps:
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer token' },
       body: '{"x":1}',
-      output: 'apiResult',
-      allowErrorStatus: true,
+      outputKey: 'apiResult',
     })
   })
 
@@ -256,5 +254,35 @@ steps:
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http', url: 'https://example.com', headers: { 'X-Foo': 42 } })
+  })
+
+  it('converts kebab-case keys to camelCase (depends-on, output-key)', () => {
+    const yaml = `
+name: kebab-flow
+steps:
+  - id: fetch
+    type: http
+    url: https://example.com
+    output-key: apiResult
+    depends-on: []
+  - id: use
+    type: command
+    run: echo done
+    depends-on: [fetch]
+`
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.name).toBe('kebab-flow')
+    expect(flow?.steps[0]).toMatchObject({
+      id: 'fetch',
+      type: 'http',
+      url: 'https://example.com',
+      outputKey: 'apiResult',
+      dependsOn: [],
+    })
+    expect(flow?.steps[1]).toMatchObject({
+      id: 'use',
+      dependsOn: ['fetch'],
+    })
   })
 })

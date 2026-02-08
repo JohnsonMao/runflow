@@ -4,6 +4,8 @@ steps:
   - id: from-file
     type: js
     file: ./step.js
+    depends-on: []
   - id: echo
     type: command
     run: echo "Step above ran {{ fromExample }} from file"
+    depends-on: [from-file]

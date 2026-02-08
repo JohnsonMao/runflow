@@ -1,0 +1,24 @@
+# Condition step: when params.env === 'prod' run then branch, else run else branch.
+# Run: flow run condition-flow.yaml --param env=prod
+# Or:  flow run condition-flow.yaml --param env=dev
+name: condition-demo
+description: Condition step with then/else branches
+params:
+  - name: env
+    type: string
+    default: dev
+steps:
+  - id: check
+    type: condition
+    when: "params.env === 'prod'"
+    then: onProd
+    else: onDev
+    depends-on: []
+  - id: onProd
+    type: command
+    run: echo "Running in PROD"
+    depends-on: [check]
+  - id: onDev
+    type: command
+    run: echo "Running in DEV"
+    depends-on: [check]

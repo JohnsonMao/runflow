@@ -38,6 +38,7 @@ steps:
   - id: s1
     type: command
     run: echo ok
+    dependsOn: []
 `)
     const result = runFlow(['run', flowPath], process.cwd())
     unlinkSync(flowPath)
@@ -53,6 +54,7 @@ steps:
   - id: s1
     type: command
     run: exit 1
+    dependsOn: []
 `)
     const result = runFlow(['run', flowPath, '--dry-run'], process.cwd())
     unlinkSync(flowPath)
@@ -68,6 +70,7 @@ steps:
   - id: j1
     type: js
     run: console.log(JSON.stringify(params))
+    dependsOn: []
 `)
     const result = runFlow(['run', flowPath, '--param', 'a=1', '--param', 'b=2', '--verbose'], process.cwd())
     unlinkSync(flowPath)
@@ -86,6 +89,7 @@ steps:
   - id: j1
     type: js
     run: "console.log(JSON.stringify({ a: params.a, b: params.b }))"
+    dependsOn: []
 `)
     writeFileSync(paramsPath, '{"a": "from-file", "b": "from-file"}')
     const result = runFlow(['run', flowPath, '--params-file', paramsPath, '--param', 'a=overridden', '--verbose'], process.cwd())
@@ -99,7 +103,7 @@ steps:
   it('exits with error when --params-file is missing or invalid JSON', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = join(dir, 'flow.yaml')
-    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n')
+    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n    dependsOn: []\n')
     const result = runFlow(['run', flowPath, '--params-file', join(dir, 'nonexistent.json')], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(1)
@@ -141,7 +145,7 @@ steps:
   it('prints "No params declared." when flow has no params', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = resolve(dir, 'flow.yaml')
-    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n')
+    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n    dependsOn: []\n')
     const result = runFlow(['params', flowPath], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)

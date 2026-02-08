@@ -45,6 +45,8 @@ To list parameters declared by a flow: `flow params <file>` (shows name, type, r
 
 ## YAML flow format
 
+**Key naming**: Use **kebab-case** in YAML (e.g. `depends-on`, `output-key`). The parser converts these to **camelCase** when loading (e.g. `dependsOn`, `outputKey`). Single-word keys (`name`, `steps`, `id`, `type`, `run`) are unchanged.
+
 Minimal schema:
 
 ```yaml
@@ -54,18 +56,22 @@ steps:
   - id: step1
     type: command
     run: echo "hello"
+    depends-on: []
   - id: step2
     type: command
     run: node -e "console.log(1+1)"
+    depends-on: [step1]
 ```
 
 - `name` – Flow name (for logs and errors).
-- `steps` – Ordered steps; each has `id`, `type`, and type-specific fields (e.g. `run` for `command`).
+- `steps` – Steps form a **DAG**: each step may have `depends-on: [stepId, ...]` (parsed as `dependsOn`). Steps **without** `dependsOn` are **orphans** (not executed). Use `dependsOn: []` for entry (root) steps. Execution order is by dependency; steps in the same wave may run in parallel.
 - `params` (optional) – Top-level parameter declaration: array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. When present, run-time params are validated (e.g. with Zod) before execution.
-- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process), `http` (sends an HTTP request).
+- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process), `http` (sends an HTTP request), `condition` (evaluates `when`; use `then`/`else` step ids to run only one branch; result is not written to context).
 - **Command steps** support template substitution in `run`: `{{ key }}`, `{{ obj.nested }}`, `{{ arr[0] }}`. Object/array values are JSON-stringified; undefined/null → empty string.
 - **JS steps** may use `run: "<inline code>"` or `file: "./script.js"` (path relative to the flow file). Only `.js` is supported; `.ts` is rejected.
-- **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `output` (context key for the response), `allowErrorStatus` (if true, 4xx/5xx still write response to context). All string fields support `{{ key }}` substitution. Response is `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Example: `examples/http-flow.yaml`.
+- **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `output-key` (context key for the response). All string fields support `{{ key }}` substitution. On 2xx the response is written to context as `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Non-2xx responses set the step as failed with no outputs. Example: `examples/http-flow.yaml`.
+- **Condition steps** use `type: condition` with required `when` (JS expression evaluated with `params` in scope, e.g. `params.env === 'prod'`). Optional `then` / `else` are step id(s); only the matching branch runs. The condition result is **not** merged into context. Example: `examples/condition-flow.yaml`.
+- **Migration**: Existing flows must add `depends-on` to every step that should run. Use `depends-on: []` for the first step and `depends-on: [previousStepId]` for the rest in a linear flow. See `examples/hello-flow.yaml` or `examples/dag-linear-flow.yaml`.
 
 ## Scripts
 

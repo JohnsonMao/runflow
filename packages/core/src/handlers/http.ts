@@ -27,8 +27,7 @@ export class HttpHandler implements IStepHandler {
       }
     }
     const body = typeof step.body === 'string' ? step.body : undefined
-    const outputKey = typeof step.output === 'string' ? step.output : step.id
-    const allowErrorStatus = step.allowErrorStatus === true
+    const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
     try {
       const init: RequestInit = {
         method: method || 'GET',
@@ -63,16 +62,6 @@ export class HttpHandler implements IStepHandler {
           success: true,
           stdout: '',
           stderr: '',
-          outputs: { [outputKey]: responseObject },
-        }
-      }
-      if (allowErrorStatus) {
-        return {
-          stepId: step.id,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: `HTTP ${statusCode}`,
           outputs: { [outputKey]: responseObject },
         }
       }

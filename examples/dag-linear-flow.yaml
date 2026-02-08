@@ -1,0 +1,17 @@
+# Linear DAG: each step depends on the previous.
+# Run: flow run dag-linear-flow.yaml
+name: dag-linear
+description: Linear chain with dependsOn
+steps:
+  - id: a
+    type: command
+    run: echo "step A"
+    depends-on: []
+  - id: b
+    type: command
+    run: echo "step B"
+    depends-on: [a]
+  - id: c
+    type: command
+    run: echo "step C"
+    depends-on: [b]

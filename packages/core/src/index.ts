@@ -1,3 +1,4 @@
+export { topologicalSort, validateDAG } from './dag'
 export { run } from './executor'
 export { loadFromFile } from './loader'
 export { parse } from './parser'

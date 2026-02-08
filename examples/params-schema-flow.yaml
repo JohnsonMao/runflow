@@ -17,6 +17,8 @@ steps:
   - id: greet
     type: command
     run: echo "Hello {{ who }}"
+    depends-on: []
   - id: js
     type: js
     run: "return { received: params.who, count: params.count }"
+    depends-on: [greet]

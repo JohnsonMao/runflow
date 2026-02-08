@@ -11,7 +11,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'dry',
       steps: [
-        { id: 's1', type: 'command', run: 'exit 1' },
+        { id: 's1', type: 'command', run: 'exit 1', dependsOn: [] },
       ],
     }
     const result = await run(flow, { dryRun: true })
@@ -26,7 +26,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'echo-flow',
       steps: [
-        { id: 's1', type: 'command', run: 'echo hello' },
+        { id: 's1', type: 'command', run: 'echo hello', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -39,7 +39,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'fail-flow',
       steps: [
-        { id: 's1', type: 'command', run: 'exit 42' },
+        { id: 's1', type: 'command', run: 'exit 42', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -52,8 +52,8 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'multi',
       steps: [
-        { id: 'a', type: 'command', run: 'echo first' },
-        { id: 'b', type: 'command', run: 'echo second' },
+        { id: 'a', type: 'command', run: 'echo first', dependsOn: [] },
+        { id: 'b', type: 'command', run: 'echo second', dependsOn: ['a'] },
       ],
     }
     const result = await run(flow)
@@ -66,7 +66,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'js-flow',
       steps: [
-        { id: 'j1', type: 'js', run: 'console.log(1 + 1)' },
+        { id: 'j1', type: 'js', run: 'console.log(1 + 1)', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -79,7 +79,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'js-fail',
       steps: [
-        { id: 'j1', type: 'js', run: 'throw new Error("expected")' },
+        { id: 'j1', type: 'js', run: 'throw new Error("expected")', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -92,8 +92,8 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'mixed',
       steps: [
-        { id: 'c1', type: 'command', run: 'echo from-shell' },
-        { id: 'j1', type: 'js', run: 'console.log("from-js")' },
+        { id: 'c1', type: 'command', run: 'echo from-shell', dependsOn: [] },
+        { id: 'j1', type: 'js', run: 'console.log("from-js")', dependsOn: ['c1'] },
       ],
     }
     const result = await run(flow)
@@ -106,7 +106,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'params-flow',
       steps: [
-        { id: 'j1', type: 'js', run: 'return { seen: params.a }' },
+        { id: 'j1', type: 'js', run: 'return { seen: params.a }', dependsOn: [] },
       ],
     }
     const result = await run(flow, { params: { a: '1' } })
@@ -118,8 +118,8 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'output-flow',
       steps: [
-        { id: 'j1', type: 'js', run: 'return { x: 1 }' },
-        { id: 'j2', type: 'js', run: 'return { y: params.x }' },
+        { id: 'j1', type: 'js', run: 'return { x: 1 }', dependsOn: [] },
+        { id: 'j2', type: 'js', run: 'return { y: params.x }', dependsOn: ['j1'] },
       ],
     }
     const result = await run(flow)
@@ -132,9 +132,9 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'accum-flow',
       steps: [
-        { id: 'j1', type: 'js', run: 'return { a: "s1" }' },
-        { id: 'j2', type: 'js', run: 'return { b: "s2", from1: params.a }' },
-        { id: 'j3', type: 'js', run: 'return { from1: params.a, from2: params.b }' },
+        { id: 'j1', type: 'js', run: 'return { a: "s1" }', dependsOn: [] },
+        { id: 'j2', type: 'js', run: 'return { b: "s2", from1: params.a }', dependsOn: ['j1'] },
+        { id: 'j3', type: 'js', run: 'return { from1: params.a, from2: params.b }', dependsOn: ['j2'] },
       ],
     }
     const result = await run(flow)
@@ -147,7 +147,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'no-params',
       steps: [
-        { id: 'j1', type: 'js', run: 'return typeof params !== "undefined" && Object.keys(params).length === 0 ? { ok: true } : {}' },
+        { id: 'j1', type: 'js', run: 'return typeof params !== "undefined" && Object.keys(params).length === 0 ? { ok: true } : {}', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -159,9 +159,9 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'no-outputs',
       steps: [
-        { id: 'j1', type: 'js', run: 'return 42' },
-        { id: 'j2', type: 'js', run: 'console.log("no return")' },
-        { id: 'j3', type: 'js', run: 'return params.x' },
+        { id: 'j1', type: 'js', run: 'return 42', dependsOn: [] },
+        { id: 'j2', type: 'js', run: 'console.log("no return")', dependsOn: ['j1'] },
+        { id: 'j3', type: 'js', run: 'return params.x', dependsOn: ['j2'] },
       ],
     }
     const result = await run(flow)
@@ -176,7 +176,7 @@ describe('run', () => {
       name: 'decl',
       params: [{ name: 'a', type: 'string', required: true }],
       steps: [
-        { id: 'j1', type: 'js', run: 'return { seen: params.a }' },
+        { id: 'j1', type: 'js', run: 'return { seen: params.a }', dependsOn: [] },
       ],
     }
     const result = await run(flow, { params: { a: 'x' } })
@@ -188,7 +188,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'decl',
       params: [{ name: 'a', type: 'string', required: true }],
-      steps: [{ id: 's1', type: 'command', run: 'echo hi' }],
+      steps: [{ id: 's1', type: 'command', run: 'echo hi', dependsOn: [] }],
     }
     const result = await run(flow, {})
     expect(result.success).toBe(false)
@@ -205,6 +205,7 @@ describe('run', () => {
           id: 'c1',
           type: 'command',
           run: 'echo "{{ a }} {{ obj.b }} {{ arr[0] }}"',
+          dependsOn: [],
         },
       ],
     }
@@ -220,7 +221,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'file-js',
       steps: [
-        { id: 'j1', type: 'js', run: '', file: 'step.js' },
+        { id: 'j1', type: 'js', run: '', file: 'step.js', dependsOn: [] },
       ],
     }
     const result = await run(flow, { flowFilePath })
@@ -232,7 +233,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'no-path',
       steps: [
-        { id: 'j1', type: 'js', run: '', file: 'step.js' },
+        { id: 'j1', type: 'js', run: '', file: 'step.js', dependsOn: [] },
       ],
     }
     const result = await run(flow, {})
@@ -245,7 +246,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'http-flow',
       steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/json' },
+        { id: 'fetch', type: 'http', url: 'https://httpbin.org/json', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -259,11 +260,11 @@ describe('run', () => {
     expect(resp.body).not.toBeNull()
   })
 
-  it('http step with 4xx and allowErrorStatus false: success false, no outputs', async () => {
+  it('http step with 4xx: success false, no outputs', async () => {
     const flow: FlowDefinition = {
       name: 'http-4xx',
       steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/status/404' },
+        { id: 'fetch', type: 'http', url: 'https://httpbin.org/status/404', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -272,26 +273,11 @@ describe('run', () => {
     expect(result.steps[0].outputs).toBeUndefined()
   })
 
-  it('http step with 4xx and allowErrorStatus true: success false, outputs merged with response', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-4xx-allow',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/status/404', allowErrorStatus: true },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].outputs?.fetch).toBeDefined()
-    const resp = result.steps[0].outputs!.fetch as { statusCode: number }
-    expect(resp.statusCode).toBe(404)
-  })
-
   it('http step: substitution applied to url', async () => {
     const flow: FlowDefinition = {
       name: 'http-subst',
       steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/{{ path }}' },
+        { id: 'fetch', type: 'http', url: 'https://httpbin.org/{{ path }}', dependsOn: [] },
       ],
     }
     const result = await run(flow, { params: { path: 'json' } })
@@ -305,7 +291,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'http-default-key',
       steps: [
-        { id: 'myFetch', type: 'http', url: 'https://httpbin.org/json' },
+        { id: 'myFetch', type: 'http', url: 'https://httpbin.org/json', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -313,11 +299,11 @@ describe('run', () => {
     expect(result.steps[0].outputs?.fetch).toBeUndefined()
   })
 
-  it('http step: output key is step.output when provided', async () => {
+  it('http step: output key is step.outputKey when provided', async () => {
     const flow: FlowDefinition = {
       name: 'http-custom-key',
       steps: [
-        { id: 'x', type: 'http', url: 'https://httpbin.org/json', output: 'apiResult' },
+        { id: 'x', type: 'http', url: 'https://httpbin.org/json', outputKey: 'apiResult', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -329,9 +315,9 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'mixed-http',
       steps: [
-        { id: 'c1', type: 'command', run: 'echo ok' },
-        { id: 'h1', type: 'http', url: 'https://httpbin.org/json', output: 'api' },
-        { id: 'j1', type: 'js', run: 'return { status: params.api?.statusCode, hasBody: typeof params.api?.body === "object" }' },
+        { id: 'c1', type: 'command', run: 'echo ok', dependsOn: [] },
+        { id: 'h1', type: 'http', url: 'https://httpbin.org/json', outputKey: 'api', dependsOn: ['c1'] },
+        { id: 'j1', type: 'js', run: 'return { status: params.api?.statusCode, hasBody: typeof params.api?.body === "object" }', dependsOn: ['h1'] },
       ],
     }
     const result = await run(flow)
@@ -343,7 +329,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'unknown-type',
       steps: [
-        { id: 's1', type: 'customType', run: 'echo hi' },
+        { id: 's1', type: 'customType', run: 'echo hi', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -358,8 +344,8 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'throw-flow',
       steps: [
-        { id: 's1', type: 'command', run: 'echo ok' },
-        { id: 's2', type: 'willThrow', run: 'x' },
+        { id: 's1', type: 'command', run: 'echo ok', dependsOn: [] },
+        { id: 's2', type: 'willThrow', run: 'x', dependsOn: ['s1'] },
       ],
     }
     const defaultReg = (await import('./registry')).createDefaultRegistry()
@@ -382,8 +368,8 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'merged',
       steps: [
-        { id: 'c1', type: 'command', run: 'echo from-default' },
-        { id: 's1', type: 'custom', payload: 'hi' },
+        { id: 'c1', type: 'command', run: 'echo from-default', dependsOn: [] },
+        { id: 's1', type: 'custom', payload: 'hi', dependsOn: ['c1'] },
       ],
     }
     const customOnly = {
@@ -407,7 +393,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'no-run',
       steps: [
-        { id: 's1', type: 'command' },
+        { id: 's1', type: 'command', dependsOn: [] },
       ],
     }
     const result = await run(flow)
@@ -419,7 +405,7 @@ describe('run', () => {
     const flow: FlowDefinition = {
       name: 'custom-reg',
       steps: [
-        { id: 's1', type: 'custom', payload: 'hello' },
+        { id: 's1', type: 'custom', payload: 'hello', dependsOn: [] },
       ],
     }
     const defaultRegistry = (await import('./registry')).createDefaultRegistry()
@@ -438,5 +424,155 @@ describe('run', () => {
     const result = await run(flow, { registry })
     expect(result.success).toBe(true)
     expect(result.steps[0].outputs).toEqual({ value: 'hello' })
+  })
+
+  it('dag linear chain executes in dependency order', async () => {
+    const flow: FlowDefinition = {
+      name: 'linear-dag',
+      steps: [
+        { id: 'a', type: 'command', run: 'echo A', dependsOn: [] },
+        { id: 'b', type: 'command', run: 'echo B', dependsOn: ['a'] },
+        { id: 'c', type: 'command', run: 'echo C', dependsOn: ['b'] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps.map(s => s.stepId)).toEqual(['a', 'b', 'c'])
+    expect(result.steps[0].stdout.trim()).toBe('A')
+    expect(result.steps[1].stdout.trim()).toBe('B')
+    expect(result.steps[2].stdout.trim()).toBe('C')
+  })
+
+  it('dag orphan steps are excluded from execution', async () => {
+    const flow: FlowDefinition = {
+      name: 'with-orphan',
+      steps: [
+        { id: 'root', type: 'command', run: 'echo only', dependsOn: [] },
+        { id: 'orphan', type: 'command', run: 'echo never' },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps).toHaveLength(1)
+    expect(result.steps[0].stepId).toBe('root')
+    expect(result.steps[0].stdout.trim()).toBe('only')
+  })
+
+  it('dag cycle returns error and no steps', async () => {
+    const flow: FlowDefinition = {
+      name: 'cycle',
+      steps: [
+        { id: 'a', type: 'command', run: 'echo a', dependsOn: ['c'] },
+        { id: 'b', type: 'command', run: 'echo b', dependsOn: ['a'] },
+        { id: 'c', type: 'command', run: 'echo c', dependsOn: ['b'] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps).toHaveLength(0)
+    expect(result.error).toContain('Cycle')
+  })
+
+  it('dag dependency on orphan returns error', async () => {
+    const flow: FlowDefinition = {
+      name: 'dep-on-orphan',
+      steps: [
+        { id: 'orphan', type: 'command', run: 'x' },
+        { id: 'b', type: 'command', run: 'echo b', dependsOn: ['orphan'] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps).toHaveLength(0)
+    expect(result.error).toMatch(/not in the DAG|orphan/)
+  })
+
+  it('condition when true returns result true and only then-branch runs', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-then',
+      steps: [
+        { id: 'check', type: 'condition', when: 'params.flag === true', then: 'onTrue', else: 'onFalse', dependsOn: [] },
+        { id: 'onTrue', type: 'command', run: 'echo then', dependsOn: ['check'] },
+        { id: 'onFalse', type: 'command', run: 'echo else', dependsOn: ['check'] },
+      ],
+    }
+    const result = await run(flow, { params: { flag: true } })
+    expect(result.success).toBe(true)
+    expect(result.steps).toHaveLength(2)
+    expect(result.steps[0].stepId).toBe('check')
+    expect(result.steps[1].stepId).toBe('onTrue')
+    expect(result.steps[1].stdout.trim()).toBe('then')
+  })
+
+  it('condition when false returns result false and only else-branch runs', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-else',
+      steps: [
+        { id: 'check', type: 'condition', when: 'params.flag === true', then: 'onTrue', else: 'onFalse', dependsOn: [] },
+        { id: 'onTrue', type: 'command', run: 'echo then', dependsOn: ['check'] },
+        { id: 'onFalse', type: 'command', run: 'echo else', dependsOn: ['check'] },
+      ],
+    }
+    const result = await run(flow, { params: { flag: false } })
+    expect(result.success).toBe(true)
+    expect(result.steps).toHaveLength(2)
+    expect(result.steps[0].stepId).toBe('check')
+    expect(result.steps[1].stepId).toBe('onFalse')
+    expect(result.steps[1].stdout.trim()).toBe('else')
+  })
+
+  it('condition result is not merged into context for downstream steps', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-no-pollution',
+      steps: [
+        { id: 'check', type: 'condition', when: 'true', then: 'next', dependsOn: [] },
+        { id: 'next', type: 'js', run: 'return { hasResult: "result" in params }', dependsOn: ['check'] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(true)
+    expect(result.steps[1].outputs?.hasResult).toBe(false)
+  })
+
+  it('condition missing when fails with error', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-no-when',
+      steps: [
+        { id: 'c', type: 'condition', dependsOn: [] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toContain('when')
+  })
+
+  it('condition when evaluation throws returns error result', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-eval-error',
+      steps: [
+        { id: 'c', type: 'condition', when: 'params.missing.foo', then: 'x', else: 'y', dependsOn: [] },
+        { id: 'x', type: 'command', run: 'echo x', dependsOn: ['c'] },
+        { id: 'y', type: 'command', run: 'echo y', dependsOn: ['c'] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toBeDefined()
+  })
+
+  it('condition without then and else fails validation', async () => {
+    const flow: FlowDefinition = {
+      name: 'cond-no-then-else',
+      steps: [
+        { id: 'c', type: 'condition', when: 'true', dependsOn: [] },
+      ],
+    }
+    const result = await run(flow)
+    expect(result.success).toBe(false)
+    expect(result.steps[0].success).toBe(false)
+    expect(result.steps[0].error).toContain('then')
+    expect(result.steps[0].error).toContain('else')
   })
 })

@@ -4,9 +4,12 @@ steps:
   - id: one
     type: echo
     message: Hello from custom handler
+    depends-on: []
   - id: two
     type: command
     run: echo "Built-in command step"
+    depends-on: [one]
   - id: three
     type: echo
     message: Done
+    depends-on: [two]

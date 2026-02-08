@@ -1,7 +1,7 @@
 import type { FlowDefinition, FlowStep, ParamDeclaration } from './types'
 import { parse as parseYaml } from 'yaml'
 import { isParamType } from './paramsSchema'
-import { isPlainObject } from './utils'
+import { convertKeysKebabToCamel, isPlainObject } from './utils'
 
 function parseParamDeclaration(raw: unknown): ParamDeclaration | null {
   if (!isPlainObject(raw) || typeof raw.name !== 'string' || typeof raw.type !== 'string')
@@ -67,15 +67,16 @@ function parseStep(raw: unknown): FlowStep | null {
 }
 
 export function parse(yamlContent: string): FlowDefinition | null {
-  let parsed: unknown
+  let raw: unknown
   try {
-    parsed = parseYaml(yamlContent)
+    raw = parseYaml(yamlContent)
   }
   catch {
     return null
   }
-  if (!isPlainObject(parsed))
+  if (!isPlainObject(raw))
     return null
+  const parsed = convertKeysKebabToCamel(raw) as Record<string, unknown>
   const { name, description, steps, params } = parsed
   if (typeof name !== 'string')
     return null

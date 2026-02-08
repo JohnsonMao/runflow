@@ -1,0 +1,17 @@
+# Parallel branches: b and c both depend on a.
+# Run: flow run dag-parallel-flow.yaml
+name: dag-parallel
+description: Parallel branches after root
+steps:
+  - id: a
+    type: command
+    run: echo "root"
+    depends-on: []
+  - id: b
+    type: command
+    run: echo "branch B"
+    depends-on: [a]
+  - id: c
+    type: command
+    run: echo "branch C"
+    depends-on: [a]

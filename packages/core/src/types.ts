@@ -15,6 +15,8 @@ export interface ParamDeclaration {
 export interface FlowStep {
   id: string
   type: string
+  /** When present, this step is part of the DAG. Empty array = root; omitted = orphan (not executed). */
+  dependsOn?: string[]
   [key: string]: unknown
 }
 
@@ -39,6 +41,12 @@ export interface StepResult {
   stderr: string
   error?: string
   outputs?: Record<string, unknown>
+  /**
+   * When set, only these step ids (among steps that depend on this step) are scheduled next.
+   * When omitted, all dependents are scheduled (default). Handlers that control branching (e.g. condition)
+   * return nextSteps so the executor does not need to know step types.
+   */
+  nextSteps?: string[]
 }
 
 /** Interface for step handlers. Implement via class. */
