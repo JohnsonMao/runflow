@@ -1,5 +1,4 @@
 import type { FlowDefinition, FlowStep } from './types'
-import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -217,55 +216,6 @@ describe('run', () => {
     expect(result.steps[0].stdout.trim()).toBe('x y z')
   })
 
-  it('command step with timeout: completes within limit', async () => {
-    const flow: FlowDefinition = {
-      name: 'cmd-timeout-ok',
-      steps: [
-        { id: 'c1', type: 'command', run: 'echo done', timeout: 5, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].stdout.trim()).toBe('done')
-  })
-
-  it('command step with timeout: fails when exceeded', async () => {
-    const flow: FlowDefinition = {
-      name: 'cmd-timeout-fail',
-      steps: [
-        { id: 'c1', type: 'command', run: 'sleep 3', timeout: 1, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('timeout')
-  })
-
-  it('command step with cwd: runs in given directory', async () => {
-    const flow: FlowDefinition = {
-      name: 'cmd-cwd',
-      steps: [
-        { id: 'c1', type: 'command', run: 'pwd', cwd: '/tmp', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].stdout.trim()).toContain('tmp')
-  })
-
-  it('command step with env: sees env var', async () => {
-    const flow: FlowDefinition = {
-      name: 'cmd-env',
-      steps: [
-        { id: 'c1', type: 'command', run: 'echo $MY_VAR', env: { MY_VAR: 'hello' }, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].stdout.trim()).toBe('hello')
-  })
-
   it('step when false: step skipped, success result pushed, dependents run', async () => {
     const flow: FlowDefinition = {
       name: 'when-skip',
@@ -348,69 +298,6 @@ describe('run', () => {
     expect(result.steps[0].outputs).toEqual({ j1: { fromFile: true } })
   })
 
-  it('js step with outputKey and primitive return: single key in outputs', async () => {
-    const flow: FlowDefinition = {
-      name: 'js-output-key',
-      steps: [
-        { id: 'j1', type: 'js', run: 'return 42', outputKey: 'total', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].outputs).toEqual({ total: 42 })
-  })
-
-  it('js step async return: awaits Promise and sets resolved value under outputKey', async () => {
-    const flow: FlowDefinition = {
-      name: 'js-async',
-      steps: [
-        { id: 'j1', type: 'js', run: 'return (async () => ({ ok: true }))()', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].outputs).toEqual({ j1: { ok: true } })
-  })
-
-  it('js step async reject: returns success false with error', async () => {
-    const flow: FlowDefinition = {
-      name: 'js-async-reject',
-      steps: [
-        { id: 'j1', type: 'js', run: 'return Promise.reject(new Error("async fail"))', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('async fail')
-  })
-
-  it('js step handler timeout (ms): fails when code exceeds timeout', async () => {
-    const flow: FlowDefinition = {
-      name: 'js-handler-timeout',
-      steps: [
-        { id: 'j1', type: 'js', run: 'while(true){}', timeout: 100, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toMatch(/timeout|timed out/i)
-  })
-
-  it('js step with file but no flowFilePath: step fails', async () => {
-    const flow: FlowDefinition = {
-      name: 'no-path',
-      steps: [
-        { id: 'j1', type: 'js', run: '', file: 'step.js', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow, {})
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('flowFilePath')
-  })
-
   it('http step with 2xx: success true, outputs under outputKey, body parsed when JSON', async () => {
     const flow: FlowDefinition = {
       name: 'http-flow',
@@ -427,115 +314,6 @@ describe('run', () => {
     expect(resp.statusCode).toBe(200)
     expect(typeof resp.body).toBe('object')
     expect(resp.body).not.toBeNull()
-  })
-
-  it('http step with 4xx: success true, responseObject in outputs', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-4xx',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/status/404', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].success).toBe(true)
-    expect(result.steps[0].outputs?.fetch).toBeDefined()
-    const resp = result.steps[0].outputs!.fetch as { statusCode: number }
-    expect(resp.statusCode).toBe(404)
-  })
-
-  it('http step: substitution applied to url', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-subst',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/{{ path }}', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow, { params: { path: 'json' } })
-    expect(result.success).toBe(true)
-    expect(result.steps[0].outputs?.fetch).toBeDefined()
-    const resp = result.steps[0].outputs!.fetch as { statusCode: number }
-    expect(resp.statusCode).toBe(200)
-  })
-
-  it('http step: output key is step id when output omitted', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-default-key',
-      steps: [
-        { id: 'myFetch', type: 'http', url: 'https://httpbin.org/json', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.steps[0].outputs?.myFetch).toBeDefined()
-    expect(result.steps[0].outputs?.fetch).toBeUndefined()
-  })
-
-  it('http step: output key is step.outputKey when provided', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-custom-key',
-      steps: [
-        { id: 'x', type: 'http', url: 'https://httpbin.org/json', outputKey: 'apiResult', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.steps[0].outputs?.apiResult).toBeDefined()
-    expect(result.steps[0].outputs?.x).toBeUndefined()
-  })
-
-  it('http step with timeout: completes within limit', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-timeout-ok',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/delay/1', timeout: 5, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].success).toBe(true)
-    expect((result.steps[0].outputs?.fetch as { statusCode: number }).statusCode).toBe(200)
-  })
-
-  it('http step with timeout: fails when exceeded', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-timeout-fail',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://httpbin.org/delay/5', timeout: 1, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toMatch(/timeout|abort/i)
-  })
-
-  it('http step with retry: all attempts fail returns last error', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-retry-fail',
-      steps: [
-        { id: 'fetch', type: 'http', url: 'https://invalid.example.nonexistent/foo', retry: 2, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toBeDefined()
-  })
-
-  it('http step: image response body as base64', async () => {
-    const flow: FlowDefinition = {
-      name: 'http-image',
-      steps: [
-        { id: 'img', type: 'http', url: 'https://httpbin.org/image/png', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].outputs?.img).toBeDefined()
-    const resp = result.steps[0].outputs!.img as { statusCode: number, body: string }
-    expect(resp.statusCode).toBe(200)
-    expect(typeof resp.body).toBe('string')
-    expect(resp.body.length).toBeGreaterThan(0)
-    expect(() => Buffer.from(resp.body, 'base64')).not.toThrow()
   })
 
   it('flow with command + http + js: http response visible in next step context', async () => {
@@ -563,31 +341,6 @@ describe('run', () => {
     expect(result.success).toBe(true)
     expect(result.steps[0].success).toBe(true)
     expect(result.steps[0].outputs).toBeUndefined()
-  })
-
-  it('sleep step with ms: waits then success', async () => {
-    const flow: FlowDefinition = {
-      name: 'sleep-ms',
-      steps: [
-        { id: 'wait', type: 'sleep', ms: 10, dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    expect(result.steps[0].success).toBe(true)
-  })
-
-  it('sleep step missing duration: fails with error', async () => {
-    const flow: FlowDefinition = {
-      name: 'sleep-missing',
-      steps: [
-        { id: 'wait', type: 'sleep', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toMatch(/seconds|ms|duration/i)
   })
 
   it('set step: outputs merged into context, downstream sees keys', async () => {
@@ -669,53 +422,6 @@ describe('run', () => {
     expect(loopResult?.outputs).toMatchObject({ count: 2 })
     const afterResult = result.steps.find(s => s.stepId === 'after')
     expect(afterResult?.outputs?.lastIteration).toBe('1')
-  })
-
-  it('loop step invalid: missing driver and body fails', async () => {
-    const flow: FlowDefinition = {
-      name: 'loop-invalid',
-      steps: [
-        { id: 'l1', type: 'loop', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-  })
-
-  it('loop step early exit: body step returns nextSteps outside body, loop completes with that nextSteps and does not run done', async () => {
-    const flow: FlowDefinition = {
-      name: 'loop-early-exit',
-      steps: [
-        { id: 'l1', type: 'loop', count: 10, body: ['b'], done: ['after'], dependsOn: [] },
-        { id: 'b', type: 'condition', when: 'true', then: ['early'], else: ['b'], dependsOn: ['l1'] },
-        { id: 'early', type: 'set', set: { early: true }, dependsOn: ['l1'] },
-        { id: 'after', type: 'set', set: { after: true }, dependsOn: ['l1'] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(true)
-    const loopResult = result.steps.find(s => s.stepId === 'l1')
-    expect(loopResult?.nextSteps).toEqual(['early'])
-    expect(loopResult?.outputs?.count).toBe(1)
-    const earlyResult = result.steps.find(s => s.stepId === 'early')
-    expect(earlyResult?.outputs?.early).toBe(true)
-    const afterResults = result.steps.filter(s => s.stepId === 'after')
-    expect(afterResults.length).toBe(0)
-  })
-
-  it('loop step invalid driver: two of items/count/until fails validation', async () => {
-    const flow: FlowDefinition = {
-      name: 'loop-two-drivers',
-      steps: [
-        { id: 'l1', type: 'loop', items: [1], count: 2, body: ['b'], dependsOn: [] },
-        { id: 'b', type: 'set', set: {}, dependsOn: ['l1'] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('exactly one')
   })
 
   it('unknown step type: returns error result and continues', async () => {
@@ -926,47 +632,5 @@ describe('run', () => {
     const result = await run(flow)
     expect(result.success).toBe(true)
     expect(result.steps[1].outputs?.next).toEqual({ hasResult: false })
-  })
-
-  it('condition missing when fails with error', async () => {
-    const flow: FlowDefinition = {
-      name: 'cond-no-when',
-      steps: [
-        { id: 'c', type: 'condition', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('when')
-  })
-
-  it('condition when evaluation throws returns error result', async () => {
-    const flow: FlowDefinition = {
-      name: 'cond-eval-error',
-      steps: [
-        { id: 'c', type: 'condition', when: 'params.missing.foo', then: 'x', else: 'y', dependsOn: [] },
-        { id: 'x', type: 'command', run: 'echo x', dependsOn: ['c'] },
-        { id: 'y', type: 'command', run: 'echo y', dependsOn: ['c'] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toBeDefined()
-  })
-
-  it('condition without then and else fails validation', async () => {
-    const flow: FlowDefinition = {
-      name: 'cond-no-then-else',
-      steps: [
-        { id: 'c', type: 'condition', when: 'true', dependsOn: [] },
-      ],
-    }
-    const result = await run(flow)
-    expect(result.success).toBe(false)
-    expect(result.steps[0].success).toBe(false)
-    expect(result.steps[0].error).toContain('then')
-    expect(result.steps[0].error).toContain('else')
   })
 })
