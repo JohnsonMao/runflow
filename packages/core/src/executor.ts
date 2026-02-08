@@ -267,22 +267,27 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       const runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
       if (runnable.length === 0)
         break
-      for (const stepId of runnable) {
-        const { result, newContext } = await runStepById(stepId, currentCtx)
+      const batch = await Promise.all(runnable.map(stepId => runStepById(stepId, currentCtx)))
+      for (const { result } of batch) {
         results.push(result)
         steps.push(result)
-        currentCtx = newContext
         if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
+          const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
+            return r.outputs && isPlainObject(r.outputs) ? { ...acc, ...r.outputs } : acc
+          }, { ...currentCtx })
           return {
             results,
-            newContext: currentCtx,
+            newContext: mergedCtx,
             earlyExit: { nextSteps: result.nextSteps },
           }
         }
-        subCompleted.add(stepId)
+        subCompleted.add(result.stepId)
         if (result.nextSteps !== undefined && Array.isArray(result.nextSteps))
-          subNextSteps[stepId] = result.nextSteps
+          subNextSteps[result.stepId] = result.nextSteps
       }
+      currentCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
+        return r.outputs && isPlainObject(r.outputs) ? { ...acc, ...r.outputs } : acc
+      }, { ...currentCtx })
     }
     return { results, newContext: currentCtx }
   }
@@ -294,88 +299,94 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     runSubFlow,
   }
 
-  while (true) {
-    const runnable = getRunnable(dagOrder, completed, stepByIdMap, stepNextSteps)
-    if (runnable.length === 0)
-      break
-    for (const stepId of runnable) {
-      const step = stepByIdMap.get(stepId)!
-      const substitutedStep = substituteStep(step, context)
-      const entry = registry[step.type]
-      if (!entry) {
-        steps.push({
+  /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */
+  const runOneStepInWave = async (
+    stepId: string,
+    ctx: Record<string, unknown>,
+  ): Promise<{ result: StepResult, outputs?: Record<string, unknown>, nextSteps?: string[] }> => {
+    const step = stepByIdMap.get(stepId)!
+    const substitutedStep = substituteStep(step, ctx)
+    const entry = registry[step.type]
+    if (!entry) {
+      return {
+        result: {
           stepId,
           success: false,
           stdout: '',
           stderr: '',
           error: `Unknown step type: ${step.type}`,
-        })
-        success = false
-        completed.add(stepId)
-        continue
+        },
       }
-      if (entry.validate) {
-        const valid = entry.validate(substitutedStep)
-        if (valid !== true) {
-          steps.push({
+    }
+    if (entry.validate) {
+      const valid = entry.validate(substitutedStep)
+      if (valid !== true) {
+        return {
+          result: {
             stepId,
             success: false,
             stdout: '',
             stderr: '',
             error: valid,
-          })
-          success = false
-          completed.add(stepId)
-          continue
+          },
         }
       }
-      if (!evaluateWhen(substitutedStep, context)) {
-        steps.push({
-          stepId,
-          success: true,
-          stdout: '',
-          stderr: '',
-        })
-        completed.add(stepId)
-        continue
+    }
+    if (!evaluateWhen(substitutedStep, ctx)) {
+      return {
+        result: { stepId, success: true, stdout: '', stderr: '' },
       }
-
-      try {
-        const maxAttempts = Math.max(1, (Number(substitutedStep.retry) ?? 0) + 1)
-        const runOne = (): Promise<StepResult> =>
-          runWithTimeout(substitutedStep, entry, () => entry.run(substitutedStep, stepContext))
-        let toPush: StepResult = await runOne() ?? {
-          stepId,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: 'Handler returned no result',
-        }
-        for (let attempt = 1; attempt < maxAttempts && !toPush.success; attempt++)
-          toPush = await runOne() ?? toPush
-        steps.push(toPush)
-        completed.add(stepId)
-        if (toPush.nextSteps !== undefined && Array.isArray(toPush.nextSteps))
-          stepNextSteps[stepId] = toPush.nextSteps
-        if (toPush.outputs && isPlainObject(toPush.outputs))
-          context = { ...context, ...toPush.outputs }
-        stepContext.params = context
-        if (!toPush.success)
-          success = false
+    }
+    try {
+      const stepContextForRun: StepContext = { ...stepContext, params: ctx }
+      const maxAttempts = Math.max(1, (Number(substitutedStep.retry) ?? 0) + 1)
+      const runOne = (): Promise<StepResult> =>
+        runWithTimeout(substitutedStep, entry, () => entry.run(substitutedStep, stepContextForRun))
+      let toPush: StepResult = await runOne() ?? {
+        stepId,
+        success: false,
+        stdout: '',
+        stderr: '',
+        error: 'Handler returned no result',
       }
-      catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        steps.push({
+      for (let attempt = 1; attempt < maxAttempts && !toPush.success; attempt++)
+        toPush = await runOne() ?? toPush
+      return {
+        result: toPush,
+        outputs: toPush.outputs && isPlainObject(toPush.outputs) ? toPush.outputs : undefined,
+        nextSteps: toPush.nextSteps,
+      }
+    }
+    catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      return {
+        result: {
           stepId,
           success: false,
           stdout: '',
           stderr: '',
           error: message,
-        })
-        success = false
-        completed.add(stepId)
+        },
       }
     }
+  }
+
+  while (true) {
+    const runnable = getRunnable(dagOrder, completed, stepByIdMap, stepNextSteps)
+    if (runnable.length === 0)
+      break
+    const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
+    for (const { result, outputs, nextSteps } of batchResults) {
+      steps.push(result)
+      completed.add(result.stepId)
+      if (nextSteps !== undefined && Array.isArray(nextSteps))
+        stepNextSteps[result.stepId] = nextSteps
+      if (outputs && isPlainObject(outputs))
+        context = { ...context, ...outputs }
+      if (!result.success)
+        success = false
+    }
+    stepContext.params = context
   }
 
   return {
