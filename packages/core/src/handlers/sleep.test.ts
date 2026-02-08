@@ -1,8 +1,10 @@
 import type { FlowStep, StepContext } from '../types'
 import { describe, expect, it } from 'vitest'
+import { stepResult } from '../stepResult'
 import { SleepHandler } from './sleep'
 
-const emptyContext: StepContext = { params: {} }
+const noopRunSubFlow = async () => ({ results: [], newContext: {} })
+const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
 
 describe('sleep handler', () => {
   const handler = new SleepHandler()

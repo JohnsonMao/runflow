@@ -1,5 +1,5 @@
 // @env node
-import type { FlowStep, IStepHandler, StepContext, StepResult } from '../types'
+import type { FlowStep, IStepHandler, StepContext, StepResult, StepResultFn } from '../types'
 import { spawn } from 'node:child_process'
 import { isPlainObject } from '../utils'
 
@@ -17,27 +17,20 @@ export class CommandHandler implements IStepHandler {
     }
   }
 
-  async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
+  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
     const run = step.run as string | undefined
-    if (typeof run !== 'string') {
-      return {
-        stepId: step.id,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: 'command step requires run (string)',
-      }
-    }
+    if (typeof run !== 'string')
+      return context.stepResult(step.id, false, { error: 'command step requires run (string)' })
     const cwd = step.cwd !== undefined && step.cwd !== null && step.cwd !== ''
       ? (typeof step.cwd === 'string' ? step.cwd : String(step.cwd))
       : undefined
     const env = step.env !== undefined && isPlainObject(step.env)
       ? { ...process.env, ...step.env as Record<string, string> }
       : undefined
-    return this.runSpawn(step.id, run, cwd, env)
+    return this.runSpawn(step.id, run, context.stepResult, cwd, env)
   }
 
-  private runSpawn(stepId: string, run: string, cwd?: string, env?: NodeJS.ProcessEnv): Promise<StepResult> {
+  private runSpawn(stepId: string, run: string, stepResult: StepResultFn, cwd?: string, env?: NodeJS.ProcessEnv): Promise<StepResult> {
     const child = spawn(run, [], {
       shell: true,
       cwd,
@@ -56,22 +49,20 @@ export class CommandHandler implements IStepHandler {
         const stdout = chunks.out.join('')
         const stderr = chunks.err.join('')
         if (code === 0 && !signal) {
-          resolve({ stepId, success: true, stdout, stderr })
+          resolve(stepResult(stepId, true, { stdout, stderr }))
         }
         else {
           const reason = signal ? `killed by signal ${signal}` : `exit code ${code}`
-          resolve({ stepId, success: false, stdout, stderr, error: reason })
+          resolve(stepResult(stepId, false, { stdout, stderr, error: reason }))
         }
       })
       child.on('error', (err) => {
         this.currentChild = null
-        resolve({
-          stepId,
-          success: false,
+        resolve(stepResult(stepId, false, {
           stdout: chunks.out.join(''),
           stderr: chunks.err.join(''),
           error: err.message,
-        })
+        }))
       })
     })
   }

@@ -9,23 +9,10 @@ export class SetHandler implements IStepHandler {
     return 'set step requires set (object)'
   }
 
-  async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
+  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
     const set = step.set
-    if (!isPlainObject(set)) {
-      return {
-        stepId: step.id,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: 'set step requires set (object)',
-      }
-    }
-    return {
-      stepId: step.id,
-      success: true,
-      stdout: '',
-      stderr: '',
-      outputs: { ...set },
-    }
+    if (!isPlainObject(set))
+      return context.stepResult(step.id, false, { error: 'set step requires set (object)' })
+    return context.stepResult(step.id, true, { outputs: { ...set } })
   }
 }

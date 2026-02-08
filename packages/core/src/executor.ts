@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm'
 import { topologicalSort, validateDAG } from './dag'
 import { paramsDeclarationToZodSchema } from './paramsSchema'
 import { createDefaultRegistry } from './registry'
+import { stepResult } from './stepResult'
 import { substitute } from './substitute'
 import { isPlainObject } from './utils'
 
@@ -174,14 +175,8 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const stepByIdMap = stepById(flow)
 
   if (options.dryRun) {
-    for (const stepId of dagOrder) {
-      steps.push({
-        stepId,
-        success: true,
-        stdout: '',
-        stderr: '',
-      })
-    }
+    for (const stepId of dagOrder)
+      steps.push(stepResult(stepId, true))
     return {
       flowName: flow.name,
       success: true,
@@ -201,7 +196,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     const st = stepByIdMap.get(targetStepId)
     if (!st) {
       return {
-        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: `Step not found: ${targetStepId}` },
+        result: stepResult(targetStepId, false, { error: `Step not found: ${targetStepId}` }),
         newContext: ctx,
       }
     }
@@ -209,7 +204,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     const ent = registry[st.type]
     if (!ent) {
       return {
-        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: `Unknown step type: ${st.type}` },
+        result: stepResult(targetStepId, false, { error: `Unknown step type: ${st.type}` }),
         newContext: ctx,
       }
     }
@@ -217,33 +212,33 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       const valid = ent.validate(sub)
       if (valid !== true) {
         return {
-          result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: valid },
+          result: stepResult(targetStepId, false, { error: valid }),
           newContext: ctx,
         }
       }
     }
     if (!evaluateWhen(sub, ctx)) {
       return {
-        result: { stepId: targetStepId, success: true, stdout: '', stderr: '' },
+        result: stepResult(targetStepId, true),
         newContext: ctx,
       }
     }
     const tempStepContext: StepContext = {
       params: ctx,
       flowFilePath: options.flowFilePath,
-      flowName: flow.name,
       runSubFlow: stepContext.runSubFlow,
+      stepResult,
     }
     try {
       const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
-      const result = res ?? { stepId: targetStepId, success: false, stdout: '', stderr: '', error: 'Handler returned no result' }
+      const result = res ?? stepResult(targetStepId, false, { error: 'Handler returned no result' })
       const newContext = result.outputs && isPlainObject(result.outputs) ? { ...ctx, ...result.outputs } : ctx
       return { result, newContext }
     }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       return {
-        result: { stepId: targetStepId, success: false, stdout: '', stderr: '', error: message },
+        result: stepResult(targetStepId, false, { error: message }),
         newContext: ctx,
       }
     }
@@ -295,8 +290,8 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   stepContext = {
     params: context,
     flowFilePath: options.flowFilePath,
-    flowName: flow.name,
     runSubFlow,
+    stepResult,
   }
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */
@@ -309,46 +304,26 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     const entry = registry[step.type]
     if (!entry) {
       return {
-        result: {
-          stepId,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: `Unknown step type: ${step.type}`,
-        },
+        result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}` }),
       }
     }
     if (entry.validate) {
       const valid = entry.validate(substitutedStep)
       if (valid !== true) {
         return {
-          result: {
-            stepId,
-            success: false,
-            stdout: '',
-            stderr: '',
-            error: valid,
-          },
+          result: stepResult(stepId, false, { error: valid }),
         }
       }
     }
     if (!evaluateWhen(substitutedStep, ctx)) {
-      return {
-        result: { stepId, success: true, stdout: '', stderr: '' },
-      }
+      return { result: stepResult(stepId, true) }
     }
     try {
       const stepContextForRun: StepContext = { ...stepContext, params: ctx }
       const maxAttempts = Math.max(1, (Number(substitutedStep.retry) ?? 0) + 1)
       const runOne = (): Promise<StepResult> =>
         runWithTimeout(substitutedStep, entry, () => entry.run(substitutedStep, stepContextForRun))
-      let toPush: StepResult = await runOne() ?? {
-        stepId,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: 'Handler returned no result',
-      }
+      let toPush: StepResult = await runOne() ?? stepResult(stepId, false, { error: 'Handler returned no result' })
       for (let attempt = 1; attempt < maxAttempts && !toPush.success; attempt++)
         toPush = await runOne() ?? toPush
       return {
@@ -359,15 +334,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      return {
-        result: {
-          stepId,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: message,
-        },
-      }
+      return { result: stepResult(stepId, false, { error: message }) }
     }
   }
 

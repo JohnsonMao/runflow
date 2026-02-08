@@ -17,22 +17,15 @@ export class HttpHandler implements IStepHandler {
     }
   }
 
-  async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
+  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
     const valid = this.validate(step)
-    if (valid !== true) {
-      return {
-        stepId: step.id,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: valid,
-      }
-    }
+    if (valid !== true)
+      return context.stepResult(step.id, false, { error: valid })
     const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
-    return this.doRequest(step, step.url as string, outputKey)
+    return this.doRequest(step, context, step.url as string, outputKey)
   }
 
-  private async doRequest(step: FlowStep, url: string, outputKey: string): Promise<StepResult> {
+  private async doRequest(step: FlowStep, context: StepContext, url: string, outputKey: string): Promise<StepResult> {
     const method = (typeof step.method === 'string' ? step.method : 'GET')
     const headers: Record<string, string> = {}
     if (step.headers !== undefined && isPlainObject(step.headers)) {
@@ -77,25 +70,13 @@ export class HttpHandler implements IStepHandler {
         bodyValue = await response.text()
       }
       const responseObject = { statusCode, headers: headersObj, body: bodyValue }
-      return {
-        stepId: step.id,
-        success: true,
-        stdout: '',
-        stderr: '',
-        outputs: { [outputKey]: responseObject },
-      }
+      return context.stepResult(step.id, true, { outputs: { [outputKey]: responseObject } })
     }
     catch (e) {
       this.abortController = null
       const message = e instanceof Error ? e.message : String(e)
       const isAbort = e instanceof Error && e.name === 'AbortError'
-      return {
-        stepId: step.id,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: isAbort ? 'request aborted' : message,
-      }
+      return context.stepResult(step.id, false, { error: isAbort ? 'request aborted' : message })
     }
   }
 }

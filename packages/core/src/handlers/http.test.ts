@@ -1,9 +1,11 @@
 import type { FlowStep, StepContext } from '../types'
 import { Buffer } from 'node:buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stepResult } from '../stepResult'
 import { HttpHandler } from './http'
 
-const emptyContext: StepContext = { params: {} }
+const noopRunSubFlow = async () => ({ results: [], newContext: {} })
+const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
 
 describe('http handler', () => {
   const handler = new HttpHandler()

@@ -10,31 +10,17 @@ export class SleepHandler implements IStepHandler {
     return 'sleep step requires seconds or ms (non-negative number)'
   }
 
-  async run(step: FlowStep, _context: StepContext): Promise<StepResult> {
+  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
     const seconds = step.seconds
     const ms = step.ms
     let durationMs: number
-    if (typeof seconds === 'number' && seconds >= 0) {
+    if (typeof seconds === 'number' && seconds >= 0)
       durationMs = seconds * 1000
-    }
-    else if (typeof ms === 'number' && ms >= 0) {
+    else if (typeof ms === 'number' && ms >= 0)
       durationMs = ms
-    }
-    else {
-      return {
-        stepId: step.id,
-        success: false,
-        stdout: '',
-        stderr: '',
-        error: 'sleep step requires seconds or ms (non-negative number)',
-      }
-    }
+    else
+      return context.stepResult(step.id, false, { error: 'sleep step requires seconds or ms (non-negative number)' })
     await new Promise<void>(resolve => setTimeout(resolve, durationMs))
-    return {
-      stepId: step.id,
-      success: true,
-      stdout: '',
-      stderr: '',
-    }
+    return context.stepResult(step.id, true)
   }
 }

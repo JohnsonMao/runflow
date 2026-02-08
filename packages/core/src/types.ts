@@ -45,9 +45,10 @@ export type RunSubFlowFn = (
 export interface StepContext {
   params: Record<string, unknown>
   flowFilePath?: string
-  flowName?: string
   /** Provided by executor so handlers (e.g. loop) can run body as sub-flow (DAG, early exit). */
-  runSubFlow?: RunSubFlowFn
+  runSubFlow: RunSubFlowFn
+  /** Provided by executor so handlers build StepResult with consistent shape. Always set by the engine. */
+  stepResult: StepResultFn
 }
 
 export interface FlowDefinition {
@@ -71,6 +72,18 @@ export interface StepResult {
    */
   nextSteps?: string[]
 }
+
+/** Options for building a StepResult (e.g. via context.stepResult). */
+export interface StepResultOptions {
+  stdout?: string
+  stderr?: string
+  error?: string
+  outputs?: Record<string, unknown>
+  nextSteps?: string[]
+}
+
+/** Signature of the stepResult factory, provided by executor on context so handlers use a single format. */
+export type StepResultFn = (stepId: string, success: boolean, opts?: StepResultOptions) => StepResult
 
 /** Interface for step handlers. Implement via class. */
 export interface IStepHandler {

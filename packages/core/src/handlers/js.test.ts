@@ -2,11 +2,13 @@ import type { FlowStep, StepContext } from '../types'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stepResult } from '../stepResult'
 import { JsHandler } from './js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const emptyContext: StepContext = { params: {} }
+const noopRunSubFlow = async () => ({ results: [], newContext: {} })
+const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
 
 describe('js handler', () => {
   const handler = new JsHandler()
@@ -59,7 +61,7 @@ describe('js handler', () => {
 
     it('sees params from context', async () => {
       const step: FlowStep = { id: 'j1', type: 'js', run: 'return { seen: params.a }', dependsOn: [] }
-      const result = await handler.run(step, { params: { a: '1' } })
+      const result = await handler.run(step, { params: { a: '1' }, runSubFlow: noopRunSubFlow, stepResult })
       expect(result.success).toBe(true)
       expect(result.outputs).toEqual({ j1: { seen: '1' } })
     })
@@ -105,14 +107,14 @@ describe('js handler', () => {
     it('loads and runs file when flowFilePath is set', async () => {
       const flowFilePath = path.join(__dirname, '..', 'fixtures', 'flow.yaml')
       const step: FlowStep = { id: 'j1', type: 'js', run: '', file: 'step.js', dependsOn: [] }
-      const result = await handler.run(step, { params: {}, flowFilePath })
+      const result = await handler.run(step, { params: {}, flowFilePath, runSubFlow: noopRunSubFlow, stepResult })
       expect(result.success).toBe(true)
       expect(result.outputs).toEqual({ j1: { fromFile: true } })
     })
 
     it('fails when file is used but flowFilePath is missing', async () => {
       const step: FlowStep = { id: 'j1', type: 'js', run: '', file: 'step.js', dependsOn: [] }
-      const result = await handler.run(step, {} as StepContext)
+      const result = await handler.run(step, { params: {}, runSubFlow: noopRunSubFlow, stepResult })
       expect(result.success).toBe(false)
       expect(result.error).toContain('flowFilePath')
     })

@@ -17,37 +17,17 @@ export class JsHandler implements IStepHandler {
     let code: string
     const file = step.file
     if (typeof file === 'string') {
-      if (!context.flowFilePath) {
-        return {
-          stepId: step.id,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: 'flowFilePath is required to run js step with file',
-        }
-      }
-      if (file.endsWith('.ts')) {
-        return {
-          stepId: step.id,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: 'TypeScript (.ts) files are not supported',
-        }
-      }
+      if (!context.flowFilePath)
+        return context.stepResult(step.id, false, { error: 'flowFilePath is required to run js step with file' })
+      if (file.endsWith('.ts'))
+        return context.stepResult(step.id, false, { error: 'TypeScript (.ts) files are not supported' })
       const resolved = path.resolve(path.dirname(context.flowFilePath), file)
       try {
         code = readFileSync(resolved, 'utf-8')
       }
       catch (e) {
         const message = e instanceof Error ? e.message : String(e)
-        return {
-          stepId: step.id,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: `Failed to load file: ${message}`,
-        }
+        return context.stepResult(step.id, false, { error: `Failed to load file: ${message}` })
       }
     }
     else {
@@ -76,24 +56,19 @@ export class JsHandler implements IStepHandler {
         { timeout: timeoutMs },
       )
       const resolved = await Promise.resolve(ret)
-      const result: StepResult = {
-        stepId: step.id,
-        success: true,
+      return context.stepResult(step.id, true, {
         stdout: out.join('\n'),
         stderr: err.join('\n'),
         outputs: { [outputKey]: resolved },
-      }
-      return result
+      })
     }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      return {
-        stepId: step.id,
-        success: false,
+      return context.stepResult(step.id, false, {
         stdout: out.join('\n'),
         stderr: err.join('\n'),
         error: message,
-      }
+      })
     }
   }
 }

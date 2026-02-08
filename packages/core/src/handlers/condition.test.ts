@@ -1,6 +1,10 @@
-import type { FlowStep } from '../types'
+import type { FlowStep, StepContext } from '../types'
 import { describe, expect, it } from 'vitest'
+import { stepResult } from '../stepResult'
 import { ConditionHandler } from './condition'
+
+const noopRunSubFlow = async () => ({ results: [], newContext: {} })
+const ctx = (params: Record<string, unknown> = {}): StepContext => ({ params, runSubFlow: noopRunSubFlow, stepResult })
 
 describe('condition handler', () => {
   const handler = new ConditionHandler()
@@ -38,7 +42,7 @@ describe('condition handler', () => {
         else: 'onFalse',
         dependsOn: [],
       }
-      const result = await handler.run(step, { params: { flag: true } })
+      const result = await handler.run(step, ctx({ flag: true }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['onTrue'])
     })
@@ -52,14 +56,14 @@ describe('condition handler', () => {
         else: 'onFalse',
         dependsOn: [],
       }
-      const result = await handler.run(step, { params: { flag: false } })
+      const result = await handler.run(step, ctx({ flag: false }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['onFalse'])
     })
 
     it('returns error when when is missing at run time', async () => {
       const step = { id: 'c', type: 'condition', dependsOn: [] } as FlowStep
-      const result = await handler.run(step, { params: {} })
+      const result = await handler.run(step, ctx())
       expect(result.success).toBe(false)
       expect(result.error).toContain('when')
     })
@@ -73,14 +77,14 @@ describe('condition handler', () => {
         else: 'y',
         dependsOn: [],
       }
-      const result = await handler.run(step, { params: {} })
+      const result = await handler.run(step, ctx())
       expect(result.success).toBe(false)
       expect(result.error).toBeDefined()
     })
 
     it('does not merge result into outputs (no outputs)', async () => {
       const step: FlowStep = { id: 'check', type: 'condition', when: 'true', then: 'next', dependsOn: [] }
-      const result = await handler.run(step, { params: {} })
+      const result = await handler.run(step, ctx())
       expect(result.success).toBe(true)
       expect(result.outputs).toBeUndefined()
     })

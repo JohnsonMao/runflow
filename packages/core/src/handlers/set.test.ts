@@ -1,8 +1,10 @@
 import type { FlowStep, StepContext } from '../types'
 import { describe, expect, it } from 'vitest'
+import { stepResult } from '../stepResult'
 import { SetHandler } from './set'
 
-const emptyContext: StepContext = { params: {} }
+const noopRunSubFlow = async () => ({ results: [], newContext: {} })
+const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
 
 describe('set handler', () => {
   const handler = new SetHandler()
