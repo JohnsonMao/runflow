@@ -1,6 +1,7 @@
 import type { IStepHandler, StepRegistry } from './types'
 import { CommandHandler } from './handlers/command'
 import { ConditionHandler } from './handlers/condition'
+import { FlowHandler } from './handlers/flow'
 import { HttpHandler } from './handlers/http'
 import { JsHandler } from './handlers/js'
 import { LoopHandler } from './handlers/loop'
@@ -16,6 +17,7 @@ export function createDefaultRegistry(): StepRegistry {
     sleep: new SleepHandler(),
     set: new SetHandler(),
     loop: new LoopHandler(),
+    flow: new FlowHandler(),
   }
 }
 

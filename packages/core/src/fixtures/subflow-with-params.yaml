@@ -1,0 +1,10 @@
+name: sub-with-params
+params:
+  - name: a
+    type: string
+    required: true
+steps:
+  - id: j1
+    type: js
+    run: "return { received: params.a }"
+    dependsOn: []

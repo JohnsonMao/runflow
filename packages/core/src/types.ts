@@ -41,6 +41,12 @@ export type RunSubFlowFn = (
   earlyExit?: { nextSteps: string[] }
 }>
 
+/** Run another flow by path; used by flow step handler. Returns RunResult (validation/load/run failures yield success: false + error). */
+export type RunFlowFn = (
+  filePath: string,
+  params: Record<string, unknown>,
+) => Promise<RunResult>
+
 /** Context passed to each step handler (params + previous outputs, flowFilePath). */
 export interface StepContext {
   params: Record<string, unknown>
@@ -49,6 +55,8 @@ export interface StepContext {
   runSubFlow: RunSubFlowFn
   /** Provided by executor so handlers build StepResult with consistent shape. Always set by the engine. */
   stepResult: StepResultFn
+  /** Provided by executor so flow step handler can run another flow (load + run with depth limit). Optional when not in a flow-call context. */
+  runFlow?: RunFlowFn
 }
 
 export interface FlowDefinition {
@@ -103,6 +111,10 @@ export interface RunOptions {
   params?: Record<string, unknown>
   flowFilePath?: string
   registry?: StepRegistry
+  /** Max nesting depth for flow steps (default from DEFAULT_MAX_FLOW_CALL_DEPTH). When a flow step would run at this depth, it fails. */
+  maxFlowCallDepth?: number
+  /** Current flow-call depth (internal). 0 at top-level; incremented when run is invoked from runFlow. */
+  flowCallDepth?: number
 }
 
 export interface RunResult {

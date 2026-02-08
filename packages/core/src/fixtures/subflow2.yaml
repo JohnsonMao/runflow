@@ -1,0 +1,6 @@
+name: subflow2
+steps:
+  - id: f1
+    type: flow
+    flow: subflow.yaml
+    dependsOn: []

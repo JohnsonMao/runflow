@@ -633,4 +633,113 @@ describe('run', () => {
     expect(result.success).toBe(true)
     expect(result.steps[1].outputs?.next).toEqual({ hasResult: false })
   })
+
+  describe('flow step', () => {
+    const fixturesDir = path.join(__dirname, 'fixtures')
+    const flowFilePath = path.join(fixturesDir, 'main.yaml')
+
+    it('runs callee flow from relative path and merges outputs; next step sees context', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow.yaml', dependsOn: [] },
+          { id: 'j1', type: 'js', run: 'return { seen: params.s1?.fromSub, n: params.s1?.n }', dependsOn: ['f1'] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].success).toBe(true)
+      expect(result.steps[0].outputs).toEqual({ s1: { fromSub: true, n: 1 } })
+      expect(result.steps[1].outputs?.j1).toEqual({ seen: true, n: 1 })
+    })
+
+    it('resolves relative path from flowFilePath dir', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow.yaml', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath: path.join(fixturesDir, 'main.yaml') })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].outputs).toEqual({ s1: { fromSub: true, n: 1 } })
+    })
+
+    it('returns failure when callee file is missing', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'nonexistent.yaml', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath })
+      expect(result.success).toBe(false)
+      expect(result.steps[0].success).toBe(false)
+      expect(result.steps[0].error).toMatch(/not found|failed to load/i)
+    })
+
+    it('max flow-call depth: second level fails with depth exceeded', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow2.yaml', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath, maxFlowCallDepth: 1 })
+      expect(result.success).toBe(false)
+      const f1Result = result.steps.find(s => s.stepId === 'f1')
+      expect(f1Result).toBeDefined()
+      expect(f1Result!.success).toBe(false)
+      expect(f1Result!.error).toMatch(/depth exceeded|max flow-call depth/i)
+    })
+
+    it('max flow-call depth: one level allowed with maxFlowCallDepth 1', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow.yaml', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath, maxFlowCallDepth: 1 })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].outputs).toEqual({ s1: { fromSub: true, n: 1 } })
+    })
+
+    it('callee with params declaration: valid params pass', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow-with-params.yaml', params: { a: 'valid' }, dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].outputs).toEqual({ j1: { received: 'valid' } })
+    })
+
+    it('callee with params declaration: invalid params yield StepResult failure with validation error', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow-with-params.yaml', params: {}, dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath })
+      expect(result.success).toBe(false)
+      expect(result.steps[0].success).toBe(false)
+      expect(result.steps[0].error).toMatch(/required|a/i)
+    })
+
+    it('flow step passes params to callee', async () => {
+      const flow: FlowDefinition = {
+        name: 'caller',
+        steps: [
+          { id: 'f1', type: 'flow', flow: 'subflow.yaml', params: { fromCaller: 42 }, dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { flowFilePath })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].outputs).toEqual({ s1: { fromSub: true, n: 1 } })
+    })
+  })
 })

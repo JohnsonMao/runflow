@@ -1,7 +1,10 @@
 // @env node
 import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepResult } from './types'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
+import { DEFAULT_MAX_FLOW_CALL_DEPTH } from './constants'
 import { topologicalSort, validateDAG } from './dag'
+import { loadFromFile } from './loader'
 import { paramsDeclarationToZodSchema } from './paramsSchema'
 import { createDefaultRegistry } from './registry'
 import { stepResult } from './stepResult'
@@ -173,6 +176,25 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const dagOrder = sortResult.order
   const registry = { ...createDefaultRegistry(), ...(options.registry ?? {}) }
   const stepByIdMap = stepById(flow)
+  const flowCallDepth = options.flowCallDepth ?? 0
+  const maxFlowCallDepth = options.maxFlowCallDepth ?? DEFAULT_MAX_FLOW_CALL_DEPTH
+
+  const runFlow = async (filePath: string, params: Record<string, unknown>): Promise<RunResult> => {
+    const baseDir = options.flowFilePath ? dirname(options.flowFilePath) : process.cwd()
+    const resolvedPath = isAbsolute(filePath) ? filePath : resolve(baseDir, filePath)
+    if (flowCallDepth >= maxFlowCallDepth)
+      return { flowName: flow.name, success: false, steps: [], error: 'max flow-call depth exceeded' }
+    const loaded = loadFromFile(resolvedPath)
+    if (!loaded)
+      return { flowName: filePath, success: false, steps: [], error: 'flow not found or failed to load' }
+    return run(loaded, {
+      params,
+      flowFilePath: resolvedPath,
+      flowCallDepth: flowCallDepth + 1,
+      maxFlowCallDepth,
+      registry,
+    })
+  }
 
   if (options.dryRun) {
     for (const stepId of dagOrder)
@@ -228,6 +250,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       flowFilePath: options.flowFilePath,
       runSubFlow: stepContext.runSubFlow,
       stepResult,
+      runFlow: stepContext.runFlow,
     }
     try {
       const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
@@ -292,6 +315,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     flowFilePath: options.flowFilePath,
     runSubFlow,
     stepResult,
+    runFlow,
   }
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */

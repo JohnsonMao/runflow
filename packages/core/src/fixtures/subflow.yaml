@@ -1,0 +1,6 @@
+name: subflow
+steps:
+  - id: s1
+    type: js
+    run: "return { fromSub: true, n: 1 }"
+    dependsOn: []
