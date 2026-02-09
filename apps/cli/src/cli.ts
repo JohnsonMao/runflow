@@ -3,6 +3,7 @@ import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { openApiToFlows } from '@runflow/convention-openapi'
 import { createDefaultRegistry, loadFromFile, registerStepHandler, run } from '@runflow/core'
 import { createCommand } from 'commander'
 
@@ -103,21 +104,52 @@ async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry
 }
 
 program
-  .command('run <file>')
-  .description('Execute a flow from a YAML file')
+  .command('run [file]')
+  .description('Execute a flow from a YAML file, or from an OpenAPI spec with --from-openapi and --operation')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
+  .option('--from-openapi <path>', 'Load flow from OpenAPI spec; requires --operation')
+  .option('--operation <key>', 'Operation key e.g. get-users (required with --from-openapi)')
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
   .option('--registry <path>', 'Path to a JS/ESM module that exports default (StepRegistry); merged after config handlers', undefined)
-  .action(async (file: string, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
-    if (!existsSync(file) || !statSync(file).isFile()) {
-      console.error(`Error: File not found or not a regular file: ${file}`)
-      process.exit(1)
+  .action(async (file: string | undefined, options: { dryRun?: boolean, verbose?: boolean, fromOpenapi?: string, operation?: string, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
+    let flow: Awaited<ReturnType<typeof loadFromFile>>
+    let flowFilePath: string | undefined
+    if (options.fromOpenapi) {
+      if (!options.operation) {
+        console.error('Error: --operation is required when using --from-openapi (e.g. --operation get-users)')
+        process.exit(1)
+      }
+      const specPath = path.resolve(process.cwd(), options.fromOpenapi)
+      if (!existsSync(specPath) || !statSync(specPath).isFile()) {
+        console.error(`Error: OpenAPI spec not found: ${specPath}`)
+        process.exit(1)
+      }
+      const flows = await openApiToFlows(specPath, { output: 'memory' })
+      const selected = flows.get(options.operation)
+      if (!selected) {
+        const keys = [...flows.keys()].slice(0, 10).join(', ')
+        console.error(`Error: Operation "${options.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
+        process.exit(1)
+      }
+      flow = selected
+      flowFilePath = specPath
     }
-    const flow = loadFromFile(file)
+    else {
+      if (!file) {
+        console.error('Error: Either <file> or --from-openapi is required.')
+        process.exit(1)
+      }
+      if (!existsSync(file) || !statSync(file).isFile()) {
+        console.error(`Error: File not found or not a regular file: ${file}`)
+        process.exit(1)
+      }
+      flow = loadFromFile(file)
+      flowFilePath = path.resolve(file)
+    }
     if (!flow) {
       console.error('Error: Invalid or unreadable flow file.')
       process.exit(1)
@@ -128,7 +160,6 @@ program
       const cliParams = parseParamPairs(options.param)
       params = { ...params, ...cliParams }
     }
-    const flowFilePath = path.resolve(file)
     const cwd = process.cwd()
     let registry: StepRegistry
     const configPath = options.config

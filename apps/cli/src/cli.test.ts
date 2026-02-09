@@ -109,6 +109,38 @@ steps:
     expect(result.code).toBe(1)
     expect(result.stderr).toMatch(/Failed to read|not found|Error/i)
   })
+
+  it('runs from OpenAPI spec with --from-openapi and --operation (dry-run)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const openapiPath = join(dir, 'openapi.yaml')
+    writeFileSync(openapiPath, `openapi: "3.0.0"
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      summary: List users
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+`)
+    const result = runFlow(['run', '--from-openapi', openapiPath, '--operation', 'get-users', '--dry-run'], dir)
+    if (result.code !== 0)
+      console.error(result.stderr)
+    expect(result.code, result.stderr).toBe(0)
+  })
+
+  it('exits with error when --from-openapi without --operation', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const openapiPath = join(dir, 'openapi.yaml')
+    writeFileSync(openapiPath, 'openapi: "3.0.0"\npaths: {}\n')
+    const result = runFlow(['run', '--from-openapi', openapiPath], dir)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('--operation is required')
+  })
 })
 
 describe('flow params', () => {

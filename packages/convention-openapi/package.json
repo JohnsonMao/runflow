@@ -1,14 +1,18 @@
 {
-  "name": "@runflow/cli",
+  "name": "@runflow/convention-openapi",
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "bin": {
-    "flow": "./dist/cli.js"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "files": [
-    "dist"
-  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -17,9 +21,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@runflow/convention-openapi": "workspace:^",
+    "@apidevtools/swagger-parser": "catalog:prod",
     "@runflow/core": "workspace:*",
-    "commander": "catalog:prod",
     "yaml": "catalog:prod"
   },
   "devDependencies": {

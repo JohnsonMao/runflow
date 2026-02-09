@@ -17,6 +17,9 @@ catalogs:
     typescript: "^5.7.2"
     vitest: "^2.1.6"
   prod:
+    "@apidevtools/swagger-parser": "^10.1.0"
     commander: "^12.1.0"
     yaml: "^2.7.0"
     zod: "^3.24.0"
+catalog:
+  "@apidevtools/swagger-parser": ^10.1.0
