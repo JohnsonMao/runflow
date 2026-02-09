@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { program } from './cli.js'
 
 const flowBin = join(process.cwd(), 'dist/cli.js')
 
@@ -140,6 +141,80 @@ paths:
     const result = runFlow(['run', '--from-openapi', openapiPath], dir)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('--operation is required')
+  })
+
+  it('uses config openapi options when running with --from-openapi and --config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const openapiPath = join(dir, 'openapi.yaml')
+    writeFileSync(openapiPath, `openapi: "3.0.0"
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      summary: List users
+`)
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, `export default {
+  openapi: { baseUrl: 'https://api.example.com' },
+}
+`)
+    const result = runFlow(
+      ['run', '--config', configPath, '--from-openapi', openapiPath, '--operation', 'get-users', '--dry-run'],
+      dir,
+    )
+    if (result.code !== 0)
+      console.error(result.stderr)
+    expect(result.code, result.stderr).toBe(0)
+  })
+
+  it('config openapi baseUrl is used for the actual HTTP request (CLI + mock fetch)', async () => {
+    const baseUrl = 'https://api.example.com'
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: () => Promise.resolve('{}'),
+    } as Response)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mockFetch
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    try {
+      const openapiPath = join(dir, 'openapi.yaml')
+      writeFileSync(openapiPath, `openapi: "3.0.0"
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      summary: List users
+`)
+      const configPath = join(dir, 'runflow.config.mjs')
+      writeFileSync(configPath, `export default {
+  openapi: { baseUrl: '${baseUrl}' },
+}
+`)
+      await program.parseAsync([
+        'node',
+        'flow',
+        'run',
+        '--config',
+        configPath,
+        '--from-openapi',
+        openapiPath,
+        '--operation',
+        'get-users',
+      ])
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/users`,
+        expect.objectContaining({ method: 'get' }),
+      )
+    }
+    finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
 

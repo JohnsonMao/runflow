@@ -316,6 +316,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     runSubFlow,
     stepResult,
     runFlow,
+    allowedCommands: options.allowedCommands,
   }
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */

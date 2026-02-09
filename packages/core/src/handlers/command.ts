@@ -1,6 +1,8 @@
 // @env node
 import type { FlowStep, IStepHandler, StepContext, StepResult, StepResultFn } from '../types'
 import { spawn } from 'node:child_process'
+import { basename } from 'node:path'
+import { DEFAULT_ALLOWED_COMMANDS } from '../constants'
 import { isPlainObject } from '../utils'
 
 export class CommandHandler implements IStepHandler {
@@ -21,6 +23,17 @@ export class CommandHandler implements IStepHandler {
     const run = step.run as string | undefined
     if (typeof run !== 'string')
       return context.stepResult(step.id, false, { error: 'command step requires run (string)' })
+    const rawAllowed = context.allowedCommands
+    const list = rawAllowed === undefined
+      ? DEFAULT_ALLOWED_COMMANDS
+      : (Array.isArray(rawAllowed) ? rawAllowed : [])
+    if (list.length === 0)
+      return context.stepResult(step.id, false, { error: 'command not allowed: allowedCommands is empty' })
+    const firstToken = run.trim().split(/\s+/)[0] ?? ''
+    const rawCmd = firstToken ? basename(firstToken) : ''
+    const cmd = rawCmd.replace(/\.exe$/i, '')
+    if (!cmd || !list.some(a => String(a).replace(/\.exe$/i, '') === cmd))
+      return context.stepResult(step.id, false, { error: `command not allowed: ${rawCmd || '(empty)'}. Allowed: ${list.join(', ')}` })
     const cwd = step.cwd !== undefined && step.cwd !== null && step.cwd !== ''
       ? (typeof step.cwd === 'string' ? step.cwd : String(step.cwd))
       : undefined

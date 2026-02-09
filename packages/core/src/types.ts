@@ -57,6 +57,8 @@ export interface StepContext {
   stepResult: StepResultFn
   /** Provided by executor so flow step handler can run another flow (load + run with depth limit). Optional when not in a flow-call context. */
   runFlow?: RunFlowFn
+  /** When set, command step only allows these executable names (e.g. ['node','npx']). First token of run is checked (basename). */
+  allowedCommands?: string[]
 }
 
 export interface FlowDefinition {
@@ -115,6 +117,8 @@ export interface RunOptions {
   maxFlowCallDepth?: number
   /** Current flow-call depth (internal). 0 at top-level; incremented when run is invoked from runFlow. */
   flowCallDepth?: number
+  /** When set, command steps only allow these executable names (e.g. ['node','npx','echo']). Passed to step context for command handler. */
+  allowedCommands?: string[]
 }
 
 export interface RunResult {

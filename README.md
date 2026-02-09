@@ -40,6 +40,12 @@ Options:
 - `--verbose` – Print per-step stdout/stderr.
 - `--param <key=value>` – Pass a parameter (repeatable). Merged into initial context.
 - `--params-file <path>` / `-f` – Load params from a JSON file (object). Merged with `--param`; `--param` overrides same keys.
+- `--config <path>` – Path to `runflow.config.mjs` (default: cwd). Used for custom step handlers and OpenAPI options.
+- `--from-openapi <path>` – Load flow from an OpenAPI spec; requires `--operation <key>` (e.g. `get-users`).
+
+**Config and OpenAPI**: In `runflow.config.mjs` you can set `openapi: { specPath, outDir, baseUrl, operationFilter, hooks }`. These options are used when running with `--from-openapi`; CLI flags override config when both are provided. Paths in config are resolved relative to the config file directory.
+
+**Security – allowed commands**: By default (when `allowedCommands` is not set in config), only `echo`, `exit`, `true`, `false` are allowed (minimal safe set). To run runtimes or tools (e.g. `node`, `npx`, `python`, `pip`, `curl`), set `allowedCommands: ['node','npx','echo', ...]` in config. Set `allowedCommands: []` to allow no command steps. The first token of each step’s `run` string is checked (basename; `.exe` is ignored on Windows).
 
 To list parameters declared by a flow: `flow params <file>` (shows name, type, required, default, enum, description).
 
@@ -70,7 +76,7 @@ steps:
 - **Command steps** support template substitution in `run`: `{{ key }}`, `{{ obj.nested }}`, `{{ arr[0] }}`. Object/array values are JSON-stringified; undefined/null → empty string.
 - **JS steps** may use `run: "<inline code>"` or `file: "./script.js"` (path relative to the flow file). Only `.js` is supported; `.ts` is rejected.
 - **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `output-key` (context key for the response). All string fields support `{{ key }}` substitution. On 2xx the response is written to context as `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Non-2xx responses set the step as failed with no outputs. Example: `examples/http-flow.yaml`.
-- **Condition steps** use `type: condition` with required `when` (JS expression evaluated with `params` in scope, e.g. `params.env === 'prod'`). Optional `then` / `else` are step id(s); only the matching branch runs. The condition result is **not** merged into context. Example: `examples/condition-flow.yaml`.
+- **Condition steps** use `type: condition` with required `when` (JS expression evaluated with `params` in scope, e.g. `params.env === 'prod'`). Optional `then` / `else` are step id(s); only the matching branch runs. The condition result is **not** merged into context.
 - **Migration**: Existing flows must add `depends-on` to every step that should run. Use `depends-on: []` for the first step and `depends-on: [previousStepId]` for the rest in a linear flow. See `examples/hello-flow.yaml` or `examples/dag-linear-flow.yaml`.
 
 ## Scripts

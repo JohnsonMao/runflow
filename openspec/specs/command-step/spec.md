@@ -77,3 +77,24 @@ A command step MAY include optional `timeout` (number, seconds), `cwd` (string, 
 - **WHEN** context has `dir: '/tmp'`, `key: 'X'` and the command step has `cwd: '{{ dir }}'`, `env: { '{{ key }}': 'value' }` (or env keys/values that use {{ }})
 - **THEN** the executor substitutes the step before calling the handler; the handler receives substituted cwd and env
 - **AND** the command runs with the resolved directory and environment
+
+### Requirement: Command step MAY be restricted by allowedCommands
+
+The engine SHALL pass an optional `allowedCommands` (array of executable names) to the step context. When the command handler receives context with `allowedCommands` defined, it SHALL allow only commands whose first token (basename, `.exe` stripped on Windows) is in that list; otherwise it SHALL return a StepResult with success: false and an error indicating the command is not allowed. When `allowedCommands` is not set (undefined), the handler SHALL use a minimal default list (e.g. `echo`, `exit`, `true`, `false`). When `allowedCommands` is an empty array, the handler SHALL allow no command and SHALL fail every command step with an error. RunOptions MAY include `allowedCommands`; the CLI MAY read `allowedCommands` from runflow config and pass it to `run()`.
+
+#### Scenario: Default list when allowedCommands not set
+
+- **WHEN** the executor runs a command step and context.allowedCommands is undefined
+- **THEN** the handler SHALL use a built-in default list of allowed executable names
+- **AND** only commands whose first token is in that default list SHALL run; others SHALL fail with "command not allowed"
+
+#### Scenario: Explicit allowed list from config
+
+- **WHEN** config has `allowedCommands: ['node','echo']` and the CLI passes it to run()
+- **THEN** the handler SHALL allow only steps whose run string's first token is node or echo (or basename match)
+- **AND** any other command SHALL fail with an error naming the disallowed command and the allowed list
+
+#### Scenario: Empty allowedCommands disables all command steps
+
+- **WHEN** context.allowedCommands is an empty array
+- **THEN** the handler SHALL return success: false for every command step with an error indicating allowedCommands is empty

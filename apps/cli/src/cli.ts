@@ -1,4 +1,5 @@
 // @env node
+import type { OpenApiToFlowsOptions } from '@runflow/convention-openapi'
 import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -9,11 +10,23 @@ import { createCommand } from 'commander'
 
 const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js']
 
-interface RunflowConfig {
-  handlers?: Record<string, string>
+/** OpenAPI block in runflow config; paths resolved relative to config file directory. */
+interface OpenApiConfig {
+  specPath?: string
+  outDir?: string
+  baseUrl?: string
+  operationFilter?: OpenApiToFlowsOptions['operationFilter']
+  hooks?: OpenApiToFlowsOptions['hooks']
 }
 
-const program = createCommand()
+interface RunflowConfig {
+  handlers?: Record<string, string>
+  openapi?: OpenApiConfig
+  /** When set, command steps only allow these executable names (e.g. ['node','npx','echo']). */
+  allowedCommands?: string[]
+}
+
+export const program = createCommand()
 
 program
   .name('flow')
@@ -71,6 +84,25 @@ function findConfigFile(cwd: string): string | null {
   return null
 }
 
+/** Resolve openapi config options; specPath and outDir are resolved relative to configDir. */
+function resolveOpenApiOptionsFromConfig(config: RunflowConfig | null, configDir: string): Partial<OpenApiToFlowsOptions> {
+  const openapi = config?.openapi
+  if (!openapi || typeof openapi !== 'object')
+    return {}
+  const opts: Partial<OpenApiToFlowsOptions> = {}
+  if (openapi.baseUrl !== undefined)
+    opts.baseUrl = openapi.baseUrl
+  if (openapi.operationFilter !== undefined)
+    opts.operationFilter = openapi.operationFilter
+  if (openapi.hooks !== undefined)
+    opts.hooks = openapi.hooks
+  if (typeof openapi.outDir === 'string') {
+    const outDir = path.isAbsolute(openapi.outDir) ? openapi.outDir : path.resolve(configDir, openapi.outDir)
+    opts.output = { outputDir: outDir }
+  }
+  return opts
+}
+
 async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry> {
   const config = await loadConfig(configPath)
   const registry = createDefaultRegistry()
@@ -116,6 +148,10 @@ program
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
   .option('--registry <path>', 'Path to a JS/ESM module that exports default (StepRegistry); merged after config handlers', undefined)
   .action(async (file: string | undefined, options: { dryRun?: boolean, verbose?: boolean, fromOpenapi?: string, operation?: string, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
+    const cwd = process.cwd()
+    const configPath = options.config
+      ? path.resolve(cwd, options.config)
+      : findConfigFile(cwd)
     let flow: Awaited<ReturnType<typeof loadFromFile>>
     let flowFilePath: string | undefined
     if (options.fromOpenapi) {
@@ -123,12 +159,15 @@ program
         console.error('Error: --operation is required when using --from-openapi (e.g. --operation get-users)')
         process.exit(1)
       }
-      const specPath = path.resolve(process.cwd(), options.fromOpenapi)
+      const specPath = path.resolve(cwd, options.fromOpenapi)
       if (!existsSync(specPath) || !statSync(specPath).isFile()) {
         console.error(`Error: OpenAPI spec not found: ${specPath}`)
         process.exit(1)
       }
-      const flows = await openApiToFlows(specPath, { output: 'memory' })
+      const config = configPath ? await loadConfig(configPath) : null
+      const configDir = configPath ? path.dirname(configPath) : cwd
+      const openApiOptions = resolveOpenApiOptionsFromConfig(config, configDir)
+      const flows = await openApiToFlows(specPath, { ...openApiOptions, output: 'memory' })
       const selected = flows.get(options.operation)
       if (!selected) {
         const keys = [...flows.keys()].slice(0, 10).join(', ')
@@ -160,11 +199,7 @@ program
       const cliParams = parseParamPairs(options.param)
       params = { ...params, ...cliParams }
     }
-    const cwd = process.cwd()
     let registry: StepRegistry
-    const configPath = options.config
-      ? path.resolve(cwd, options.config)
-      : findConfigFile(cwd)
     if (configPath) {
       registry = await buildRegistryFromConfig(configPath)
     }
@@ -193,11 +228,16 @@ program
         process.exit(1)
       }
     }
+    const runConfig = configPath ? await loadConfig(configPath) : null
+    const allowedCommands = runConfig?.allowedCommands !== undefined && Array.isArray(runConfig.allowedCommands)
+      ? runConfig.allowedCommands.filter((c): c is string => typeof c === 'string')
+      : undefined
     const result = await run(flow, {
       dryRun: options.dryRun,
       params: Object.keys(params).length ? params : undefined,
       flowFilePath,
       registry,
+      allowedCommands,
     })
     if (options.verbose) {
       for (const step of result.steps) {
@@ -247,4 +287,5 @@ program
     }
   })
 
-program.parse()
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
+  program.parse()

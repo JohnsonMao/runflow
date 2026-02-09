@@ -39,8 +39,9 @@ describe('command handler', () => {
     })
 
     it('runs in given cwd when step.cwd is set', async () => {
+      const ctx: StepContext = { ...emptyContext, allowedCommands: ['pwd', 'echo'] }
       const step: FlowStep = { id: 'c1', type: 'command', run: 'pwd', cwd: '/tmp', dependsOn: [] }
-      const result = await handler.run(step, emptyContext)
+      const result = await handler.run(step, ctx)
       expect(result.success).toBe(true)
       expect(result.stdout.trim()).toContain('tmp')
     })
@@ -63,6 +64,46 @@ describe('command handler', () => {
       const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(false)
       expect(result.error).toContain('command step requires run')
+    })
+
+    it('allows command when allowedCommands is set and first token is in list', async () => {
+      const ctx: StepContext = { ...emptyContext, allowedCommands: ['echo', 'node'] }
+      const step: FlowStep = { id: 's1', type: 'command', run: 'echo ok', dependsOn: [] }
+      const result = await handler.run(step, ctx)
+      expect(result.success).toBe(true)
+      expect(result.stdout.trim()).toBe('ok')
+    })
+
+    it('rejects command when allowedCommands is set and first token is not in list', async () => {
+      const ctx: StepContext = { ...emptyContext, allowedCommands: ['node'] }
+      const step: FlowStep = { id: 's1', type: 'command', run: 'echo hi', dependsOn: [] }
+      const result = await handler.run(step, ctx)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('command not allowed')
+      expect(result.error).toContain('Allowed: node')
+    })
+
+    it('when allowedCommands is empty array, rejects all commands', async () => {
+      const ctx: StepContext = { ...emptyContext, allowedCommands: [] }
+      const step: FlowStep = { id: 's1', type: 'command', run: 'echo hi', dependsOn: [] }
+      const result = await handler.run(step, ctx)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('allowedCommands is empty')
+    })
+
+    it('when allowedCommands is undefined, uses default safe list (e.g. echo allowed)', async () => {
+      const step: FlowStep = { id: 's1', type: 'command', run: 'echo ok', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(true)
+      expect(result.stdout.trim()).toBe('ok')
+    })
+
+    it('when allowedCommands is undefined, rejects command not in default list', async () => {
+      const step: FlowStep = { id: 's1', type: 'command', run: 'curl -s example.com', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('command not allowed')
+      expect(result.error).toContain('curl')
     })
   })
 })
