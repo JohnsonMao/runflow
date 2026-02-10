@@ -9,7 +9,7 @@ describe('loadFromFile', () => {
     const dir = mkdtempSync(join(tmpdir(), 'runflow-loader-'))
     try {
       const file = join(dir, 'flow.yaml')
-      writeFileSync(file, 'name: test\nsteps:\n  - id: s1\n    type: command\n    run: echo hi\n', 'utf-8')
+      writeFileSync(file, 'name: test\nsteps:\n  - id: s1\n    type: set\n    set: {}\n', 'utf-8')
       const flow = loadFromFile(file)
       expect(flow).not.toBeNull()
       expect(flow?.name).toBe('test')
@@ -43,7 +43,7 @@ describe('loadFromFile', () => {
     const dir = mkdtempSync(join(tmpdir(), 'runflow-loader-'))
     try {
       const file = join(dir, 'no-name.yaml')
-      writeFileSync(file, 'steps:\n  - id: s1\n    type: command\n    run: echo hi\n', 'utf-8')
+      writeFileSync(file, 'steps:\n  - id: s1\n    type: set\n    set: {}\n', 'utf-8')
       const result = loadFromFile(file)
       expect(result).toBeNull()
     }

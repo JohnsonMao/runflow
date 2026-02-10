@@ -4,14 +4,14 @@ name: dag-parallel
 description: Parallel branches after root
 steps:
   - id: a
-    type: command
-    run: echo "root"
+    type: set
+    set: { root: true }
     depends-on: []
   - id: b
-    type: command
-    run: echo "branch B"
+    type: set
+    set: { branch: "B" }
     depends-on: [a]
   - id: c
-    type: command
-    run: echo "branch C"
+    type: set
+    set: { branch: "C" }
     depends-on: [a]

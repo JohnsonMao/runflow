@@ -1,11 +1,11 @@
-name: js-file-flow
-description: JS step loads code from file
+name: set-flow
+description: Simple set steps (no JS file step)
 steps:
-  - id: from-file
-    type: js
-    file: ./step.js
+  - id: first
+    type: set
+    set: { fromExample: true, message: "from set step" }
     depends-on: []
-  - id: echo
-    type: command
-    run: echo "Step above ran {{ fromExample }} from file"
-    depends-on: [from-file]
+  - id: second
+    type: set
+    set: { combined: "{{ first.fromExample }}" }
+    depends-on: [first]

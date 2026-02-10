@@ -19,6 +19,7 @@
   "dependencies": {
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
+    "@runflow/handlers": "workspace:^",
     "commander": "catalog:prod",
     "yaml": "catalog:prod"
   },

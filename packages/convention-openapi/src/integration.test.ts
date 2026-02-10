@@ -1,7 +1,8 @@
 import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createDefaultRegistry, registerStepHandler, run } from '@runflow/core'
+import { run } from '@runflow/core'
+import { createBuiltinRegistry } from '@runflow/handlers'
 import { describe, expect, it } from 'vitest'
 import { openApiToFlows } from './index.js'
 
@@ -9,6 +10,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(__dirname, 'fixtures')
 
 const mockHttpHandler: IStepHandler = {
+  validate: () => true,
+  kill: () => {},
   run: async (step: FlowStep, context: StepContext): Promise<StepResult> => {
     return context.stepResult(step.id, true, {
       outputs: { [step.id]: { statusCode: 200, body: {} } },
@@ -23,8 +26,8 @@ describe('integration: openApiToFlows + run', () => {
     expect(flow).toBeDefined()
     expect(flow!.steps.some(s => s.type === 'http')).toBe(true)
 
-    const registry = createDefaultRegistry()
-    registerStepHandler(registry, 'http', mockHttpHandler)
+    const registry = createBuiltinRegistry()
+    registry.http = mockHttpHandler
 
     const runResult = await run(flow!, {
       params: { id: '1' },

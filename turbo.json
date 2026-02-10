@@ -15,5 +15,7 @@
     "typecheck": {
       "dependsOn": ["^build"]
     }
-  }
+  },
+  "globalDependencies": [],
+  "globalPassThroughEnv": []
 }

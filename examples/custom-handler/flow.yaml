@@ -6,8 +6,8 @@ steps:
     message: Hello from custom handler
     depends-on: []
   - id: two
-    type: command
-    run: echo "Built-in command step"
+    type: set
+    set: { builtin: true }
     depends-on: [one]
   - id: three
     type: echo

@@ -1,12 +1,12 @@
-# Custom handler example (registerStepHandler)
+# Custom handler example
 
-This example shows how to register a custom step type via **config** and use it in a flow.
+This example shows how to register a custom step type via **config** and use it in a flow. The CLI builds the registry from built-in handlers (`@runflow/handlers`) and then merges your config handlers, so you only need to declare your custom type and path in `runflow.config.mjs`.
 
 ## Files
 
 - **runflow.config.mjs** – Lists handler type names and paths to ESM modules (relative to config).
-- **echo-handler.mjs** – Implements `IStepHandler`: `run(step, context)` and optional `validate(step)`.
-- **flow.yaml** – Flow that uses built-in `command` and custom `echo` steps.
+- **echo-handler.mjs** – Implements `IStepHandler`: `run(step, context)`, `validate(step)`, and `kill()`.
+- **flow.yaml** – Flow that uses built-in `set` and custom `echo` steps.
 
 ## Run
 
@@ -31,9 +31,10 @@ node ../../apps/cli/dist/cli.js run flow.yaml
 Your module must **export default** an object (or class instance) with:
 
 - **`run(step, context)`** – `async` function returning `Promise<StepResult>`.
-- **`validate(step)`** – optional; return `true` or a string error message.
+- **`validate(step)`** – return `true` or a string error message.
+- **`kill()`** – no-op if nothing to abort; otherwise abort any in-flight work (e.g. child process).
 
-Example (class form):
+Example (object form):
 
 ```js
 // my-handler.mjs
@@ -41,6 +42,7 @@ export default {
   validate(step) {
     return step.payload != null ? true : 'payload required'
   },
+  kill() {},
   async run(step, context) {
     return {
       stepId: step.id,

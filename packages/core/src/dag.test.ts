@@ -5,8 +5,8 @@ import { buildDAG, getDAGStepIds, topologicalSort } from './dag'
 describe('buildDAG', () => {
   it('excludes steps with no dependsOn (orphans)', () => {
     const steps: FlowStep[] = [
-      { id: 'a', type: 'command', run: 'x' },
-      { id: 'b', type: 'command', run: 'y', dependsOn: [] },
+      { id: 'a', type: 'set', set: {} },
+      { id: 'b', type: 'set', set: {}, dependsOn: [] },
     ]
     const g = buildDAG(steps)
     expect(g.has('a')).toBe(false)
@@ -16,7 +16,7 @@ describe('buildDAG', () => {
 
   it('includes steps with dependsOn: [] as roots', () => {
     const steps: FlowStep[] = [
-      { id: 'root', type: 'command', run: 'x', dependsOn: [] },
+      { id: 'root', type: 'set', set: {}, dependsOn: [] },
     ]
     const g = buildDAG(steps)
     expect(g.get('root')).toEqual([])

@@ -2,10 +2,10 @@ name: hello-flow
 description: Example flow that prints greetings
 steps:
   - id: greet
-    type: command
-    run: echo "Hello from flow"
+    type: set
+    set: { message: "Hello from flow" }
     depends-on: []
   - id: sum
-    type: command
-    run: node -e "console.log('1 + 1 =', 1 + 1)"
+    type: set
+    set: { result: 2 }
     depends-on: [greet]

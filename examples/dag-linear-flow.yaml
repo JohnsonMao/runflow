@@ -4,14 +4,14 @@ name: dag-linear
 description: Linear chain with dependsOn
 steps:
   - id: a
-    type: command
-    run: echo "step A"
+    type: set
+    set: { step: "A" }
     depends-on: []
   - id: b
-    type: command
-    run: echo "step B"
+    type: set
+    set: { step: "B" }
     depends-on: [a]
   - id: c
-    type: command
-    run: echo "step C"
+    type: set
+    set: { step: "C" }
     depends-on: [b]

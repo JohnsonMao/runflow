@@ -5,7 +5,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { openApiToFlows } from '@runflow/convention-openapi'
-import { createDefaultRegistry, loadFromFile, registerStepHandler, run } from '@runflow/core'
+import { loadFromFile, run } from '@runflow/core'
+import { createBuiltinRegistry } from '@runflow/handlers'
 import { createCommand } from 'commander'
 
 const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js']
@@ -22,8 +23,6 @@ interface OpenApiConfig {
 interface RunflowConfig {
   handlers?: Record<string, string>
   openapi?: OpenApiConfig
-  /** When set, command steps only allow these executable names (e.g. ['node','npx','echo']). */
-  allowedCommands?: string[]
 }
 
 export const program = createCommand()
@@ -105,7 +104,7 @@ function resolveOpenApiOptionsFromConfig(config: RunflowConfig | null, configDir
 
 async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry> {
   const config = await loadConfig(configPath)
-  const registry = createDefaultRegistry()
+  const registry = createBuiltinRegistry()
   if (!config?.handlers || typeof config.handlers !== 'object')
     return registry
   const configDir = path.dirname(configPath)
@@ -124,7 +123,7 @@ async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry
         console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
         process.exit(1)
       }
-      registerStepHandler(registry, type, handler)
+      registry[type] = handler
     }
     catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -204,7 +203,7 @@ program
       registry = await buildRegistryFromConfig(configPath)
     }
     else {
-      registry = createDefaultRegistry()
+      registry = createBuiltinRegistry()
     }
     if (options.registry) {
       const resolved = path.resolve(cwd, options.registry)
@@ -217,8 +216,8 @@ program
         const extra = mod.default
         if (extra && typeof extra === 'object') {
           for (const [type, handler] of Object.entries(extra)) {
-            if (handler && typeof (handler as IStepHandler).run === 'function')
-              registerStepHandler(registry, type, handler as IStepHandler)
+            if (handler && typeof handler.run === 'function')
+              registry[type] = handler
           }
         }
       }
@@ -228,16 +227,11 @@ program
         process.exit(1)
       }
     }
-    const runConfig = configPath ? await loadConfig(configPath) : null
-    const allowedCommands = runConfig?.allowedCommands !== undefined && Array.isArray(runConfig.allowedCommands)
-      ? runConfig.allowedCommands.filter((c): c is string => typeof c === 'string')
-      : undefined
     const result = await run(flow, {
       dryRun: options.dryRun,
       params: Object.keys(params).length ? params : undefined,
       flowFilePath,
       registry,
-      allowedCommands,
     })
     if (options.verbose) {
       for (const step of result.steps) {
@@ -245,6 +239,8 @@ program
           process.stdout.write(step.stdout)
         if (step.stderr)
           process.stderr.write(step.stderr)
+        if (step.outputs && Object.keys(step.outputs).length > 0)
+          process.stdout.write(`${JSON.stringify(step.outputs)}\n`)
         if (step.error)
           console.error(`Step ${step.stepId}: ${step.error}`)
       }

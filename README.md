@@ -4,8 +4,9 @@ Monorepo for YAML-defined reusable execution flows. Uses TypeScript, pnpm, and T
 
 ## Structure
 
-- **packages/core** (`@runflow/core`) – Flow engine: parse YAML, validate schema, run steps (e.g. `command`).
-- **apps/cli** (`@runflow/cli`) – CLI to run a flow from a YAML file.
+- **packages/core** (`@runflow/core`) – Flow engine: parse YAML, validate schema, run steps. Does **not** include built-in step handlers; you must pass a **registry** when calling `run()`.
+- **packages/handlers** (`@runflow/handlers`) – Built-in step handlers (command, js, http, condition, sleep, set, loop, flow). Use `createBuiltinRegistry()` and pass the registry to `run(flow, { registry })`; override or add with `registry.myType = myHandler`.
+- **apps/cli** (`@runflow/cli`) – CLI to run a flow from a YAML file (uses `@runflow/handlers` to build the default registry).
 
 ## Prerequisites
 
@@ -45,8 +46,6 @@ Options:
 
 **Config and OpenAPI**: In `runflow.config.mjs` you can set `openapi: { specPath, outDir, baseUrl, operationFilter, hooks }`. These options are used when running with `--from-openapi`; CLI flags override config when both are provided. Paths in config are resolved relative to the config file directory.
 
-**Security – allowed commands**: By default (when `allowedCommands` is not set in config), only `echo`, `exit`, `true`, `false` are allowed (minimal safe set). To run runtimes or tools (e.g. `node`, `npx`, `python`, `pip`, `curl`), set `allowedCommands: ['node','npx','echo', ...]` in config. Set `allowedCommands: []` to allow no command steps. The first token of each step’s `run` string is checked (basename; `.exe` is ignored on Windows).
-
 To list parameters declared by a flow: `flow params <file>` (shows name, type, required, default, enum, description).
 
 ## YAML flow format
@@ -60,21 +59,20 @@ name: my-flow
 description: optional
 steps:
   - id: step1
-    type: command
-    run: echo "hello"
+    type: set
+    set: { done: true }
     depends-on: []
   - id: step2
-    type: command
-    run: node -e "console.log(1+1)"
+    type: set
+    set: { result: 2 }
     depends-on: [step1]
 ```
 
 - `name` – Flow name (for logs and errors).
 - `steps` – Steps form a **DAG**: each step may have `depends-on: [stepId, ...]` (parsed as `dependsOn`). Steps **without** `dependsOn` are **orphans** (not executed). Use `dependsOn: []` for entry (root) steps. Execution order is by dependency; steps in the same wave may run in parallel.
 - `params` (optional) – Top-level parameter declaration: array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. When present, run-time params are validated (e.g. with Zod) before execution.
-- Supported step types: `command` (runs a shell command), `js` (runs JavaScript in-process), `http` (sends an HTTP request), `condition` (evaluates `when`; use `then`/`else` step ids to run only one branch; result is not written to context).
-- **Command steps** support template substitution in `run`: `{{ key }}`, `{{ obj.nested }}`, `{{ arr[0] }}`. Object/array values are JSON-stringified; undefined/null → empty string.
-- **JS steps** may use `run: "<inline code>"` or `file: "./script.js"` (path relative to the flow file). Only `.js` is supported; `.ts` is rejected.
+- Supported step types: `set` (writes key-value object to context), `http` (sends an HTTP request), `condition` (evaluates `when`; use `then`/`else` step ids to run only one branch; result is not written to context).
+- **Set steps** use `type: set` with `set: { key: value, ... }`. Values support template substitution `{{ key }}`, `{{ obj.nested }}`. Object/array values are JSON-stringified; undefined/null → empty string.
 - **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `output-key` (context key for the response). All string fields support `{{ key }}` substitution. On 2xx the response is written to context as `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Non-2xx responses set the step as failed with no outputs. Example: `examples/http-flow.yaml`.
 - **Condition steps** use `type: condition` with required `when` (JS expression evaluated with `params` in scope, e.g. `params.env === 'prod'`). Optional `then` / `else` are step id(s); only the matching branch runs. The condition result is **not** merged into context.
 - **Migration**: Existing flows must add `depends-on` to every step that should run. Use `depends-on: []` for the first step and `depends-on: [previousStepId]` for the rest in a linear flow. See `examples/hello-flow.yaml` or `examples/dag-linear-flow.yaml`.
@@ -123,9 +121,23 @@ Use **OpenSpec** so changes stay spec-driven and traceable:
 
 See `.cursor/commands/opsx-*.md` or the OpenSpec skills in `.cursor/skills/openspec-*` for the exact commands.
 
+### Using the engine programmatically
+
+The engine does not provide a default registry. You must build one and pass it to `run()`:
+
+```ts
+import { run } from '@runflow/core'
+import { createBuiltinRegistry } from '@runflow/handlers'
+
+const registry = createBuiltinRegistry()
+const result = await run(flow, { registry, params: { a: 1 } })
+```
+
+To add custom step types, assign your handler to the registry: `registry.myType = myHandler` (or `registry['myType'] = myHandler`) after creating the registry (e.g. after `createBuiltinRegistry()`).
+
 ### Where to edit
 
-- **Flow engine (parse YAML, run steps)**: `packages/core/src/` — add types in `types.ts`, constants in `constants.ts`, new step types in `executor.ts` and `parser.ts`.
+- **Flow engine (parse YAML, run steps)**: `packages/core/src/` — add types in `types.ts`, constants in `constants.ts`. Step execution is dispatched via the registry; built-in handlers live in `packages/handlers`.
 - **CLI (commands, flags, output)**: `apps/cli/src/cli.ts`.
 - **Example flows**: `examples/*.yaml`.
 

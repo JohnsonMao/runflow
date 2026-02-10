@@ -11,15 +11,26 @@ export interface ParamDeclaration {
   items?: ParamDeclaration
 }
 
-/** Generic step shape: id and type required, rest preserved for the handler. */
+/**
+ * Generic step shape: id and type required, rest preserved for the handler.
+ *
+ * Engine-reserved fields (id, type, dependsOn, skip, timeout, retry) have fixed semantics.
+ * Handler-specific fields (e.g. when, then, else for condition) are documented per handler.
+ * Extending this interface with your own step types and overlapping the same keys is normal:
+ * you narrow types (e.g. when: string) or add constraints; the index signature [key: string]: unknown
+ * allows extra properties. Prefer not to reuse engine-reserved names for different semantics.
+ */
 export interface FlowStep {
   id: string
   type: string
   /** When present, this step is part of the DAG. Empty array = root; omitted = orphan (not executed). */
   dependsOn?: string[]
-  /** Skip this step when expression evaluates to false (engine). Expression runs with `params` in scope. */
-  when?: string
-  /** Max execution time in seconds. Enforced by engine; handlers (command, http, js) may use it to abort the operation. */
+  /**
+   * When expression evaluates to true, engine skips this step (default false).
+   * Evaluated with params in scope. Skipped step gets success result and no nextSteps (dependents may all run).
+   */
+  skip?: string
+  /** Max execution time in seconds. Enforced by engine; handlers (e.g. http) may use it to abort the operation. */
   timeout?: number
   /** Number of retries on failure (engine). Total attempts = retry + 1. */
   retry?: number
@@ -28,7 +39,7 @@ export interface FlowStep {
 
 /**
  * Run a sub-flow over a set of step ids (body) with the same executor model (DAG order,
- * when/condition/nextSteps). When any step returns nextSteps that include an id outside
+ * skip/condition/nextSteps). When any step returns nextSteps that include an id outside
  * the set, returns earlyExit with that nextSteps so the caller (e.g. loop) can complete
  * with that branch.
  */
@@ -57,8 +68,8 @@ export interface StepContext {
   stepResult: StepResultFn
   /** Provided by executor so flow step handler can run another flow (load + run with depth limit). Optional when not in a flow-call context. */
   runFlow?: RunFlowFn
-  /** When set, command step only allows these executable names (e.g. ['node','npx']). First token of run is checked (basename). */
-  allowedCommands?: string[]
+  /** When set and non-empty, http step only allows these hostnames (case-insensitive). Omit or empty = allow all (including localhost/private IP). */
+  allowedHttpHosts?: string[]
 }
 
 export interface FlowDefinition {
@@ -99,10 +110,10 @@ export type StepResultFn = (stepId: string, success: boolean, opts?: StepResultO
 export interface IStepHandler {
   /** Execute the step. */
   run: (step: FlowStep, context: StepContext) => Promise<StepResult>
-  /** When present, called by the engine on step timeout to force-abort the running operation (e.g. kill child process). */
-  kill?: () => void
-  /** Return true if step shape is valid, or a string error message. */
-  validate?: (step: FlowStep) => true | string
+  /** Called by the engine on step timeout to force-abort (e.g. kill child process). Implement no-op if nothing to clean up. */
+  kill: () => void
+  /** Return true if step shape is valid, or a string error message. Enforced before run. */
+  validate: (step: FlowStep) => true | string
 }
 
 /** Registry: step type -> IStepHandler. Merged with default (default first, then options.registry). */
@@ -117,8 +128,8 @@ export interface RunOptions {
   maxFlowCallDepth?: number
   /** Current flow-call depth (internal). 0 at top-level; incremented when run is invoked from runFlow. */
   flowCallDepth?: number
-  /** When set, command steps only allow these executable names (e.g. ['node','npx','echo']). Passed to step context for command handler. */
-  allowedCommands?: string[]
+  /** When set and non-empty, http steps only allow these hostnames (case-insensitive). Omit or empty = allow all. */
+  allowedHttpHosts?: string[]
 }
 
 export interface RunResult {

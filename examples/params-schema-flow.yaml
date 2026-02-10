@@ -15,10 +15,10 @@ params:
     description: Repeat count
 steps:
   - id: greet
-    type: command
-    run: echo "Hello {{ who }}"
+    type: set
+    set: { greeting: "Hello {{ who }}" }
     depends-on: []
-  - id: js
-    type: js
-    run: "return { received: params.who, count: params.count }"
+  - id: out
+    type: set
+    set: { received: "{{ greet.greeting }}", count: "{{ count }}" }
     depends-on: [greet]

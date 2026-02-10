@@ -1,40 +1,36 @@
 // @env node
-import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepResult } from './types'
-import { dirname, isAbsolute, resolve } from 'node:path'
-import { runInNewContext } from 'node:vm'
-import { DEFAULT_MAX_FLOW_CALL_DEPTH } from './constants'
+import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepRegistry, StepResult } from './types'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { topologicalSort, validateDAG } from './dag'
 import { loadFromFile } from './loader'
 import { paramsDeclarationToZodSchema } from './paramsSchema'
-import { createDefaultRegistry } from './registry'
+import { evaluateToBoolean } from './safeExpression'
 import { stepResult } from './stepResult'
 import { substitute } from './substitute'
 import { isPlainObject } from './utils'
 
-/** Evaluate step-level when (skip condition). Returns false to skip, true to run. */
-function evaluateWhen(step: FlowStep, context: Record<string, unknown>): boolean {
-  const when = step.when
-  if (when === undefined || when === null)
-    return true
-  if (typeof when !== 'string')
-    return true
+/** Default maximum flow-call nesting depth. When a flow step would run the callee at this depth, the step fails with depth-exceeded error. */
+export const DEFAULT_MAX_FLOW_CALL_DEPTH = 32
+
+/** Evaluate step-level skip using safe expression. Returns true to skip step, false to run. Default (skip absent) is false. */
+function evaluateSkip(step: FlowStep, context: Record<string, unknown>): boolean {
+  const skip = step.skip
+  if (skip === undefined || skip === null)
+    return false
+  if (typeof skip !== 'string')
+    return false
   try {
-    const value = runInNewContext(
-      `(function(params){ return Boolean(${when}); })(params)`,
-      { params: context },
-      { timeout: 2000 },
-    )
-    return Boolean(value)
+    return evaluateToBoolean(skip, context, { maxLength: 2000 })
   }
   catch {
-    return true
+    return false
   }
 }
 
 /** Default step timeout in seconds when step.timeout is not set. */
 const DEFAULT_STEP_TIMEOUT_SEC = 60
 
-/** Run handler with step-level timeout; on timeout calls handler.kill?() then fails. */
+/** Run handler with step-level timeout; on timeout calls handler.kill() then fails. */
 async function runWithTimeout(
   step: FlowStep,
   handler: IStepHandler,
@@ -47,7 +43,7 @@ async function runWithTimeout(
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<StepResult>((_, reject) => {
     timeoutId = setTimeout(() => {
-      handler.kill?.()
+      handler.kill()
       reject(new Error(`step timeout after ${timeoutSec}s`))
     }, timeoutMs)
   })
@@ -174,14 +170,19 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   }
 
   const dagOrder = sortResult.order
-  const registry = { ...createDefaultRegistry(), ...(options.registry ?? {}) }
+  if (dagOrder.length > 0 && (options.registry == null || typeof options.registry !== 'object'))
+    throw new Error('registry is required when flow has steps')
+  const registry = options.registry ?? ({} as StepRegistry)
   const stepByIdMap = stepById(flow)
   const flowCallDepth = options.flowCallDepth ?? 0
   const maxFlowCallDepth = options.maxFlowCallDepth ?? DEFAULT_MAX_FLOW_CALL_DEPTH
 
   const runFlow = async (filePath: string, params: Record<string, unknown>): Promise<RunResult> => {
-    const baseDir = options.flowFilePath ? dirname(options.flowFilePath) : process.cwd()
-    const resolvedPath = isAbsolute(filePath) ? filePath : resolve(baseDir, filePath)
+    const baseDir = options.flowFilePath ? resolve(dirname(options.flowFilePath)) : resolve(process.cwd())
+    const resolvedPath = isAbsolute(filePath) ? resolve(filePath) : resolve(baseDir, filePath)
+    const rel = relative(baseDir, resolvedPath)
+    if (rel.startsWith('..') || rel === '..')
+      return { flowName: flow.name, success: false, steps: [], error: 'flow path must be under current flow directory' }
     if (flowCallDepth >= maxFlowCallDepth)
       return { flowName: flow.name, success: false, steps: [], error: 'max flow-call depth exceeded' }
     const loaded = loadFromFile(resolvedPath)
@@ -230,16 +231,14 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
         newContext: ctx,
       }
     }
-    if (ent.validate) {
-      const valid = ent.validate(sub)
-      if (valid !== true) {
-        return {
-          result: stepResult(targetStepId, false, { error: valid }),
-          newContext: ctx,
-        }
+    const valid = ent.validate(sub)
+    if (valid !== true) {
+      return {
+        result: stepResult(targetStepId, false, { error: valid }),
+        newContext: ctx,
       }
     }
-    if (!evaluateWhen(sub, ctx)) {
+    if (evaluateSkip(sub, ctx)) {
       return {
         result: stepResult(targetStepId, true),
         newContext: ctx,
@@ -267,7 +266,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     }
   }
 
-  /** Run body steps as sub-flow (DAG order, when/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
+  /** Run body steps as sub-flow (DAG order, skip/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
   const runSubFlow: RunSubFlowFn = async (
     bodyStepIds: string[],
     ctx: Record<string, unknown>,
@@ -316,7 +315,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     runSubFlow,
     stepResult,
     runFlow,
-    allowedCommands: options.allowedCommands,
+    allowedHttpHosts: options.allowedHttpHosts,
   }
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */
@@ -332,15 +331,13 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
         result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}` }),
       }
     }
-    if (entry.validate) {
-      const valid = entry.validate(substitutedStep)
-      if (valid !== true) {
-        return {
-          result: stepResult(stepId, false, { error: valid }),
-        }
+    const valid = entry.validate(substitutedStep)
+    if (valid !== true) {
+      return {
+        result: stepResult(stepId, false, { error: valid }),
       }
     }
-    if (!evaluateWhen(substitutedStep, ctx)) {
+    if (evaluateSkip(substitutedStep, ctx)) {
       return { result: stepResult(stepId, true) }
     }
     try {

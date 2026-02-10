@@ -14,8 +14,8 @@ describe('parse', () => {
     const yaml = `
 steps:
   - id: s1
-    type: command
-    run: echo hi
+    type: set
+    set: {}
 `
     expect(parse(yaml)).toBeNull()
   })
@@ -46,14 +46,14 @@ steps:
 name: my-flow
 steps:
   - id: step1
-    type: command
-    run: echo "hello"
+    type: set
+    set: { x: 1 }
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.name).toBe('my-flow')
     expect(flow?.steps).toHaveLength(1)
-    expect(flow?.steps[0]).toEqual({ id: 'step1', type: 'command', run: 'echo "hello"' })
+    expect(flow?.steps[0]).toEqual({ id: 'step1', type: 'set', set: { x: 1 } })
   })
 
   it('parses flow with description and multiple steps', () => {
@@ -62,56 +62,44 @@ name: my-flow
 description: optional
 steps:
   - id: step1
-    type: command
-    run: echo "hello"
+    type: set
+    set: { a: 1 }
   - id: step2
-    type: command
-    run: node -e "console.log(1+1)"
+    type: set
+    set: { b: 2 }
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.name).toBe('my-flow')
     expect(flow?.description).toBe('optional')
     expect(flow?.steps).toHaveLength(2)
-    expect(flow?.steps[1]).toMatchObject({ type: 'command', run: 'node -e "console.log(1+1)"' })
+    expect(flow?.steps[1]).toMatchObject({ type: 'set', set: { b: 2 } })
   })
 
-  it('parses command step without run (generic step)', () => {
+  it('parses set step without set (generic step)', () => {
     const yaml = `
 name: my-flow
 steps:
   - id: s1
-    type: command
+    type: set
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'command' })
+    expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'set' })
   })
 
-  it('parses js step with run string', () => {
+  it('parses set step with set object', () => {
     const yaml = `
 name: my-flow
 steps:
-  - id: js1
-    type: js
-    run: return 1 + 1
+  - id: s1
+    type: set
+    set: { a: 1, b: 2 }
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps).toHaveLength(1)
-    expect(flow?.steps[0]).toEqual({ id: 'js1', type: 'js', run: 'return 1 + 1' })
-  })
-
-  it('parses js step without run (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: js1
-    type: js
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js' })
+    expect(flow?.steps[0]).toEqual({ id: 's1', type: 'set', set: { a: 1, b: 2 } })
   })
 
   it('parses flow with top-level params array', () => {
@@ -126,54 +114,14 @@ params:
     default: 1
 steps:
   - id: s1
-    type: command
-    run: echo hi
+    type: set
+    set: {}
 `
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.params).toHaveLength(2)
     expect(flow?.params?.[0]).toMatchObject({ name: 'who', type: 'string', required: true })
     expect(flow?.params?.[1]).toMatchObject({ name: 'count', type: 'number', default: 1 })
-  })
-
-  it('parses js step with file', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: js1
-    type: js
-    file: ./scripts/step.js
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './scripts/step.js' })
-  })
-
-  it('parses js step with file ending in .ts (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: js1
-    type: js
-    file: ./script.ts
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './script.ts' })
-  })
-
-  it('parses js step with both file and run (file wins)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: js1
-    type: js
-    file: ./step.js
-    run: return 1
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'js1', type: 'js', file: './step.js' })
   })
 
   it('parses http step with required url', () => {
@@ -266,8 +214,8 @@ steps:
     output-key: apiResult
     depends-on: []
   - id: use
-    type: command
-    run: echo done
+    type: set
+    set: { done: true }
     depends-on: [fetch]
 `
     const flow = parse(yaml)
@@ -282,6 +230,8 @@ steps:
     })
     expect(flow?.steps[1]).toMatchObject({
       id: 'use',
+      type: 'set',
+      set: { done: true },
       dependsOn: ['fetch'],
     })
   })

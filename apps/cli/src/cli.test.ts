@@ -37,8 +37,8 @@ describe('flow run', () => {
 name: test-flow
 steps:
   - id: s1
-    type: command
-    run: echo ok
+    type: set
+    set: {}
     dependsOn: []
 `)
     const result = runFlow(['run', flowPath], process.cwd())
@@ -53,8 +53,8 @@ steps:
 name: dry-flow
 steps:
   - id: s1
-    type: command
-    run: exit 1
+    type: set
+    set: {}
     dependsOn: []
 `)
     const result = runFlow(['run', flowPath, '--dry-run'], process.cwd())
@@ -62,15 +62,15 @@ steps:
     expect(result.code).toBe(0)
   })
 
-  it('passes --param to flow: js step receives params', () => {
+  it('passes --param to flow: set step receives params via substitution', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = join(dir, 'flow.yaml')
     writeFileSync(flowPath, `
 name: param-flow
 steps:
-  - id: j1
-    type: js
-    run: console.log(JSON.stringify(params))
+  - id: s1
+    type: set
+    set: { a: "{{ a }}", b: "{{ b }}" }
     dependsOn: []
 `)
     const result = runFlow(['run', flowPath, '--param', 'a=1', '--param', 'b=2', '--verbose'], process.cwd())
@@ -87,9 +87,9 @@ steps:
     writeFileSync(flowPath, `
 name: file-param-flow
 steps:
-  - id: j1
-    type: js
-    run: "console.log(JSON.stringify({ a: params.a, b: params.b }))"
+  - id: s1
+    type: set
+    set: { a: "{{ a }}", b: "{{ b }}" }
     dependsOn: []
 `)
     writeFileSync(paramsPath, '{"a": "from-file", "b": "from-file"}')
@@ -104,11 +104,112 @@ steps:
   it('exits with error when --params-file is missing or invalid JSON', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = join(dir, 'flow.yaml')
-    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n    dependsOn: []\n')
+    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: set\n    set: {}\n    dependsOn: []\n')
     const result = runFlow(['run', flowPath, '--params-file', join(dir, 'nonexistent.json')], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toMatch(/Failed to read|not found|Error/i)
+  })
+
+  it('condition step runs else branch when when is false', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, `
+name: condition-else-flow
+steps:
+  - id: cond
+    type: condition
+    when: params.useThen === 'true'
+    then: runThen
+    else: runElse
+    dependsOn: []
+  - id: runThen
+    type: set
+    set: { branch: "BRANCH_THEN" }
+    dependsOn: [cond]
+  - id: runElse
+    type: set
+    set: { branch: "BRANCH_ELSE" }
+    dependsOn: [cond]
+`)
+    const result = runFlow(['run', flowPath, '--param', 'useThen=false', '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('BRANCH_ELSE')
+    expect(result.stdout).not.toContain('BRANCH_THEN')
+  })
+
+  it('condition step runs then branch when when is true', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, `
+name: condition-then-flow
+steps:
+  - id: cond
+    type: condition
+    when: params.useThen === 'true'
+    then: runThen
+    else: runElse
+    dependsOn: []
+  - id: runThen
+    type: set
+    set: { branch: "BRANCH_THEN" }
+    dependsOn: [cond]
+  - id: runElse
+    type: set
+    set: { branch: "BRANCH_ELSE" }
+    dependsOn: [cond]
+`)
+    const result = runFlow(['run', flowPath, '--param', 'useThen=true', '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('BRANCH_THEN')
+    expect(result.stdout).not.toContain('BRANCH_ELSE')
+  })
+
+  it('set step outputs state and second set step reads it (multi-step e2e)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, `
+name: set-set-flow
+steps:
+  - id: s1
+    type: set
+    set: { key: "from-set", n: 42 }
+    dependsOn: []
+  - id: s2
+    type: set
+    set: { out: "{{ key }}-{{ n }}" }
+    dependsOn: [s1]
+`)
+    const result = runFlow(['run', flowPath, '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('from-set-42')
+  })
+
+  it('loop step with count runs body N times', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, `
+name: loop-count-flow
+steps:
+  - id: loop
+    type: loop
+    count: 3
+    body: bodyStep
+    dependsOn: []
+  - id: bodyStep
+    type: set
+    set: { n: "{{ index }}" }
+    dependsOn: [loop]
+`)
+    const result = runFlow(['run', flowPath, '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('"n":"0"')
+    expect(result.stdout).toContain('"n":"1"')
+    expect(result.stdout).toContain('"n":"2"')
   })
 
   it('runs from OpenAPI spec with --from-openapi and --operation (dry-run)', () => {
@@ -167,6 +268,85 @@ paths:
     if (result.code !== 0)
       console.error(result.stderr)
     expect(result.code, result.stderr).toBe(0)
+  })
+
+  it('accepts -f as short for --params-file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = resolve(dir, 'flow.yaml')
+    const paramsPath = resolve(dir, 'params.json')
+    writeFileSync(flowPath, `
+name: short-f-flow
+steps:
+  - id: s1
+    type: set
+    set: { ok: true }
+    dependsOn: []
+`)
+    writeFileSync(paramsPath, '{"x": "from-f"}')
+    const result = runFlow(['run', flowPath, '-f', paramsPath, '--verbose'], process.cwd())
+    unlinkSync(flowPath)
+    unlinkSync(paramsPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('ok')
+  })
+
+  it('custom handler from config runs and produces output', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    const configPath = join(dir, 'runflow.config.mjs')
+    const handlerPath = join(dir, 'echo-handler.mjs')
+    writeFileSync(flowPath, `
+name: custom-echo-flow
+steps:
+  - id: e1
+    type: echo
+    message: hello-from-custom
+    dependsOn: []
+`)
+    writeFileSync(configPath, `export default { handlers: { echo: './echo-handler.mjs' } }\n`)
+    writeFileSync(handlerPath, `export default {
+  validate() { return true },
+  kill() {},
+  async run(step) {
+    const msg = step.message != null ? String(step.message) : step.id;
+    return { stepId: step.id, success: true, stdout: msg + "\\n", stderr: "" };
+  }
+}\n`)
+    const result = runFlow(['run', flowPath, '--config', configPath, '--verbose'], dir)
+    unlinkSync(flowPath)
+    unlinkSync(configPath)
+    unlinkSync(handlerPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('hello-from-custom')
+  })
+
+  it('--registry merges handlers and custom step runs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    const registryPath = join(dir, 'registry.mjs')
+    writeFileSync(flowPath, `
+name: registry-echo-flow
+steps:
+  - id: e1
+    type: customEcho
+    message: from-registry
+    dependsOn: []
+`)
+    writeFileSync(registryPath, `export default {
+  customEcho: {
+    validate() { return true },
+    kill() {},
+    async run(step) {
+      const msg = step.message != null ? String(step.message) : step.id;
+      return { stepId: step.id, success: true, stdout: msg + "\\n", stderr: "" };
+    }
+  }
+}\n`)
+    const result = runFlow(['run', flowPath, '--registry', registryPath, '--verbose'], dir)
+    unlinkSync(flowPath)
+    unlinkSync(registryPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('from-registry')
   })
 
   it('config openapi baseUrl is used for the actual HTTP request (CLI + mock fetch)', async () => {
@@ -234,8 +414,8 @@ params:
     default: 1
 steps:
   - id: s1
-    type: command
-    run: echo hi
+    type: set
+    set: {}
 `)
     const result = runFlow(['params', flowPath], process.cwd())
     unlinkSync(flowPath)
@@ -252,10 +432,43 @@ steps:
   it('prints "No params declared." when flow has no params', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = resolve(dir, 'flow.yaml')
-    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: command\n    run: echo ok\n    dependsOn: []\n')
+    writeFileSync(flowPath, 'name: x\nsteps:\n  - id: s1\n    type: set\n    set: {}\n    dependsOn: []\n')
     const result = runFlow(['params', flowPath], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout.trim()).toBe('No params declared.')
+  })
+
+  it('exits with error when params file does not exist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const result = runFlow(['params', join(dir, 'missing.yaml')], process.cwd())
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/File not found|not a regular file/)
+  })
+
+  it('exits with error when params flow file is invalid', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'bad.yaml')
+    writeFileSync(flowPath, 'name: x\nsteps: not-an-array')
+    const result = runFlow(['params', flowPath], process.cwd())
+    unlinkSync(flowPath)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/Invalid|unreadable/)
+  })
+})
+
+describe('flow CLI global', () => {
+  it('--version exits 0 and prints version', () => {
+    const result = runFlow(['--version'], process.cwd())
+    expect(result.code).toBe(0)
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  it('--help exits 0 and prints usage', () => {
+    const result = runFlow(['--help'], process.cwd())
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('flow')
+    expect(result.stdout).toContain('run')
+    expect(result.stdout).toContain('params')
   })
 })

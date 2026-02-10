@@ -6,6 +6,7 @@ export default {
   validate(step) {
     return true
   },
+  kill() {},
   async run(step, _context) {
     const message = step.message != null ? String(step.message) : step.id
     return {

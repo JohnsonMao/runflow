@@ -13,7 +13,7 @@ steps:
     url: https://httpbin.org/{{ path }}
     output-key: api
     depends-on: []
-  - id: echo
-    type: command
-    run: echo "Status {{ api.statusCode }}"
+  - id: done
+    type: set
+    set: { status: "{{ api.statusCode }}" }
     depends-on: [fetch]

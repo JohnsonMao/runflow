@@ -43,8 +43,8 @@ describe('openApiToFlows', () => {
       output: 'memory',
       hooks: {
         'get-users': {
-          before: [{ type: 'js', run: 'return {}' }],
-          after: [{ type: 'js', run: 'return {}' }],
+          before: [{ type: 'set', set: {} }],
+          after: [{ type: 'set', set: {} }],
         },
       },
     })
@@ -53,9 +53,9 @@ describe('openApiToFlows', () => {
     expect(flow).toBeDefined()
     expect(flow!.steps.length).toBe(3)
     const [first, second, third] = flow!.steps
-    expect(first.type).toBe('js')
+    expect(first.type).toBe('set')
     expect(second.type).toBe('http')
-    expect(third.type).toBe('js')
+    expect(third.type).toBe('set')
     expect(second.dependsOn).toContain(first.id)
     expect(third.dependsOn).toContain(second.id)
   })
@@ -65,7 +65,7 @@ describe('openApiToFlows', () => {
     const result = await openApiToFlows(specPath, {
       output: 'memory',
       hooks: [
-        { pattern: /^get-/, hooks: { before: [{ type: 'js', run: 'return {}' }] } },
+        { pattern: /^get-/, hooks: { before: [{ type: 'set', set: {} }] } },
       ],
     })
     const getUsers = result.get('get-users')
@@ -74,8 +74,8 @@ describe('openApiToFlows', () => {
     expect(getUser).toBeDefined()
     expect(getUsers!.steps.length).toBe(2)
     expect(getUser!.steps.length).toBe(2)
-    expect(getUsers!.steps[0].type).toBe('js')
-    expect(getUser!.steps[0].type).toBe('js')
+    expect(getUsers!.steps[0].type).toBe('set')
+    expect(getUser!.steps[0].type).toBe('set')
   })
 })
 
