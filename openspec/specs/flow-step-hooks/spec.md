@@ -4,7 +4,7 @@
 
 定義在 **convention 轉換為 flow 時**，依 operation 在 API step 前／後插入自訂步驟的規格。不引入 step 上的 `before`／`after` 欄位；插入僅在轉換階段由 adapter 依設定產出帶有正確 `dependsOn` 的 flow。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: The system SHALL NOT add before/after fields to steps
 

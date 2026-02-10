@@ -1,6 +1,10 @@
 # Spec: config-openapi
 
-## ADDED Requirements
+## Purpose
+
+定義 runflow 設定檔中 OpenAPI 區塊的格式與行為：config 可選的 `openapi` 物件提供 `--from-openapi` 的預設選項（specPath、outDir、baseUrl 等），CLI 參數可覆寫 config 值。
+
+## Requirements
 
 ### Requirement: Config MAY define an openapi block
 

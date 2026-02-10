@@ -1,6 +1,10 @@
 # Spec: examples-converge
 
-## ADDED Requirements
+## Purpose
+
+將 `examples/` 收斂為具代表性、不重複的一組範例，涵蓋最小 flow、參數、DAG、HTTP、JS、自訂 handler；多餘範例移除並更新文件引用。
+
+## Requirements
 
 ### Requirement: Examples directory SHALL contain only a representative set
 

@@ -4,7 +4,7 @@
 
 定義從「約定格式」（例如 OpenAPI YAML）轉成 Runflow flow 的轉換規格與套件介面，使每個 API／操作可對應為一可執行的 flow，並與現有 loader/executor 銜接。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: The system SHALL provide a convention-to-flow adapter interface
 

@@ -6,9 +6,9 @@
 
 ## Requirements
 
-### Requirement: Flow MAY declare top-level params array
+### Requirement: Flow MAY declare top-level params array; when present parser SHALL include it
 
-A flow definition MAY include an optional top-level `params` array. Each element declares one parameter with: `name` (string), `type` (string: `string` | `number` | `boolean` | `object` | `array`), optional `required` (boolean, default false), optional `default`, optional `enum` (array of allowed values), optional `description` (string).
+A flow definition MAY include an optional top-level `params` array. When present, the parser SHALL include the params declaration in the parsed flow. Each element SHALL declare one parameter with: `name` (string), `type` (string: `string` | `number` | `boolean` | `object` | `array`), optional `required` (boolean, default false), optional `default`, optional `enum` (array of allowed values), optional `description` (string).
 
 #### Scenario: Flow with params declaration
 
