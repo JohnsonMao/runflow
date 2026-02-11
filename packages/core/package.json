@@ -30,9 +30,9 @@
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
     "glob": "catalog:dev",
-    "ts-json-schema-generator": "catalog:dev",
     "tsup": "catalog:dev",
     "tsx": "catalog:dev",
     "typescript": "catalog:dev",

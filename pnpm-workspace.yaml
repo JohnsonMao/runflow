@@ -5,6 +5,7 @@ packages:
 catalogs:
   dev:
     "@antfu/eslint-config": "^7.0.0"
+    "@vitest/coverage-v8": "^2.1.6"
     "tsx": "^4.19.2"
     "glob": "^11.0.0"
     "ts-json-schema-generator": "^2.4.0"

@@ -31,7 +31,7 @@ describe('flow handler', () => {
     })
 
     it('returns error when flow is not a string', () => {
-      const step: FlowStep = { id: 'f1', type: 'flow', flow: 123, dependsOn: [] } as unknown as FlowStep
+      const step: FlowStep = { id: 'f1', type: 'flow', flow: 123, dependsOn: [] }
       expect(handler.validate(step)).toMatch(/flow.*required|non-empty string/)
     })
 
@@ -41,7 +41,7 @@ describe('flow handler', () => {
     })
 
     it('returns error when params is not an object', () => {
-      const step: FlowStep = { id: 'f1', type: 'flow', flow: 'x.yaml', params: 'invalid', dependsOn: [] } as unknown as FlowStep
+      const step: FlowStep = { id: 'f1', type: 'flow', flow: 'x.yaml', params: 'invalid', dependsOn: [] }
       expect(handler.validate(step)).toMatch(/params.*object/)
     })
   })

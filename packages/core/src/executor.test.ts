@@ -303,6 +303,19 @@ describe('run', () => {
     expect(result.steps[0].outputs).toEqual({ s1: { a: 'x' } })
   })
 
+  it('params declaration: wrong param type yields flow-level error before any step', async () => {
+    const flow: FlowDefinition = {
+      name: 'decl',
+      params: [{ name: 'n', type: 'number' }],
+      steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+    }
+    const result = await run(flow, { registry: createStubRegistry(), params: { n: 'not-a-number' } })
+    expect(result.success).toBe(false)
+    expect(result.steps).toHaveLength(0)
+    expect(result.error).toBeDefined()
+    expect(result.error).toMatch(/number/)
+  })
+
   it('dag linear chain executes in dependency order', async () => {
     const flow: FlowDefinition = {
       name: 'linear',
@@ -410,5 +423,248 @@ describe('run', () => {
     expect(result.success).toBe(false)
     expect(result.steps[0].success).toBe(false)
     expect(result.steps[0].error).toMatch(/flow path must be under|flow directory/)
+  })
+
+  it('runFlow returns error when max flow-call depth exceeded', async () => {
+    const flowHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        if (!ctx.runFlow)
+          return ctx.stepResult(step.id, false, { error: 'no runFlow' })
+        const flowPath = step.flow
+        if (typeof flowPath !== 'string')
+          return ctx.stepResult(step.id, false, { error: 'missing flow path' })
+        const runResult = await ctx.runFlow(flowPath, {})
+        const err = runResult.error ?? runResult.steps?.find(s => s.error)?.error
+        return ctx.stepResult(step.id, runResult.success, {
+          error: err,
+          outputs: { [step.id]: { error: err } },
+        })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.flow = flowHandler
+    const flow: FlowDefinition = {
+      name: 'caller',
+      steps: [{ id: 'f1', type: 'flow', flow: 'nested.yaml', dependsOn: [] }],
+    }
+    const result = await run(flow, {
+      registry: reg,
+      flowFilePath: path.join(__dirname, 'fixtures', 'flow.yaml'),
+      maxFlowCallDepth: 1,
+    })
+    expect(result.success).toBe(false)
+    const f1 = result.steps.find(s => s.stepId === 'f1')
+    expect(f1?.success).toBe(false)
+    expect(f1?.error).toMatch(/depth exceeded|max flow-call depth/)
+  })
+
+  it('runFlow returns error when callee flow not found or failed to load', async () => {
+    const flowHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        if (!ctx.runFlow)
+          return ctx.stepResult(step.id, false, { error: 'no runFlow' })
+        const runResult = await ctx.runFlow('nonexistent.yaml', {})
+        return ctx.stepResult(step.id, runResult.success, {
+          outputs: { [step.id]: { error: runResult.error } },
+        })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.flow = flowHandler
+    const flow: FlowDefinition = {
+      name: 'caller',
+      steps: [{ id: 'f1', type: 'flow', flow: 'nonexistent.yaml', dependsOn: [] }],
+    }
+    const result = await run(flow, {
+      registry: reg,
+      flowFilePath: path.join(__dirname, 'fixtures', 'flow.yaml'),
+    })
+    expect(result.success).toBe(false)
+    const f1 = result.steps.find(s => s.stepId === 'f1')
+    expect(f1?.outputs).toBeDefined()
+    const out = (f1?.outputs as Record<string, { error?: string }>)?.f1
+    expect(out?.error).toMatch(/not found|failed to load/)
+  })
+
+  describe('runSubFlow / runStepById (via handler that calls runSubFlow)', () => {
+    /** Handler that runs body step ids as a subflow and returns aggregated result. */
+    const subflowRunnerHandler: IStepHandler = {
+      validate: (step: FlowStep) => (Array.isArray(step.bodyIds) ? true : 'need bodyIds'),
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        const raw = step.bodyIds
+        if (!Array.isArray(raw))
+          return ctx.stepResult(step.id, false, { error: 'need bodyIds' })
+        const bodyIds = raw.filter((x): x is string => typeof x === 'string')
+        const out = await ctx.runSubFlow(bodyIds, ctx.params)
+        const success = out.results.every(r => r.success)
+        return ctx.stepResult(step.id, success, {
+          outputs: { [step.id]: out.newContext },
+          nextSteps: out.earlyExit?.nextSteps,
+        })
+      },
+    }
+
+    it('runSubFlow with only non-existent body ids completes without running that step and runner succeeds', async () => {
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['nonexistent'], dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      expect(result.steps).toHaveLength(1)
+      expect(result.steps[0].stepId).toBe('runner')
+      expect(result.steps[0].success).toBe(true)
+    })
+
+    it('runStepById: unknown step type in subflow returns error and does not throw', async () => {
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['inner'], dependsOn: [] },
+          { id: 'inner', type: 'noHandler', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(false)
+      const innerStep = result.steps.find(s => s.stepId === 'inner')
+      expect(innerStep?.success).toBe(false)
+      expect(innerStep?.error).toContain('Unknown step type')
+      expect(innerStep?.error).toContain('noHandler')
+    })
+
+    it('runStepById: validate failure in subflow step returns error result', async () => {
+      const strictHandler: IStepHandler = {
+        validate: (step: FlowStep) => ((step as { need?: string }).need ? true : 'need field'),
+        kill: () => {},
+        run: async (step: FlowStep, ctx: StepContext) => ctx.stepResult(step.id, true, {}),
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.strict = strictHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['inner'], dependsOn: [] },
+          { id: 'inner', type: 'strict', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(false)
+      expect(result.steps[0].error).toContain('need field')
+    })
+
+    it('runStepById: skip in subflow step returns success and keeps context', async () => {
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['a', 'b'], dependsOn: [] },
+          { id: 'a', type: 'step', skip: 'params.skipA', dependsOn: [] },
+          { id: 'b', type: 'step', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg, params: { skipA: true } })
+      expect(result.success).toBe(true)
+      const runnerStep = result.steps.find(s => s.stepId === 'runner')
+      const runnerOutputs = runnerStep?.outputs as Record<string, Record<string, unknown>>
+      expect(runnerOutputs?.runner).toBeDefined()
+      expect(runnerOutputs?.runner?.b).toBeDefined()
+    })
+
+    it('runStepById: handler throws in subflow step returns error result', async () => {
+      const throwHandler: IStepHandler = {
+        validate: () => true,
+        kill: () => {},
+        run: async () => { throw new Error('subflow step threw') },
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.thrower = throwHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['t'], dependsOn: [] },
+          { id: 't', type: 'thrower', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(false)
+      expect(result.steps[0].error).toContain('subflow step threw')
+    })
+
+    it('runStepById: handler returns no result yields error result', async () => {
+      const noResultHandler: IStepHandler = {
+        validate: () => true,
+        kill: () => {},
+        run: async () => undefined as unknown as Promise<StepResult>,
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.bad = noResultHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['bad'], dependsOn: [] },
+          { id: 'bad', type: 'bad', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(false)
+      expect(result.steps[0].error).toContain('Handler returned no result')
+    })
+
+    it('runSubFlow: early exit when step returns nextSteps outside body', async () => {
+      const earlyExitHandler: IStepHandler = {
+        validate: () => true,
+        kill: () => {},
+        run: async (step: FlowStep, ctx: StepContext) =>
+          ctx.stepResult(step.id, true, { nextSteps: ['out'] }),
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.early = earlyExitHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['a'], dependsOn: [] },
+          { id: 'a', type: 'early', dependsOn: [] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      expect(result.steps[0].nextSteps).toEqual(['out'])
+    })
+
+    it('runSubFlow: context accumulation across body steps', async () => {
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['a', 'b'], dependsOn: [] },
+          { id: 'a', type: 'step', dependsOn: [] },
+          { id: 'b', type: 'step', dependsOn: ['a'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg, params: { x: 1 } })
+      expect(result.success).toBe(true)
+      const runnerStep = result.steps.find(s => s.stepId === 'runner')
+      const runnerOutputs = runnerStep?.outputs as Record<string, Record<string, unknown>>
+      expect(runnerOutputs?.runner).toBeDefined()
+      expect(runnerOutputs?.runner?.a).toBeDefined()
+      expect(runnerOutputs?.runner?.b).toMatchObject({ a: { x: 1 } })
+    })
   })
 })

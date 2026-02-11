@@ -17,8 +17,8 @@ steps:
   - id: greet
     type: set
     set: { greeting: "Hello {{ who }}" }
-    depends-on: []
+    dependsOn: []
   - id: out
     type: set
     set: { received: "{{ greet.greeting }}", count: "{{ count }}" }
-    depends-on: [greet]
+    dependsOn: [greet]

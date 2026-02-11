@@ -1,0 +1,6 @@
+name: nested
+steps:
+  - id: f2
+    type: flow
+    flow: deeper.yaml
+    dependsOn: []

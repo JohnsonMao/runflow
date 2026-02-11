@@ -145,5 +145,51 @@ describe('http handler', () => {
       const result = await handler.run(step, ctx)
       expect(result.success).toBe(true)
     })
+
+    it('run returns validation error when url missing (run path)', async () => {
+      const step: FlowStep = { id: 'h1', type: 'http', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('url')
+    })
+
+    it('returns failure when url is invalid', async () => {
+      const step: FlowStep = { id: 'h1', type: 'http', url: 'not-a-url', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('invalid')
+    })
+
+    it('returns failure when protocol is not http or https', async () => {
+      const step: FlowStep = { id: 'h1', type: 'http', url: 'file:///etc/passwd', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/https?/)
+    })
+
+    it('returns failure and abort message when request is aborted', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+      const step: FlowStep = { id: 'h1', type: 'http', url: 'https://example.com/', dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/abort/i)
+    })
+
+    it('non-string header values are skipped', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      const step = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://example.com/',
+        headers: { 'Accept': 'application/json', 'X-Num': 42 },
+        dependsOn: [],
+      } as FlowStep
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(true)
+    })
   })
 })

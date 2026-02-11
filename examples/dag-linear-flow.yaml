@@ -6,12 +6,12 @@ steps:
   - id: a
     type: set
     set: { step: "A" }
-    depends-on: []
+    dependsOn: []
   - id: b
     type: set
     set: { step: "B" }
-    depends-on: [a]
+    dependsOn: [a]
   - id: c
     type: set
     set: { step: "C" }
-    depends-on: [b]
+    dependsOn: [b]

@@ -46,5 +46,12 @@ describe('sleep handler', () => {
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/seconds|ms|duration/i)
     })
+
+    it('fails when seconds is negative at run time', async () => {
+      const step: FlowStep = { id: 'wait', type: 'sleep', seconds: -1, dependsOn: [] }
+      const result = await handler.run(step, emptyContext)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/seconds|ms|duration/i)
+    })
   })
 })

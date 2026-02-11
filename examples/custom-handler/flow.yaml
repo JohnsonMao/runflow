@@ -4,12 +4,12 @@ steps:
   - id: one
     type: echo
     message: Hello from custom handler
-    depends-on: []
+    dependsOn: []
   - id: two
     type: set
     set: { builtin: true }
-    depends-on: [one]
+    dependsOn: [one]
   - id: three
     type: echo
     message: Done
-    depends-on: [two]
+    dependsOn: [two]

@@ -37,4 +37,8 @@ describe('substitute', () => {
   it('replaces multiple placeholders', () => {
     expect(substitute('{{ a }} and {{ b }}', { a: 1, b: 2 })).toBe('1 and 2')
   })
+
+  it('path with property before bracket resolves', () => {
+    expect(substitute('{{ data.items[1] }}', { data: { items: [10, 20, 30] } })).toBe('20')
+  })
 })

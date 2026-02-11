@@ -1,8 +1,8 @@
-# 示範：HTTP 步驟、可配置 output-key
+# 示範：HTTP 步驟、可配置 outputKey
 # 執行：flow run http-flow.yaml
 # 或帶參數：flow run http-flow.yaml --param path=json
 name: http-flow
-description: Flow with http step, optional output-key
+description: Flow with http step, optional outputKey
 params:
   - name: path
     type: string
@@ -11,9 +11,9 @@ steps:
   - id: fetch
     type: http
     url: https://httpbin.org/{{ path }}
-    output-key: api
-    depends-on: []
+    outputKey: api
+    dependsOn: []
   - id: done
     type: set
     set: { status: "{{ api.statusCode }}" }
-    depends-on: [fetch]
+    dependsOn: [fetch]

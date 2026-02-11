@@ -4,8 +4,8 @@ steps:
   - id: first
     type: set
     set: { fromExample: true, message: "from set step" }
-    depends-on: []
+    dependsOn: []
   - id: second
     type: set
     set: { combined: "{{ first.fromExample }}" }
-    depends-on: [first]
+    dependsOn: [first]

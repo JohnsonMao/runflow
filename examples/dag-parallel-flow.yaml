@@ -6,12 +6,12 @@ steps:
   - id: a
     type: set
     set: { root: true }
-    depends-on: []
+    dependsOn: []
   - id: b
     type: set
     set: { branch: "B" }
-    depends-on: [a]
+    dependsOn: [a]
   - id: c
     type: set
     set: { branch: "C" }
-    depends-on: [a]
+    dependsOn: [a]

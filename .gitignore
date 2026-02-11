@@ -9,6 +9,7 @@
 .cursorindexingignore
 .next
 .temp
+tsup.config.bundled_*.mjs
 .output
 .turbo
 cache

@@ -11,44 +11,44 @@ describe('parse', () => {
   })
 
   it('returns null when name is missing', () => {
-    const yaml = `
-steps:
-  - id: s1
-    type: set
-    set: {}
-`
+    const yaml = [
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+    ].join('\n')
     expect(parse(yaml)).toBeNull()
   })
 
   it('returns null when steps is not an array', () => {
-    const yaml = `
-name: my-flow
-steps: not-an-array
-`
+    const yaml = [
+      'name: my-flow',
+      'steps: not-an-array',
+    ].join('\n')
     expect(parse(yaml)).toBeNull()
   })
 
   it('parses step with unknown type as generic step', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: s1
-    type: unknown
-    run: echo hi
-`
+    const yaml = [
+      'name: my-flow',
+      'steps:',
+      '  - id: s1',
+      '    type: unknown',
+      '    run: echo hi',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'unknown', run: 'echo hi' })
   })
 
   it('parses minimal valid flow', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: step1
-    type: set
-    set: { x: 1 }
-`
+    const yaml = [
+      'name: my-flow',
+      'steps:',
+      '  - id: step1',
+      '    type: set',
+      '    set: { x: 1 }',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.name).toBe('my-flow')
@@ -57,17 +57,17 @@ steps:
   })
 
   it('parses flow with description and multiple steps', () => {
-    const yaml = `
-name: my-flow
-description: optional
-steps:
-  - id: step1
-    type: set
-    set: { a: 1 }
-  - id: step2
-    type: set
-    set: { b: 2 }
-`
+    const yaml = [
+      'name: my-flow',
+      'description: optional',
+      'steps:',
+      '  - id: step1',
+      '    type: set',
+      '    set: { a: 1 }',
+      '  - id: step2',
+      '    type: set',
+      '    set: { b: 2 }',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.name).toBe('my-flow')
@@ -77,25 +77,25 @@ steps:
   })
 
   it('parses set step without set (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: s1
-    type: set
-`
+    const yaml = [
+      'name: my-flow',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'set' })
   })
 
   it('parses set step with set object', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: s1
-    type: set
-    set: { a: 1, b: 2 }
-`
+    const yaml = [
+      'name: my-flow',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { a: 1, b: 2 }',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.steps).toHaveLength(1)
@@ -103,20 +103,20 @@ steps:
   })
 
   it('parses flow with top-level params array', () => {
-    const yaml = `
-name: param-flow
-params:
-  - name: who
-    type: string
-    required: true
-  - name: count
-    type: number
-    default: 1
-steps:
-  - id: s1
-    type: set
-    set: {}
-`
+    const yaml = [
+      'name: param-flow',
+      'params:',
+      '  - name: who',
+      '    type: string',
+      '    required: true',
+      '  - name: count',
+      '    type: number',
+      '    default: 1',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
     expect(flow?.params).toHaveLength(2)
@@ -124,115 +124,79 @@ steps:
     expect(flow?.params?.[1]).toMatchObject({ name: 'count', type: 'number', default: 1 })
   })
 
-  it('parses http step with required url', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: fetch
-    type: http
-    url: https://api.example.com/users
-`
+  it('parses params with nested object schema', () => {
+    const yaml = [
+      'name: obj-params',
+      'params:',
+      '  - name: config',
+      '    type: object',
+      '    schema:',
+      '      host: { type: string }',
+      '      port: { type: number }',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toEqual({ id: 'fetch', type: 'http', url: 'https://api.example.com/users' })
-  })
-
-  it('parses http step with optional method, headers, body, output-key', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: post
-    type: http
-    url: https://api.example.com/post
-    method: POST
-    headers:
-      Content-Type: application/json
-      Authorization: Bearer token
-    body: '{"x":1}'
-    output-key: apiResult
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({
-      id: 'post',
-      type: 'http',
-      url: 'https://api.example.com/post',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer token' },
-      body: '{"x":1}',
-      outputKey: 'apiResult',
+    expect(flow?.params).toHaveLength(1)
+    expect(flow?.params?.[0]).toMatchObject({ name: 'config', type: 'object' })
+    expect(flow?.params?.[0]?.schema).toMatchObject({
+      host: { type: 'string' },
+      port: { type: 'number' },
     })
   })
 
-  it('parses http step without url (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: fetch
-    type: http
-`
+  it('parses params with nested array items', () => {
+    const yaml = [
+      'name: arr-params',
+      'params:',
+      '  - name: ids',
+      '    type: array',
+      '    items: { type: number }',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http' })
+    expect(flow?.params).toHaveLength(1)
+    expect(flow?.params?.[0]).toMatchObject({ name: 'ids', type: 'array' })
+    expect(flow?.params?.[0]?.items).toMatchObject({ type: 'number' })
   })
 
-  it('parses http step with url as number (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: fetch
-    type: http
-    url: 123
-`
+  it('parses params with object nested array nested object', () => {
+    const yaml = [
+      'name: nested-params',
+      'params:',
+      '  - name: data',
+      '    type: object',
+      '    schema:',
+      '      rows:',
+      '        type: array',
+      '        items:',
+      '          type: object',
+      '          schema:',
+      '            key: { type: string }',
+      '            value: { type: number }',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+    ].join('\n')
     const flow = parse(yaml)
     expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http', url: 123 })
-  })
-
-  it('parses http step with non-string header value (generic step)', () => {
-    const yaml = `
-name: my-flow
-steps:
-  - id: fetch
-    type: http
-    url: https://example.com
-    headers:
-      X-Foo: 42
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.steps[0]).toMatchObject({ id: 'fetch', type: 'http', url: 'https://example.com', headers: { 'X-Foo': 42 } })
-  })
-
-  it('converts kebab-case keys to camelCase (depends-on, output-key)', () => {
-    const yaml = `
-name: kebab-flow
-steps:
-  - id: fetch
-    type: http
-    url: https://example.com
-    output-key: apiResult
-    depends-on: []
-  - id: use
-    type: set
-    set: { done: true }
-    depends-on: [fetch]
-`
-    const flow = parse(yaml)
-    expect(flow).not.toBeNull()
-    expect(flow?.name).toBe('kebab-flow')
-    expect(flow?.steps[0]).toMatchObject({
-      id: 'fetch',
-      type: 'http',
-      url: 'https://example.com',
-      outputKey: 'apiResult',
-      dependsOn: [],
-    })
-    expect(flow?.steps[1]).toMatchObject({
-      id: 'use',
-      type: 'set',
-      set: { done: true },
-      dependsOn: ['fetch'],
+    expect(flow?.params).toHaveLength(1)
+    expect(flow?.params?.[0]).toMatchObject({ name: 'data', type: 'object' })
+    const schema = flow?.params?.[0]?.schema as Record<string, unknown>
+    expect(schema?.rows).toMatchObject({ type: 'array' })
+    const rowsItems = (schema?.rows as { items?: unknown })?.items as Record<string, unknown>
+    expect(rowsItems).toMatchObject({ type: 'object' })
+    expect(rowsItems?.schema).toMatchObject({
+      key: { type: 'string' },
+      value: { type: 'number' },
     })
   })
 })

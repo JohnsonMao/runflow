@@ -22,8 +22,8 @@ function resolvePath(path: string, context: Record<string, unknown>): unknown {
       return undefined
     if (part.type === 'prop')
       current = (current as Record<string, unknown>)[part.name]
-    else
-      current = (current as unknown[])[part.index]
+    else if (Array.isArray(current))
+      current = current[part.index]
   }
   return current
 }

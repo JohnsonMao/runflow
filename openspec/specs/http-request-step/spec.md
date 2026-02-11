@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定義 flow 支援步驟型別 `http`：以宣告式欄位（url、method、headers、body）發送 HTTP 請求；所有字串欄位支援與現有 context 一致的模板替換；回應可透過可配置的 output key（YAML 欄位 `output-key`）寫入 context。請求完成且無 network/runtime 錯誤時 success 為 true，並一律回傳 responseObject（statusCode, headers, body）；4xx/5xx 仍為 success 並寫入 outputs。支援 timeout、retry；binary 回應以 base64 字串表示。
+定義 flow 支援步驟型別 `http`：以宣告式欄位（url、method、headers、body）發送 HTTP 請求；所有字串欄位支援與現有 context 一致的模板替換；回應可透過可配置的 output key（YAML 欄位 `outputKey`）寫入 context。請求完成且無 network/runtime 錯誤時 success 為 true，並一律回傳 responseObject（statusCode, headers, body）；4xx/5xx 仍為 success 並寫入 outputs。支援 timeout、retry；binary 回應以 base64 字串表示。
 
 ## Requirements
 
@@ -14,7 +14,7 @@ A flow step MUST be allowed to have `type: 'http'` with a required `url` (string
 
 - **WHEN** a flow contains a step `{ id: 'fetch', type: 'http', url: 'https://api.example.com/ok' }` and the default (or provided) registry includes the http handler, and the response status is 2xx
 - **THEN** the executor invokes the http handler; the handler sends the request and returns a StepResult with `success: true`
-- **AND** the step's result includes `outputs` with the response (e.g. statusCode, headers, body) under the output key (step id or configured `output-key` → `outputKey`)
+- **AND** the step's result includes `outputs` with the response (e.g. statusCode, headers, body) under the output key (step id or configured `outputKey`)
 
 #### Scenario: Http step with 4xx or 5xx still succeeds and returns responseObject
 
@@ -25,7 +25,7 @@ A flow step MUST be allowed to have `type: 'http'` with a required `url` (string
 
 #### Scenario: Parser accepts steps with type http as generic step
 
-- **WHEN** YAML contains a step with `type: http` and optional `url`, `method`, `headers`, `body`, `output-key`
+- **WHEN** YAML contains a step with `type: http` and optional `url`, `method`, `headers`, `body`, `outputKey`
 - **THEN** the parser SHALL include a generic FlowStep (id, type, and remaining keys) in the flow steps
 - **AND** type-specific validation (e.g. url required) is NOT required at parse time; the built-in http handler SHALL enforce input contract at run time and MAY produce an error StepResult for invalid step shape
 
@@ -50,25 +50,25 @@ Before the http handler is invoked, the executor SHALL substitute `{{ path }}` p
 - **WHEN** a prior step produced `outputs: { payload: '{"name":"x"}' }` and the http step has `body: '{{ payload }}'`
 - **THEN** the request body is the string value of `payload` from context (after substitution)
 
-### Requirement: Http step output key SHALL be configurable (output-key)
+### Requirement: Http step output key SHALL be configurable (outputKey)
 
-The key under which the response is written to context SHALL be determined by the optional step field `output-key` in YAML (parsed as `outputKey`). When `outputKey` is present, that value is the key. When absent, the step's `id` SHALL be used as the key.
+The key under which the response is written to context SHALL be determined by the optional step field `outputKey` in YAML. When `outputKey` is present, that value is the key. When absent, the step's `id` SHALL be used as the key.
 
 #### Scenario: Default output key is step id
 
-- **WHEN** an http step has `id: 'fetchUsers'` and no `output-key` field
+- **WHEN** an http step has `id: 'fetchUsers'` and no `outputKey` field
 - **THEN** the response object is merged into context as `context.fetchUsers = { statusCode, headers, body }` (or equivalent shape)
 - **AND** the next step can reference `params.fetchUsers.body` or `{{ fetchUsers.statusCode }}`
 
 #### Scenario: Explicit output key
 
-- **WHEN** an http step has `id: 'fetchUsers'` and `output-key: 'apiResult'` (parsed as outputKey)
+- **WHEN** an http step has `id: 'fetchUsers'` and `outputKey: 'apiResult'`
 - **THEN** the response object is merged into context as `context.apiResult = { statusCode, headers, body }`
 - **AND** the next step can reference `params.apiResult` or `{{ apiResult.statusCode }}`
 
 #### Scenario: Multiple http steps do not overwrite each other when output keys differ
 
-- **WHEN** step 1 has `id: 'a', output-key: 'first'` and step 2 has `id: 'b', output-key: 'second'`
+- **WHEN** step 1 has `id: 'a', outputKey: 'first'` and step 2 has `id: 'b', outputKey: 'second'`
 - **THEN** context has both `first` and `second` with their respective response objects
 - **AND** neither overwrites the other
 

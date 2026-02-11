@@ -26,6 +26,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
     "tsup": "catalog:dev",
     "typescript": "catalog:dev",

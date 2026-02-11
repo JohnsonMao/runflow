@@ -1,5 +1,8 @@
 export type ParamType = 'string' | 'number' | 'boolean' | 'object' | 'array'
 
+/** Param shape without `name`; used for nested schema values and array items. */
+export type ParamDeclarationWithoutName = Omit<ParamDeclaration, 'name'>
+
 export interface ParamDeclaration {
   name: string
   type: ParamType
@@ -7,8 +10,8 @@ export interface ParamDeclaration {
   default?: unknown
   enum?: unknown[]
   description?: string
-  schema?: Record<string, ParamDeclaration>
-  items?: ParamDeclaration
+  schema?: Record<string, ParamDeclarationWithoutName>
+  items?: ParamDeclarationWithoutName
 }
 
 /**

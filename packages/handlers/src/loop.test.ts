@@ -45,6 +45,17 @@ describe('loop handler', () => {
       }
       expect(handler.validate(step)).toContain('exactly one')
     })
+
+    it('returns true when step has until and body', () => {
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        until: 'check',
+        body: ['body'],
+        dependsOn: [],
+      }
+      expect(handler.validate(step)).toBe(true)
+    })
   })
 
   describe('run', () => {
@@ -134,6 +145,136 @@ describe('loop handler', () => {
       await handler.run(step, ctx({ runSubFlow }))
       expect(runSubFlow).toHaveBeenNthCalledWith(1, ['body'], expect.objectContaining({ item: 'a', index: 0, items: ['a', 'b'] }))
       expect(runSubFlow).toHaveBeenNthCalledWith(2, ['body'], expect.objectContaining({ item: 'b', index: 1, items: ['a', 'b'] }))
+    })
+
+    it('items driver with earlyExit returns early with nextSteps and does not run remaining items', async () => {
+      let callCount = 0
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+        callCount++
+        if (callCount === 1)
+          return { results: [{ stepId: 'b', success: true, stdout: '', stderr: '' }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['out'] } }
+        return { results: [], newContext: runCtx }
+      })
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        items: [1, 2, 3],
+        body: ['b'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toEqual(['out'])
+      expect(result.outputs).toMatchObject({ count: 1, items: [1, 2, 3] })
+      expect(runSubFlow).toHaveBeenCalledTimes(1)
+    })
+
+    it('items driver without done returns no nextSteps', async () => {
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
+        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        newContext: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        items: [1],
+        body: ['body'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toBeUndefined()
+      expect(result.outputs).toMatchObject({ count: 1, items: [1] })
+    })
+
+    it('count driver without done returns no nextSteps', async () => {
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
+        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        newContext: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        count: 1,
+        body: ['body'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toBeUndefined()
+    })
+  })
+
+  describe('run (until driver)', () => {
+    it('until: exits when until step returns nextSteps outside body', async () => {
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+        if (bodyStepIds[0] === 'body')
+          return { results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }], newContext: { ...runCtx } }
+        if (bodyStepIds[0] === 'check') {
+          return {
+            results: [{ stepId: 'check', success: true, stdout: '', stderr: '', nextSteps: ['done'] }],
+            newContext: { ...runCtx },
+          }
+        }
+        return { results: [], newContext: runCtx }
+      })
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        until: 'check',
+        body: ['body'],
+        done: ['after'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toEqual(['after'])
+      expect(result.outputs?.count).toBe(1)
+      expect(runSubFlow).toHaveBeenCalledWith(['body'], expect.any(Object))
+      expect(runSubFlow).toHaveBeenCalledWith(['check'], expect.any(Object))
+    })
+
+    it('until: earlyExit from body returns with body nextSteps', async () => {
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+        if (bodyStepIds[0] === 'body')
+          return { results: [{ stepId: 'body', success: true, stdout: '', stderr: '' }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['early'] } }
+        return { results: [], newContext: runCtx }
+      })
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        until: 'check',
+        body: ['body'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toEqual(['early'])
+      expect(runSubFlow).toHaveBeenCalledTimes(1)
+    })
+
+    it('until: exceeds maxIterations returns error', async () => {
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+        if (bodyStepIds[0] === 'body')
+          return { results: [{ stepId: 'body', success: true, stdout: '', stderr: '' }], newContext: { ...runCtx } }
+        return {
+          results: [{ stepId: 'check', success: true, stdout: '', stderr: '' }],
+          newContext: { ...runCtx },
+        }
+      })
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        until: 'check',
+        body: ['body'],
+        maxIterations: 2,
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow }))
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/exceeded max iterations/)
+      expect(result.error).toMatch(/max iterations \(2\)/)
+      expect(result.outputs?.count).toBe(2)
     })
   })
 })

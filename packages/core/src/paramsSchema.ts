@@ -1,9 +1,9 @@
-import type { ParamDeclaration } from './types'
+import type { ParamDeclaration, ParamDeclarationWithoutName } from './types'
 import { z } from 'zod'
 
 const PARAM_TYPES = ['string', 'number', 'boolean', 'object', 'array'] as const
 
-function baseSchemaForType(decl: ParamDeclaration): z.ZodTypeAny {
+function baseSchemaForType(decl: ParamDeclarationWithoutName): z.ZodTypeAny {
   switch (decl.type) {
     case 'string':
       return z.string()
@@ -20,7 +20,7 @@ function baseSchemaForType(decl: ParamDeclaration): z.ZodTypeAny {
   }
 }
 
-function paramToZod(decl: ParamDeclaration): z.ZodTypeAny {
+function paramToZod(decl: ParamDeclarationWithoutName): z.ZodTypeAny {
   let out: z.ZodTypeAny = baseSchemaForType(decl)
   if (decl.enum != null && Array.isArray(decl.enum) && decl.enum.length > 0) {
     const literals = decl.enum.map(v => z.literal(v as string | number | boolean | null))
@@ -33,7 +33,7 @@ function paramToZod(decl: ParamDeclaration): z.ZodTypeAny {
   return out
 }
 
-function objectSchema(schema?: Record<string, ParamDeclaration>): z.ZodTypeAny {
+function objectSchema(schema?: Record<string, ParamDeclarationWithoutName>): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') {
     return z.record(z.string(), z.unknown())
   }
@@ -44,7 +44,7 @@ function objectSchema(schema?: Record<string, ParamDeclaration>): z.ZodTypeAny {
   return z.object(shape).strict()
 }
 
-function arraySchema(items?: ParamDeclaration): z.ZodArray<z.ZodTypeAny> {
+function arraySchema(items?: ParamDeclarationWithoutName): z.ZodArray<z.ZodTypeAny> {
   if (!items)
     return z.array(z.unknown())
   return z.array(paramToZod(items))
@@ -60,9 +60,11 @@ export function paramsDeclarationToZodSchema(declarations: ParamDeclaration[]): 
   }
   const shape: z.ZodRawShape = {}
   for (const decl of declarations) {
-    shape[decl.name] = paramToZod(decl)
+    const key = decl.name
+    if (key)
+      shape[key] = paramToZod(decl)
   }
-  return z.object(shape).strict() as unknown as z.ZodType<Record<string, unknown>>
+  return z.object(shape).strict()
 }
 
 export function isParamType(value: unknown): value is ParamDeclaration['type'] {

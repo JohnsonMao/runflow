@@ -9,7 +9,14 @@ describe('loadFromFile', () => {
     const dir = mkdtempSync(join(tmpdir(), 'runflow-loader-'))
     try {
       const file = join(dir, 'flow.yaml')
-      writeFileSync(file, 'name: test\nsteps:\n  - id: s1\n    type: set\n    set: {}\n', 'utf-8')
+      const yaml = [
+        'name: test',
+        'steps:',
+        '  - id: s1',
+        '    type: set',
+        '    set: {}',
+      ].join('\n')
+      writeFileSync(file, yaml, 'utf-8')
       const flow = loadFromFile(file)
       expect(flow).not.toBeNull()
       expect(flow?.name).toBe('test')
@@ -43,9 +50,44 @@ describe('loadFromFile', () => {
     const dir = mkdtempSync(join(tmpdir(), 'runflow-loader-'))
     try {
       const file = join(dir, 'no-name.yaml')
-      writeFileSync(file, 'steps:\n  - id: s1\n    type: set\n    set: {}\n', 'utf-8')
+      const yaml = [
+        'steps:',
+        '  - id: s1',
+        '    type: set',
+        '    set: {}',
+      ].join('\n')
+      writeFileSync(file, yaml, 'utf-8')
       const result = loadFromFile(file)
       expect(result).toBeNull()
+    }
+    finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('loads flow with camelCase step keys (dependsOn)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'runflow-loader-'))
+    try {
+      const file = join(dir, 'flow.yaml')
+      const yaml = [
+        'name: dag-flow',
+        'steps:',
+        '  - id: a',
+        '    type: set',
+        '    set: {}',
+        '    dependsOn: []',
+        '  - id: b',
+        '    type: set',
+        '    set: {}',
+        '    dependsOn: [a]',
+      ].join('\n')
+      writeFileSync(file, yaml, 'utf-8')
+      const flow = loadFromFile(file)
+      expect(flow).not.toBeNull()
+      expect(flow?.name).toBe('dag-flow')
+      expect(flow?.steps).toHaveLength(2)
+      expect(flow?.steps[0].dependsOn).toEqual([])
+      expect(flow?.steps[1].dependsOn).toEqual(['a'])
     }
     finally {
       rmSync(dir, { recursive: true })

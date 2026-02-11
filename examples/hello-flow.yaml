@@ -4,8 +4,8 @@ steps:
   - id: greet
     type: set
     set: { message: "Hello from flow" }
-    depends-on: []
+    dependsOn: []
   - id: sum
     type: set
     set: { result: 2 }
-    depends-on: [greet]
+    dependsOn: [greet]

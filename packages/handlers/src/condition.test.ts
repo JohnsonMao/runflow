@@ -81,5 +81,27 @@ describe('condition handler', () => {
       expect(result.success).toBe(true)
       expect(result.outputs).toBeUndefined()
     })
+
+    it('returns error when when is not a string at run time', async () => {
+      const step = { id: 'c', type: 'condition' as const, when: 123, then: 'a', dependsOn: [] as string[] }
+      const result = await handler.run(step as unknown as FlowStep, ctx())
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('condition step requires when (string)')
+    })
+
+    it('returns error and message when expression throws or is invalid', async () => {
+      const step: FlowStep = {
+        id: 'c',
+        type: 'condition',
+        when: 'throw new Error("eval err")',
+        then: 'a',
+        else: 'b',
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx())
+      expect(result.success).toBe(false)
+      expect(result.error).toBeDefined()
+      expect(typeof result.error).toBe('string')
+    })
   })
 })
