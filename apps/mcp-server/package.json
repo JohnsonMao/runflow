@@ -1,0 +1,27 @@
+{
+  "name": "@runflow/mcp-server",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:prod",
+    "@runflow/core": "workspace:*",
+    "@runflow/handlers": "workspace:^",
+    "zod": "catalog:prod"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "eslint": "catalog:dev",
+    "tsup": "catalog:dev",
+    "typescript": "catalog:dev"
+  }
+}
