@@ -1,6 +1,6 @@
 # Runflow MCP Server
 
-MCP (Model Context Protocol) server that exposes Runflow as tools over stdio. Use it from Cursor or other MCP clients to run flow files without the CLI.
+MCP (Model Context Protocol) server that exposes Runflow as tools over stdio. Use it from Cursor or other MCP clients to run flow files without the CLI. Supports the same **flowId** and **runflow.config** as the CLI (flowsDir, prefix-keyed openapi, optional handlers).
 
 ## Install
 
@@ -25,35 +25,56 @@ Or run the built entry directly (from repo root so relative flow paths resolve):
 node apps/mcp-server/dist/index.js
 ```
 
+To use a specific config file:
+
+```bash
+node apps/mcp-server/dist/index.js --config ./runflow.config.mjs
+```
+
+Or set `RUNFLOW_CONFIG` to the config path (relative to cwd or absolute). The server discovers config from `--config`, `RUNFLOW_CONFIG`, or `runflow.config.mjs` / `runflow.config.js` in cwd.
+
 The server uses **stdio** transport: it reads JSON-RPC from stdin and writes responses to stdout. MCP clients spawn this process and connect via stdio.
+
+## Config (runflow.config.mjs)
+
+Same format as the CLI:
+
+- **flowsDir** – Directory to resolve file flowIds (relative to config file). When set, file flowIds are relative to this directory.
+- **openapi** – Object keyed by prefix; each value has `specPath` and optionally `hooks`, `baseUrl`, `operationFilter`. FlowIds for OpenAPI flows are `prefix-operation` (e.g. `myApi-get-users`).
+- **handlers** – Optional custom step handlers (same as CLI).
 
 ## Tools
 
-- **run_flow** – Run a flow YAML file.
-  - **flowPath** (required): Path to the flow file (absolute or relative to process cwd).
+- **execute** – Run a flow by **flowId**.
+  - **flowId** (required): Either a file path (absolute or relative to config.flowsDir or cwd), or a prefix-operation string (e.g. `myApi-get-users`) when config has `openapi` for that prefix.
   - **params** (optional): Object of initial parameters for the flow.
 
   Result is returned as text: success summary or error message (and step id when a step fails).
 
-- **list_flows** – List flow files in a directory (recursive).
-  - **directory** (optional): Directory to search, relative to cwd. Default: current working directory.
-  - **extension** (optional): `yaml` | `yml` | `both`. Default: `yaml`.
+- **discover** – List flows from config (flowsDir YAML files + OpenAPI-derived flows). Uses a cached catalog built when config is loaded.
+  - **limit** (optional): Max number of flows to return (default **20**, max 1000).
+  - **keyword** (optional): Filter by flowId, flow name, or description (case-insensitive). Omit to list all.
 
-  Returns a JSON array of `{ path, name, description? }` for each valid flow file found. Skips `node_modules` and dot-directories.
+  Returns **Markdown** text in **list format**: each flow is a block with **flowId**, **name**, **description**, **params**. Params for API flows show only **path**, **query**, and **body** (no headers); **body** is expanded into key–value with type and description. Each param includes its description when present. **flowId** may contain slashes: for file flows it is the path relative to flowsDir (or cwd), so subdirectories yield slashes (e.g. `payment/flow.yaml`); for OpenAPI flows it is `prefix-operation`. When no flows match, returns a short message (e.g. "No flows found.").
 
 ## Cursor MCP configuration
 
-Add the Runflow MCP server in Cursor settings (e.g. **Settings → MCP** or `.cursor/mcp.json` depending on your setup). Example using the built app from the repo root:
+Add the Runflow MCP server in Cursor settings (e.g. **Settings → MCP** or `.cursor/mcp.json`). Example from the repo root:
 
 **Command:** `node`  
 **Args:** `apps/mcp-server/dist/index.js`
 
-Or with pnpm from the repo root:
+With a config file:
+
+**Command:** `node`  
+**Args:** `apps/mcp-server/dist/index.js`, `--config`, `./runflow.config.mjs`
+
+Or with pnpm:
 
 **Command:** `pnpm`  
 **Args:** `--filter`, `@runflow/mcp-server`, `start`
 
-Ensure the **cwd** is the repo root (or the directory your flow paths are relative to).
+Set **cwd** to the repo root (or the directory that contains your flows and optional runflow.config.mjs).
 
 ## Development
 

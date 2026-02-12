@@ -25,11 +25,12 @@ export interface OperationFilter {
 }
 
 /**
- * Hook entry for batch: pattern = exact operation key (string) or RegExp to match multiple keys.
+ * Hook entry for batch: pattern = exact operation key (string), regex source (string with ^ $ etc.), or RegExp.
+ * When pattern is a string: if it contains regex metacharacters (^ $ [ ] ( ) * + ? . \ etc.), it is used as RegExp source; otherwise exact key match.
  * When using array form, all matching entries are merged (before/after concatenated in order).
  */
 export interface HooksEntry {
-  pattern: OperationKey | RegExp
+  pattern: OperationKey | RegExp | string
   hooks: OperationHooks
 }
 
@@ -59,6 +60,9 @@ export interface OpenApiDocument {
   openapi?: string
   paths?: Record<string, PathItem>
   servers?: Array<{ url?: string }>
+  components?: {
+    schemas?: Record<string, OpenApiSchema>
+  }
 }
 
 export interface PathItem {
@@ -98,6 +102,7 @@ export interface OpenApiSchema {
   properties?: Record<string, OpenApiSchema>
   required?: string[]
   $ref?: string
+  allOf?: OpenApiSchema[]
 }
 
 export interface RequestBodyObject {

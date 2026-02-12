@@ -3,6 +3,9 @@ export type ParamType = 'string' | 'number' | 'boolean' | 'object' | 'array'
 /** Param shape without `name`; used for nested schema values and array items. */
 export type ParamDeclarationWithoutName = Omit<ParamDeclaration, 'name'>
 
+/** Param location for API flows (path, query, header, body). When set, discover may filter to path/query/body only. */
+export type ParamIn = 'path' | 'query' | 'header' | 'cookie' | 'body'
+
 export interface ParamDeclaration {
   name: string
   type: ParamType
@@ -10,6 +13,8 @@ export interface ParamDeclaration {
   default?: unknown
   enum?: unknown[]
   description?: string
+  /** For API flows: path, query, header, cookie, or body. Omitted for YAML flow params. */
+  in?: ParamIn
   schema?: Record<string, ParamDeclarationWithoutName>
   items?: ParamDeclarationWithoutName
 }

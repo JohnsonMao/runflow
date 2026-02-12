@@ -52,7 +52,7 @@ function arraySchema(items?: ParamDeclarationWithoutName): z.ZodArray<z.ZodTypeA
 
 /**
  * Build a Zod schema from a flow's params declaration array.
- * Validates the whole params object (all declared params at top level).
+ * Validates declared params; unknown keys are passed through so global config params can reach context.
  */
 export function paramsDeclarationToZodSchema(declarations: ParamDeclaration[]): z.ZodType<Record<string, unknown>> {
   if (!declarations.length) {
@@ -64,7 +64,7 @@ export function paramsDeclarationToZodSchema(declarations: ParamDeclaration[]): 
     if (key)
       shape[key] = paramToZod(decl)
   }
-  return z.object(shape).strict()
+  return z.object(shape).passthrough()
 }
 
 export function isParamType(value: unknown): value is ParamDeclaration['type'] {

@@ -41,4 +41,13 @@ describe('resolveHooksForKey', () => {
     expect(result?.after).toHaveLength(1)
     expect(resolveHooksForKey('post-users', hooks)).toBeUndefined()
   })
+
+  it('matches with string regex pattern when pattern contains regex metacharacters', () => {
+    const hooks = [
+      { pattern: '^get-', hooks: { before: [{ type: 'set', set: {} }] } },
+    ]
+    expect(resolveHooksForKey('get-users', hooks)?.before).toHaveLength(1)
+    expect(resolveHooksForKey('get-users-id', hooks)?.before).toHaveLength(1)
+    expect(resolveHooksForKey('post-users', hooks)).toBeUndefined()
+  })
 })

@@ -7,7 +7,7 @@ Monorepo for YAML-defined reusable execution flows. Uses TypeScript, pnpm, and T
 - **packages/core** (`@runflow/core`) – Flow engine: parse YAML, validate schema, run steps. Does **not** include built-in step handlers; you must pass a **registry** when calling `run()`.
 - **packages/handlers** (`@runflow/handlers`) – Built-in step handlers (command, js, http, condition, sleep, set, loop, flow). Use `createBuiltinRegistry()` and pass the registry to `run(flow, { registry })`; override or add with `registry.myType = myHandler`.
 - **apps/cli** (`@runflow/cli`) – CLI to run a flow from a YAML file (uses `@runflow/handlers` to build the default registry).
-- **apps/mcp-server** (`@runflow/mcp-server`) – MCP server (stdio) that exposes a `run_flow` tool for MCP clients (e.g. Cursor). See [apps/mcp-server/README.md](apps/mcp-server/README.md).
+- **apps/mcp-server** (`@runflow/mcp-server`) – MCP server (stdio) that exposes `execute` and `discover` tools for MCP clients (e.g. Cursor). See [apps/mcp-server/README.md](apps/mcp-server/README.md).
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ To list parameters declared by a flow: `flow params <file>` (shows name, type, r
 
 ## MCP
 
-The **MCP server** lets Cursor (or other MCP clients) run flows via the `run_flow` tool over stdio. Build and start from repo root:
+The **MCP server** lets Cursor (or other MCP clients) run flows via the `execute` tool over stdio. Build and start from repo root:
 
 ```bash
 pnpm --filter @runflow/mcp-server build

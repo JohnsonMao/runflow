@@ -1,5 +1,6 @@
 import type { ParamDeclaration } from '@runflow/core'
 import type { CollectedOperation } from './collectOperations.js'
+import type { OpenApiDocument } from './types.js'
 import { describe, expect, it } from 'vitest'
 import { mapParamsToDeclarations } from './mapParams.js'
 
@@ -93,5 +94,89 @@ describe('mapParamsToDeclarations', () => {
     }
     const params = mapParamsToDeclarations(op)
     expect(params[0].description).toBe('Search query')
+  })
+
+  it('resolves requestBody $ref to object schema when doc has components.schemas', () => {
+    const doc: OpenApiDocument = {
+      components: {
+        schemas: {
+          PayByTxnTokenRequestEntity: {
+            type: 'object',
+            required: ['txnToken', 'merchantConsumerId'],
+            properties: {
+              txnToken: { type: 'string', description: 'SDK 取得的 txnToken' },
+              merchantConsumerId: { type: 'string', description: '商店會員編號' },
+            },
+          },
+        },
+      },
+    }
+    const op: CollectedOperation = {
+      key: 'post-v2-payments-request-by-txnToken',
+      path: '/v2/payments/request-by-txnToken',
+      method: 'post',
+      pathItem: {},
+      operation: {
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/PayByTxnTokenRequestEntity' },
+            },
+          },
+        },
+      } as Record<string, unknown>,
+    }
+    const paramsWithoutDoc = mapParamsToDeclarations(op)
+    const bodyWithoutDoc = paramsWithoutDoc.find((p: ParamDeclaration) => p.name === 'body')
+    expect(bodyWithoutDoc!.type).toBe('string')
+
+    const paramsWithDoc = mapParamsToDeclarations(op, doc)
+    const bodyWithDoc = paramsWithDoc.find((p: ParamDeclaration) => p.name === 'body')
+    expect(bodyWithDoc).toBeDefined()
+    expect(bodyWithDoc!.type).toBe('object')
+    expect(bodyWithDoc!.schema).toBeDefined()
+    expect(Object.keys(bodyWithDoc!.schema!)).toContain('txnToken')
+    expect(Object.keys(bodyWithDoc!.schema!)).toContain('merchantConsumerId')
+  })
+
+  it('resolves requestBody allOf to merged object schema when doc provided', () => {
+    const doc: OpenApiDocument = {
+      components: {
+        schemas: {
+          Base: {
+            type: 'object',
+            required: ['payType'],
+            properties: { payType: { type: 'string' } },
+          },
+        },
+      },
+    }
+    const op: CollectedOperation = {
+      key: 'post-pay',
+      path: '/pay',
+      method: 'post',
+      pathItem: {},
+      operation: {
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { type: 'object', required: ['txnToken'], properties: { txnToken: { type: 'string' } } },
+                  { $ref: '#/components/schemas/Base' },
+                ],
+              },
+            },
+          },
+        },
+      } as Record<string, unknown>,
+    }
+    const params = mapParamsToDeclarations(op, doc)
+    const body = params.find((p: ParamDeclaration) => p.name === 'body')
+    expect(body).toBeDefined()
+    expect(body!.type).toBe('object')
+    expect(body!.schema).toBeDefined()
+    expect(Object.keys(body!.schema!)).toContain('txnToken')
+    expect(Object.keys(body!.schema!)).toContain('payType')
   })
 })

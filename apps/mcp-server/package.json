@@ -9,19 +9,25 @@
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "lint": "eslint .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:prod",
+    "@runflow/config": "workspace:*",
+    "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
+    "commander": "catalog:prod",
     "zod": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
     "tsup": "catalog:dev",
-    "typescript": "catalog:dev"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:dev"
   }
 }

@@ -8,7 +8,7 @@ export function operationToFlow(
   op: CollectedOperation,
   baseUrl: string,
 ): FlowDefinition {
-  const params = mapParamsToDeclarations(op)
+  const params = mapParamsToDeclarations(op, doc)
   const pathWithTemplates = op.path.replace(/\{(\w+)\}/g, '{{ params.$1 }}')
   const url = baseUrl ? `${baseUrl.replace(/\/$/, '')}${pathWithTemplates}` : pathWithTemplates
   const apiStepId = 'api'

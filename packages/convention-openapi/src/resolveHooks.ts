@@ -1,7 +1,13 @@
 import type { HooksEntry, OpenApiToFlowsOptions, OperationHooks } from './types.js'
 
+const REGEX_META = /[.*+?^${}()|[\]\\]/
+
+function isRegexSource(s: string): boolean {
+  return REGEX_META.test(s)
+}
+
 /**
- * Resolve merged hooks for an operation key. Supports Record (exact key) and HooksEntry[] (pattern + regex).
+ * Resolve merged hooks for an operation key. Supports Record (exact key) and HooksEntry[] (pattern: exact string, regex string, or RegExp).
  */
 export function resolveHooksForKey(
   key: string,
@@ -13,9 +19,15 @@ export function resolveHooksForKey(
     const before: OperationHooks['before'] = []
     const after: OperationHooks['after'] = []
     for (const entry of hooks as HooksEntry[]) {
-      const match = typeof entry.pattern === 'string'
-        ? entry.pattern === key
-        : entry.pattern.test(key)
+      let match: boolean
+      if (typeof entry.pattern === 'string') {
+        match = isRegexSource(entry.pattern)
+          ? new RegExp(entry.pattern).test(key)
+          : entry.pattern === key
+      }
+      else {
+        match = entry.pattern.test(key)
+      }
       if (match && entry.hooks) {
         if (entry.hooks.before?.length)
           before.push(...entry.hooks.before)

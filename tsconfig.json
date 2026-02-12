@@ -16,7 +16,8 @@
     "apps/*/vitest.config.ts",
     "apps/*/src/**/*.test.ts",
     "packages/*/src/**/*.test.ts",
-    "eslint.config.mjs"
+    "eslint.config.mjs",
+    "scripts/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

@@ -160,10 +160,12 @@ describe('paramsDeclarationToZodSchema', () => {
     expect(schema.safeParse({ data: { items: [{ key: 'a', value: 'not-number' }] } }).success).toBe(false)
   })
 
-  it('rejects extra keys (strict)', () => {
+  it('allows extra keys (passthrough) for global config params', () => {
     const decl: ParamDeclaration[] = [{ name: 'x', type: 'string' }]
     const schema = paramsDeclarationToZodSchema(decl)
-    expect(schema.safeParse({ x: 'ok', extra: 1 }).success).toBe(false)
+    const parsed = schema.safeParse({ x: 'ok', extra: 1 })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data).toMatchObject({ x: 'ok', extra: 1 })
   })
 })
 

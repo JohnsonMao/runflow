@@ -181,10 +181,10 @@ describe('flow run', () => {
     expect(result.stderr).toContain('params file must be a JSON object')
   })
 
-  it('exits with error when neither file nor --from-openapi is provided', async () => {
+  it('exits with error when flowId is not provided', async () => {
     const result = await runWithParse(['run'], process.cwd())
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('Either <file> or --from-openapi is required')
+    expect(result.stderr).toContain('flowId is required')
   })
 
   it('exits with error when run file path does not exist', async () => {
@@ -194,19 +194,25 @@ describe('flow run', () => {
     expect(result.stderr).toMatch(/File not found|not a regular file/)
   })
 
-  it('exits with error when --from-openapi spec path does not exist', async () => {
+  it('exits with error when openapi flowId references missing spec', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
-    const result = await runWithParse(['run', '--from-openapi', join(dir, 'nospec.yaml'), '--operation', 'get-users'], process.cwd())
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./nospec.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi-get-users', '--config', configPath], dir)
+    unlinkSync(configPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('OpenAPI spec not found')
   })
 
-  it('exits with error when --from-openapi --operation is not in generated flows', async () => {
+  it('exits with error when openapi flowId operation is not in generated flows', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const openapiPath = join(dir, 'openapi.yaml')
+    const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(openapiPath, ['openapi: "3.0.0"', 'info: { title: X, version: "1.0" }', 'paths: {}'].join('\n'))
-    const result = await runWithParse(['run', '--from-openapi', openapiPath, '--operation', 'nonexistent-op'], dir)
+    writeFileSync(configPath, `export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n`)
+    const result = await runWithParse(['run', 'myApi-nonexistent-op', '--config', configPath], dir)
     unlinkSync(openapiPath)
+    unlinkSync(configPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('Operation "nonexistent-op" not found')
   })
@@ -227,6 +233,27 @@ describe('flow run', () => {
     unlinkSync(flowPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('Registry file not found')
+  })
+
+  it('exits with error when --registry file fails to load (import throws)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    const registryPath = join(dir, 'bad-registry.mjs')
+    const yaml = [
+      'name: x',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: {}',
+      '    dependsOn: []',
+    ].join('\n')
+    writeFileSync(flowPath, yaml)
+    writeFileSync(registryPath, 'throw new Error("registry load failed")')
+    const result = await runWithParse(['run', flowPath, '--registry', registryPath], dir)
+    unlinkSync(flowPath)
+    unlinkSync(registryPath)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/Failed to load registry|registry load failed/)
   })
 
   it('exits with code 1 and prints error when flow execution fails', async () => {
@@ -311,6 +338,36 @@ describe('flow run', () => {
     unlinkSync(handlerPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('must export default (IStepHandler)')
+  })
+
+  it('skips handler entries with non-string modulePath and runs flow with valid handler', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    const configPath = join(dir, 'runflow.config.mjs')
+    const handlerPath = join(dir, 'echo-handler.mjs')
+    const yaml = [
+      'name: skip-non-string-flow',
+      'steps:',
+      '  - id: e1',
+      '    type: echo',
+      '    message: ok',
+      '    dependsOn: []',
+    ].join('\n')
+    writeFileSync(flowPath, yaml)
+    writeFileSync(configPath, 'export default { handlers: { skipMe: 123, echo: "./echo-handler.mjs" } }\n')
+    writeFileSync(handlerPath, [
+      'export default {',
+      '  validate() { return true },',
+      '  kill() {},',
+      '  async run(step) { const m = step.message != null ? String(step.message) : step.id; return { stepId: step.id, success: true, stdout: m + "\\n", stderr: "" }; }',
+      '}',
+    ].join('\n'))
+    const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)
+    unlinkSync(flowPath)
+    unlinkSync(configPath)
+    unlinkSync(handlerPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('ok')
   })
 
   it('condition step runs else branch when when is false', async () => {
@@ -418,9 +475,10 @@ describe('flow run', () => {
     expect(result.stdout).toContain('"n":"2"')
   })
 
-  it('runs from OpenAPI spec with --from-openapi and --operation (dry-run)', async () => {
+  it('runs from OpenAPI spec via flowId prefix-operation (dry-run)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const openapiPath = join(dir, 'openapi.yaml')
+    const configPath = join(dir, 'runflow.config.mjs')
     const openapi = [
       'openapi: "3.0.0"',
       'info:',
@@ -437,26 +495,27 @@ describe('flow run', () => {
       '            type: integer',
     ].join('\n')
     writeFileSync(openapiPath, openapi)
-    const result = await runWithParse(['run', '--from-openapi', openapiPath, '--operation', 'get-users', '--dry-run'], dir)
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi-get-users', '--config', configPath, '--dry-run'], dir)
     unlinkSync(openapiPath)
+    unlinkSync(configPath)
     expect(result.code, result.stderr).toBe(0)
   })
 
-  it('exits with error when --from-openapi without --operation', async () => {
+  it('exits with error when openapi flowId has no matching operation in spec', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const openapiPath = join(dir, 'openapi.yaml')
-    writeFileSync(openapiPath, [
-      'openapi: "3.0.0"',
-      'info: { title: X, version: "1.0" }',
-      'paths: {}',
-    ].join('\n'))
-    const result = await runWithParse(['run', '--from-openapi', openapiPath], dir)
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(openapiPath, ['openapi: "3.0.0"', 'info: { title: X, version: "1.0" }', 'paths: {}'].join('\n'))
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi-nonexistent-op', '--config', configPath], dir)
     unlinkSync(openapiPath)
+    unlinkSync(configPath)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('--operation is required')
+    expect(result.stderr).toContain('not found')
   })
 
-  it('uses config openapi options when running with --from-openapi and --config', async () => {
+  it('uses config openapi options when running with flowId prefix-operation and --config', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const openapiPath = join(dir, 'openapi.yaml')
     const openapi = [
@@ -473,11 +532,11 @@ describe('flow run', () => {
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(configPath, [
       'export default {',
-      '  openapi: { baseUrl: \'https://api.example.com\' },',
+      '  openapi: { myApi: { specPath: \'./openapi.yaml\', baseUrl: \'https://api.example.com\' } },',
       '}',
     ].join('\n'))
     const result = await runWithParse(
-      ['run', '--config', configPath, '--from-openapi', openapiPath, '--operation', 'get-users', '--dry-run'],
+      ['run', 'myApi-get-users', '--config', configPath, '--dry-run'],
       dir,
     )
     unlinkSync(openapiPath)
@@ -599,11 +658,11 @@ describe('flow run', () => {
       const configPath = join(dir, 'runflow.config.mjs')
       writeFileSync(configPath, [
         'export default {',
-        `  openapi: { baseUrl: '${baseUrl}' },`,
+        `  openapi: { myApi: { specPath: './openapi.yaml', baseUrl: '${baseUrl}' } },`,
         '}',
       ].join('\n'))
       const result = await runWithParse(
-        ['run', '--config', configPath, '--from-openapi', openapiPath, '--operation', 'get-users'],
+        ['run', 'myApi-get-users', '--config', configPath],
         dir,
       )
       expect(result.code, result.stderr).toBe(0)
@@ -778,6 +837,60 @@ describe('flow params', () => {
     unlinkSync(flowPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toMatch(/Invalid|unreadable/)
+  })
+
+  it('params with openapi flowId and --config lists params when flow has params', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const openapiPath = join(dir, 'openapi.yaml')
+    const openapi = [
+      'openapi: "3.0.0"',
+      'info: { title: Test, version: "1.0" }',
+      'paths:',
+      '  /users:',
+      '    get:',
+      '      parameters:',
+      '        - name: limit',
+      '          in: query',
+      '          schema: { type: integer }',
+    ].join('\n')
+    writeFileSync(openapiPath, openapi)
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['params', 'myApi-get-users', '--config', configPath], dir)
+    unlinkSync(openapiPath)
+    unlinkSync(configPath)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('limit')
+    expect(result.stdout).toContain('type:')
+  })
+
+  it('params exits with error when OpenAPI spec not found', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./missing-spec.yaml" } } }\n')
+    const result = await runWithParse(['params', 'myApi-get-users', '--config', configPath], dir)
+    unlinkSync(configPath)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/OpenAPI spec not found|not found/)
+  })
+
+  it('params exits with error when openapi operation not in generated flows', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const openapiPath = join(dir, 'openapi.yaml')
+    writeFileSync(openapiPath, [
+      'openapi: "3.0.0"',
+      'info: { title: Test, version: "1.0" }',
+      'paths:',
+      '  /users:',
+      '    get: {}',
+    ].join('\n'))
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['params', 'myApi-get-nonexistent', '--config', configPath], dir)
+    unlinkSync(openapiPath)
+    unlinkSync(configPath)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/Invalid|unreadable|not found/)
   })
 })
 

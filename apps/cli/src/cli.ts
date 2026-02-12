@@ -1,29 +1,13 @@
 // @env node
-import type { OpenApiToFlowsOptions } from '@runflow/convention-openapi'
 import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { findConfigFile, loadConfig, resolveFlowId } from '@runflow/config'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile, run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import { createCommand } from 'commander'
-
-const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js']
-
-/** OpenAPI block in runflow config; paths resolved relative to config file directory. */
-interface OpenApiConfig {
-  specPath?: string
-  outDir?: string
-  baseUrl?: string
-  operationFilter?: OpenApiToFlowsOptions['operationFilter']
-  hooks?: OpenApiToFlowsOptions['hooks']
-}
-
-interface RunflowConfig {
-  handlers?: Record<string, string>
-  openapi?: OpenApiConfig
-}
 
 export const program = createCommand()
 
@@ -62,46 +46,6 @@ function loadParamsFile(filePath: string): Record<string, unknown> {
   }
 }
 
-async function loadConfig(configPath: string): Promise<RunflowConfig | null> {
-  if (!existsSync(configPath) || !statSync(configPath).isFile())
-    return null
-  try {
-    const mod = await import(pathToFileURL(configPath).href) as { default?: RunflowConfig }
-    return mod.default ?? null
-  }
-  catch {
-    return null
-  }
-}
-
-function findConfigFile(cwd: string): string | null {
-  for (const name of CONFIG_NAMES) {
-    const p = path.join(cwd, name)
-    if (existsSync(p) && statSync(p).isFile())
-      return p
-  }
-  return null
-}
-
-/** Resolve openapi config options; specPath and outDir are resolved relative to configDir. */
-function resolveOpenApiOptionsFromConfig(config: RunflowConfig | null, configDir: string): Partial<OpenApiToFlowsOptions> {
-  const openapi = config?.openapi
-  if (!openapi || typeof openapi !== 'object')
-    return {}
-  const opts: Partial<OpenApiToFlowsOptions> = {}
-  if (openapi.baseUrl !== undefined)
-    opts.baseUrl = openapi.baseUrl
-  if (openapi.operationFilter !== undefined)
-    opts.operationFilter = openapi.operationFilter
-  if (openapi.hooks !== undefined)
-    opts.hooks = openapi.hooks
-  if (typeof openapi.outDir === 'string') {
-    const outDir = path.isAbsolute(openapi.outDir) ? openapi.outDir : path.resolve(configDir, openapi.outDir)
-    opts.output = { outputDir: outDir }
-  }
-  return opts
-}
-
 async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry> {
   const config = await loadConfig(configPath)
   const registry = createBuiltinRegistry()
@@ -135,65 +79,60 @@ async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry
 }
 
 program
-  .command('run [file]')
-  .description('Execute a flow from a YAML file, or from an OpenAPI spec with --from-openapi and --operation')
+  .command('run [flowId]')
+  .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or prefix-operation (e.g. my-api-get-users) from config openapi')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
-  .option('--from-openapi <path>', 'Load flow from OpenAPI spec; requires --operation')
-  .option('--operation <key>', 'Operation key e.g. get-users (required with --from-openapi)')
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
   .option('--registry <path>', 'Path to a JS/ESM module that exports default (StepRegistry); merged after config handlers', undefined)
-  .action(async (file: string | undefined, options: { dryRun?: boolean, verbose?: boolean, fromOpenapi?: string, operation?: string, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
+  .action(async (flowId: string | undefined, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
     const cwd = process.cwd()
+    if (!flowId) {
+      console.error('Error: flowId is required (file path or prefix-operation e.g. my-api-get-users).')
+      process.exit(1)
+    }
     const configPath = options.config
       ? path.resolve(cwd, options.config)
       : findConfigFile(cwd)
+    const config = configPath ? await loadConfig(configPath) : null
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    const resolved = resolveFlowId(flowId, config, configDir, cwd)
     let flow: Awaited<ReturnType<typeof loadFromFile>>
     let flowFilePath: string | undefined
-    if (options.fromOpenapi) {
-      if (!options.operation) {
-        console.error('Error: --operation is required when using --from-openapi (e.g. --operation get-users)')
+    if (resolved.type === 'openapi') {
+      if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile()) {
+        console.error(`Error: OpenAPI spec not found: ${resolved.specPath}`)
         process.exit(1)
       }
-      const specPath = path.resolve(cwd, options.fromOpenapi)
-      if (!existsSync(specPath) || !statSync(specPath).isFile()) {
-        console.error(`Error: OpenAPI spec not found: ${specPath}`)
-        process.exit(1)
-      }
-      const config = configPath ? await loadConfig(configPath) : null
-      const configDir = configPath ? path.dirname(configPath) : cwd
-      const openApiOptions = resolveOpenApiOptionsFromConfig(config, configDir)
-      const flows = await openApiToFlows(specPath, { ...openApiOptions, output: 'memory' })
-      const selected = flows.get(options.operation)
+      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
+      const selected = flows.get(resolved.operation)
       if (!selected) {
         const keys = [...flows.keys()].slice(0, 10).join(', ')
-        console.error(`Error: Operation "${options.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
+        console.error(`Error: Operation "${resolved.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
         process.exit(1)
       }
       flow = selected
-      flowFilePath = specPath
+      flowFilePath = resolved.specPath
     }
     else {
-      if (!file) {
-        console.error('Error: Either <file> or --from-openapi is required.')
+      if (!existsSync(resolved.path) || !statSync(resolved.path).isFile()) {
+        console.error(`Error: File not found or not a regular file: ${resolved.path}`)
         process.exit(1)
       }
-      if (!existsSync(file) || !statSync(file).isFile()) {
-        console.error(`Error: File not found or not a regular file: ${file}`)
-        process.exit(1)
-      }
-      flow = loadFromFile(file)
-      flowFilePath = path.resolve(file)
+      flow = loadFromFile(resolved.path)
+      flowFilePath = resolved.path
     }
     if (!flow) {
       console.error('Error: Invalid or unreadable flow file.')
       process.exit(1)
     }
     const paramsPath = options.paramsFile ?? options.f
-    let params: Record<string, unknown> = paramsPath ? loadParamsFile(paramsPath) : {}
+    let params: Record<string, unknown> = { ...(config?.params ?? {}) }
+    if (paramsPath)
+      params = { ...params, ...loadParamsFile(paramsPath) }
     if (options.param?.length) {
       const cliParams = parseParamPairs(options.param)
       params = { ...params, ...cliParams }
@@ -254,16 +193,35 @@ program
   })
 
 program
-  .command('params <file>')
-  .description('List parameters declared by a flow (name, type, required, enum, description)')
-  .action((file: string) => {
-    if (!existsSync(file) || !statSync(file).isFile()) {
-      console.error(`Error: File not found or not a regular file: ${file}`)
-      process.exit(1)
+  .command('params <flowId>')
+  .description('List parameters declared by a flow (flowId: file path or prefix-operation)')
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .action(async (flowId: string, options: { config?: string }) => {
+    const cwd = process.cwd()
+    const configPath = options.config
+      ? path.resolve(cwd, options.config)
+      : findConfigFile(cwd)
+    const config = configPath ? await loadConfig(configPath) : null
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    const resolved = resolveFlowId(flowId, config, configDir, cwd)
+    let flow: Awaited<ReturnType<typeof loadFromFile>>
+    if (resolved.type === 'openapi') {
+      if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile()) {
+        console.error(`Error: OpenAPI spec not found: ${resolved.specPath}`)
+        process.exit(1)
+      }
+      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
+      flow = flows.get(resolved.operation) ?? null
     }
-    const flow = loadFromFile(file)
+    else {
+      if (!existsSync(resolved.path) || !statSync(resolved.path).isFile()) {
+        console.error(`Error: File not found or not a regular file: ${resolved.path}`)
+        process.exit(1)
+      }
+      flow = loadFromFile(resolved.path)
+    }
     if (!flow) {
-      console.error('Error: Invalid or unreadable flow file.')
+      console.error('Error: Invalid or unreadable flow.')
       process.exit(1)
     }
     if (!flow.params?.length) {

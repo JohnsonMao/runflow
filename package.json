@@ -12,6 +12,7 @@
     "prepare": "npx simple-git-hooks",
     "test": "turbo run test",
     "test:coverage": "turbo run test -- --coverage",
+    "coverage:open": "pnpm test:coverage && tsx scripts/coverage-dashboard.ts --open",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
@@ -20,6 +21,7 @@
     "eslint": "catalog:dev",
     "lint-staged": "catalog:dev",
     "simple-git-hooks": "catalog:dev",
+    "tsx": "catalog:dev",
     "turbo": "catalog:dev"
   },
   "simple-git-hooks": {

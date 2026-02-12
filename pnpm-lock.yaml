@@ -78,12 +78,18 @@ importers:
       simple-git-hooks:
         specifier: catalog:dev
         version: 2.13.1
+      tsx:
+        specifier: catalog:dev
+        version: 4.21.0
       turbo:
         specifier: catalog:dev
         version: 2.8.3
 
   apps/cli:
     dependencies:
+      '@runflow/config':
+        specifier: workspace:*
+        version: link:../../packages/runflow-config
       '@runflow/convention-openapi':
         specifier: workspace:^
         version: link:../../packages/convention-openapi
@@ -127,12 +133,21 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: catalog:prod
         version: 1.26.0(zod@3.25.76)
+      '@runflow/config':
+        specifier: workspace:*
+        version: link:../../packages/runflow-config
+      '@runflow/convention-openapi':
+        specifier: workspace:^
+        version: link:../../packages/convention-openapi
       '@runflow/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@runflow/handlers':
         specifier: workspace:^
         version: link:../../packages/handlers
+      commander:
+        specifier: catalog:prod
+        version: 12.1.0
       zod:
         specifier: catalog:prod
         version: 3.25.76
@@ -143,6 +158,9 @@ importers:
       '@types/node':
         specifier: catalog:dev
         version: 22.19.9
+      '@vitest/coverage-v8':
+        specifier: catalog:dev
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.9))
       eslint:
         specifier: catalog:dev
         version: 9.39.2
@@ -152,6 +170,9 @@ importers:
       typescript:
         specifier: catalog:dev
         version: 5.9.3
+      vitest:
+        specifier: catalog:dev
+        version: 2.1.9(@types/node@22.19.9)
 
   packages/convention-openapi:
     dependencies:
@@ -232,6 +253,34 @@ importers:
       '@runflow/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      '@antfu/eslint-config':
+        specifier: catalog:dev
+        version: 7.2.0(@vue/compiler-sfc@3.5.27)(eslint@9.39.2)(typescript@5.9.3)(vitest@2.1.9(@types/node@22.19.9))
+      '@types/node':
+        specifier: catalog:dev
+        version: 22.19.9
+      '@vitest/coverage-v8':
+        specifier: catalog:dev
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.9))
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.2
+      tsup:
+        specifier: catalog:dev
+        version: 8.5.1(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: catalog:dev
+        version: 5.9.3
+      vitest:
+        specifier: catalog:dev
+        version: 2.1.9(@types/node@22.19.9)
+
+  packages/runflow-config:
+    dependencies:
+      '@runflow/convention-openapi':
+        specifier: workspace:^
+        version: link:../convention-openapi
     devDependencies:
       '@antfu/eslint-config':
         specifier: catalog:dev
