@@ -3,6 +3,10 @@ import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/c
 import { evaluateToBoolean, normalizeStepIds } from '@runflow/core'
 
 export class ConditionHandler implements IStepHandler {
+  getAllowedDependentIds(step: FlowStep): string[] {
+    return [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)]
+  }
+
   validate(step: FlowStep): true | string {
     if (typeof step.when !== 'string')
       return 'condition step requires when (string)'

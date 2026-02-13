@@ -3,9 +3,15 @@ schema: spec-driven
 context: |
   Project: Runflow – YAML-defined reusable execution flows. Monorepo with pnpm + Turborepo.
   Tech stack: TypeScript, Vitest, ESLint (@antfu/eslint-config), pnpm catalogs.
-  Packages: @runflow/core (flow engine: parse YAML, run steps), @runflow/cli (flow run <file.yaml>).
-  Flow YAML: name, optional description, steps (id, type, run for type "command").
-  Conventions: mao skill (types in types.ts, constants in constants.ts, describe/it, lint:fix).
+  
+  Structure:
+  - apps/cli: flow run <file>; apps/mcp-server: MCP server (future GUI will reuse core).
+  - packages/core: Flow engine – single source of truth for flow semantics. Defines FlowDefinition, FlowStep (types.ts), DAG (dag.ts), executor (executor.ts), loader, parser. Steps with dependsOn are in the DAG; today dependsOn: [] = root (trigger), no dependsOn = orphan (excluded).
+  - packages/handlers: Step handlers (loop, http, condition, set, flow, …); consume FlowStep only, do not define flow structure.
+  - packages/convention-openapi: OpenAPI → FlowDefinition (produces flow YAML with steps).
+  - packages/runflow-config: config schema/loading.
+
+  Flow YAML: name, optional description, params, steps (id, type, dependsOn, …). Conventions: mao skill (types in types.ts, constants in constants.ts, describe/it, lint:fix).
   Future: MCP Server and GUI will reuse @runflow/core.
 
 # Per-artifact rules (optional)

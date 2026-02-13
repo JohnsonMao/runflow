@@ -19,6 +19,14 @@ function parseCount(v: unknown): number | null {
 }
 
 export class LoopHandler implements IStepHandler {
+  getAllowedDependentIds(step: FlowStep): string[] {
+    return [
+      ...normalizeStepIds(step.entry),
+      ...normalizeStepIds(step.done),
+      ...normalizeStepIds(step.end),
+    ]
+  }
+
   validate(step: FlowStep): true | string {
     const hasItems = Array.isArray(step.items)
     const hasCount = parseCount(step.count) !== null

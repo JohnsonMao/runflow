@@ -8,6 +8,7 @@ import { evaluateToBoolean } from './safeExpression'
 import { stepResult } from './stepResult'
 import { substitute } from './substitute'
 import { isPlainObject } from './utils'
+import { validateCanBeDependedOn } from './validateCanBeDependedOn'
 
 /** Default maximum flow-call nesting depth. When a flow step would run the callee at this depth, the step fails with depth-exceeded error. */
 export const DEFAULT_MAX_FLOW_CALL_DEPTH = 32
@@ -176,6 +177,16 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const stepByIdMap = stepById(flow)
   const flowCallDepth = options.flowCallDepth ?? 0
   const maxFlowCallDepth = options.maxFlowCallDepth ?? DEFAULT_MAX_FLOW_CALL_DEPTH
+
+  const canBeDependedOnError = validateCanBeDependedOn(flow, stepByIdMap, registry)
+  if (canBeDependedOnError) {
+    return {
+      flowName: flow.name,
+      success: false,
+      steps: [],
+      error: canBeDependedOnError,
+    }
+  }
 
   const runFlow = async (filePath: string, params: Record<string, unknown>): Promise<RunResult> => {
     const baseDir = options.flowFilePath ? resolve(dirname(options.flowFilePath)) : resolve(process.cwd())

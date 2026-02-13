@@ -1,0 +1,11 @@
+---
+description: Core 不依賴 handler 型別或 step 形狀
+globs: packages/core/**
+alwaysApply: false
+---
+
+# packages/core 架構規範
+
+- **不要依 step.type 做分支**：在 core 內不得寫 `step.type === 'condition'`、`step.type === 'loop'` 等來解讀 step 欄位（then/else、entry/done 等）。未來新增 step 型別時，core 不應為此改動。
+- **由 handler 提供行為**：需要「依 step 形狀決定引擎行為」時，改為在 IStepHandler 上定義可選方法（例如 `getAllowedDependentIds(step)`），由 core 呼叫 `registry[step.type].getAllowedDependentIds(step)`，不在 core 裡解析 step 內容。
+- **Apply / 實作時**：在 core 新增邏輯前，若會依 step 的某欄位或 type 分支，先改為「由 handler 實作 optional 介面，core 只呼叫」再實作。

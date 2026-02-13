@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { run } from './executor'
+import { normalizeStepIds } from './utils'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -55,6 +56,71 @@ describe('run', () => {
       steps: [{ id: 's1', type: 'step', dependsOn: [] }],
     }
     await expect(run(flow, {})).rejects.toThrow('registry is required when flow has steps')
+  })
+
+  describe('allowed dependents (getAllowedDependentIds) validation', () => {
+    const conditionHandlerWithRestrict: IStepHandler = {
+      getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext): Promise<StepResult> =>
+        ctx.stepResult(step.id, true, { nextSteps: ['thenStep'] }),
+    }
+
+    it('fails before any step runs when a step not in then/else depends on condition', async () => {
+      const reg = createStubRegistry()
+      reg.condition = conditionHandlerWithRestrict
+      const flow: FlowDefinition = {
+        name: 'invalid-dep',
+        steps: [
+          { id: 'init', type: 'step', dependsOn: [] },
+          { id: 'cond', type: 'condition', when: 'true', then: ['thenStep'], else: ['elseStep'], dependsOn: ['init'] },
+          { id: 'thenStep', type: 'step', dependsOn: ['cond'] },
+          { id: 'elseStep', type: 'step', dependsOn: ['cond'] },
+          { id: 'other', type: 'step', dependsOn: ['cond'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(false)
+      expect(result.steps).toHaveLength(0)
+      expect(result.error).toContain('cond')
+      expect(result.error).toContain('other')
+    })
+
+    it('succeeds when only then/else steps depend on condition', async () => {
+      const reg = createStubRegistry()
+      reg.condition = conditionHandlerWithRestrict
+      const flow: FlowDefinition = {
+        name: 'valid-dep',
+        steps: [
+          { id: 'init', type: 'step', dependsOn: [] },
+          { id: 'cond', type: 'condition', when: 'true', then: ['thenStep'], else: ['elseStep'], dependsOn: ['init'] },
+          { id: 'thenStep', type: 'step', dependsOn: ['cond'] },
+          { id: 'elseStep', type: 'step', dependsOn: ['cond'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      expect(result.steps.length).toBeGreaterThan(0)
+    })
+
+    it('dry-run fails with same error when allowed dependents violated', async () => {
+      const reg = createStubRegistry()
+      reg.condition = conditionHandlerWithRestrict
+      const flow: FlowDefinition = {
+        name: 'invalid-dry',
+        steps: [
+          { id: 'init', type: 'step', dependsOn: [] },
+          { id: 'cond', type: 'condition', when: 'true', then: ['thenStep'], else: ['elseStep'], dependsOn: ['init'] },
+          { id: 'thenStep', type: 'step', dependsOn: ['cond'] },
+          { id: 'other', type: 'step', dependsOn: ['cond'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg, dryRun: true })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('cond')
+      expect(result.error).toContain('other')
+    })
   })
 
   it('runs multiple steps in DAG order', async () => {

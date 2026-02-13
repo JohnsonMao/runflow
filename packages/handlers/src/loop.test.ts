@@ -26,6 +26,11 @@ function ctx(overrides: Partial<{
 describe('loop handler', () => {
   const handler = new LoopHandler()
 
+  it('implements getAllowedDependentIds (entry + done)', () => {
+    const step = { id: 'l', type: 'loop' as const, count: 1, entry: ['body'], done: ['after'], dependsOn: [] as string[] }
+    expect(handler.getAllowedDependentIds(step)).toEqual(['body', 'after'])
+  })
+
   describe('validate', () => {
     it('returns true when step has items and entry', () => {
       const step: FlowStep = {

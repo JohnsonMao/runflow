@@ -134,6 +134,12 @@ export interface IStepHandler {
   kill: () => void
   /** Return true if step shape is valid, or a string error message. Enforced before run. */
   validate: (step: FlowStep) => true | string
+  /**
+   * When present, the engine calls this to get the set of step ids that may have dependsOn including this step.
+   * Only those steps are allowed to depend on this step; any other step with dependsOn including this step causes validation to fail.
+   * Omit to allow any step to depend on this one. Core does not interpret step shape; the handler owns this logic.
+   */
+  getAllowedDependentIds?: (step: FlowStep) => string[]
 }
 
 /** Registry: step type -> IStepHandler. Merged with default (default first, then options.registry). */

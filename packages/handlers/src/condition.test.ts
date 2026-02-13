@@ -9,6 +9,11 @@ const ctx = (params: Record<string, unknown> = {}): StepContext => ({ params, ru
 describe('condition handler', () => {
   const handler = new ConditionHandler()
 
+  it('implements getAllowedDependentIds (then + else)', () => {
+    const step = { id: 'c', type: 'condition' as const, when: 'true', then: ['a', 'b'], else: ['d'], dependsOn: [] as string[] }
+    expect(handler.getAllowedDependentIds(step)).toEqual(['a', 'b', 'd'])
+  })
+
   describe('validate', () => {
     it('returns true when step has when and then', () => {
       const step: FlowStep = { id: 'c', type: 'condition', when: 'true', then: 'a', dependsOn: [] }
