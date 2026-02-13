@@ -62,7 +62,7 @@ function tokenize(input: string): Token[] {
       i += 2
       continue
     }
-    if ('()!.&|<>'.includes(rest[0]!)) {
+    if ('()!.&|<>+-'.includes(rest[0]!)) {
       if (rest[0] === '.') {
         tokens.push({ type: 'dot' })
         i += 1
@@ -74,6 +74,10 @@ function tokenize(input: string): Token[] {
       else if (rest[0] === '|' && rest[1] === '|') {
         tokens.push({ type: 'op', value: '||' })
         i += 2
+      }
+      else if (rest[0] === '+' || rest[0] === '-') {
+        tokens.push({ type: 'op', value: rest[0]! })
+        i += 1
       }
       else {
         const c = rest[0]!
@@ -241,13 +245,13 @@ export function evaluate(
     return left
   }
   function parseComparison(): unknown {
-    let left = parsePrimary()
+    let left = parseAdditive()
     while (cur().type === 'op') {
       const op = (cur() as { value: string }).value
       if (op !== '<' && op !== '>' && op !== '<=' && op !== '>=')
         break
       consume('op')
-      let rightVal = parsePrimary()
+      let rightVal = parseAdditive()
       if (typeof left !== 'number' && typeof left !== 'string')
         left = Number(left)
       if (typeof rightVal !== 'number' && typeof rightVal !== 'string')
@@ -262,6 +266,22 @@ export function evaluate(
     }
     return left
   }
+  function parseAdditive(): unknown {
+    let left = parsePrimary()
+    while (cur().type === 'op') {
+      const op = (cur() as { value: string }).value
+      if (op !== '+' && op !== '-')
+        break
+      consume('op')
+      const right = parsePrimary()
+      const l = Number(left)
+      const r = Number(right)
+      if (Number.isNaN(l) || Number.isNaN(r))
+        throw new SafeExpressionError('Arithmetic requires numbers')
+      left = op === '+' ? l + r : l - r
+    }
+    return left
+  }
   function parsePrimary(): unknown {
     if (cur().type === 'lp') {
       consume('lp')
@@ -272,6 +292,15 @@ export function evaluate(
     if (cur().type === 'op' && (cur() as { value: string }).value === '!') {
       consume('op', '!')
       return !parsePrimary()
+    }
+    if (cur().type === 'op' && ((cur() as { value: string }).value === '-' || (cur() as { value: string }).value === '+')) {
+      const isMinus = (cur() as { value: string }).value === '-'
+      consume('op')
+      const v = parsePrimary()
+      const n = Number(v)
+      if (Number.isNaN(n))
+        throw new SafeExpressionError('Unary +/- requires a number')
+      return isMinus ? -n : n
     }
     if (cur().type === 'true') {
       consume('true')

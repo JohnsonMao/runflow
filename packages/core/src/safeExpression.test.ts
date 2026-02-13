@@ -20,6 +20,13 @@ describe('safeExpression', () => {
       expect(evaluateToBoolean('params.x <= 1', { x: 1 })).toBe(true)
     })
 
+    it('evaluates simple arithmetic (+, -) in expressions', () => {
+      expect(evaluateToBoolean('params.x >= params.n - 1', { x: 2, n: 3 })).toBe(true)
+      expect(evaluateToBoolean('params.x >= params.n - 1', { x: 1, n: 3 })).toBe(false)
+      expect(evaluateToBoolean('params.a + params.b === 10', { a: 3, b: 7 })).toBe(true)
+      expect(evaluateToBoolean('-1 < 0', {})).toBe(true)
+    })
+
     it('evaluates logical', () => {
       expect(evaluateToBoolean('params.a && params.b', { a: true, b: true })).toBe(true)
       expect(evaluateToBoolean('params.a && params.b', { a: true, b: false })).toBe(false)
@@ -66,6 +73,12 @@ describe('safeExpression', () => {
       expect(evaluate('\'hi\'', {})).toBe('hi')
       expect(evaluate('null', {})).toBe(null)
       expect(evaluate('true', {})).toBe(true)
+    })
+
+    it('evaluates simple arithmetic', () => {
+      expect(evaluate('params.a + params.b', { a: 1, b: 2 })).toBe(3)
+      expect(evaluate('params.n - 1', { n: 3 })).toBe(2)
+      expect(evaluate('-1', {})).toBe(-1)
     })
   })
 })

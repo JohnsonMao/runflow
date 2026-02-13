@@ -1,6 +1,6 @@
 import type { ParamDeclaration } from './types'
 import { describe, expect, it } from 'vitest'
-import { isParamType, paramsDeclarationToZodSchema } from './paramsSchema'
+import { formatParamsValidationError, isParamType, paramsDeclarationToZodSchema } from './paramsSchema'
 
 describe('paramsDeclarationToZodSchema', () => {
   it('returns permissive record when declarations is empty', () => {
@@ -85,6 +85,26 @@ describe('paramsDeclarationToZodSchema', () => {
     const schema = paramsDeclarationToZodSchema(decl)
     expect(schema.safeParse({ obj: { inner: 'x' } })).toMatchObject({ success: true })
     expect(schema.safeParse({ obj: { inner: 1 } }).success).toBe(false)
+  })
+
+  it('object with schema and nested defaults applied when key omitted', () => {
+    const decl: ParamDeclaration[] = [
+      {
+        name: 'options',
+        type: 'object',
+        schema: {
+          level: { type: 'string', default: 'info' },
+          enabled: { type: 'boolean', default: true },
+          count: { type: 'number', default: 1 },
+        },
+      },
+    ]
+    const schema = paramsDeclarationToZodSchema(decl)
+    const parsed = schema.safeParse({})
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data).toMatchObject({
+      options: { level: 'info', enabled: true, count: 1 },
+    })
   })
 
   it('object without schema uses record', () => {
@@ -188,5 +208,53 @@ describe('isParamType', () => {
     expect(isParamType(null)).toBe(false)
     expect(isParamType(undefined)).toBe(false)
     expect(isParamType([])).toBe(false)
+  })
+})
+
+describe('formatParamsValidationError', () => {
+  it('includes required label and description when param has description', () => {
+    const decl: ParamDeclaration[] = [
+      { name: 'title', type: 'string', required: true, description: '顯示用標題' },
+    ]
+    const errors = [{ path: ['title'], message: 'Required' }]
+    expect(formatParamsValidationError(decl, errors)).toBe(
+      'title (required): Required — 顯示用標題',
+    )
+  })
+
+  it('includes nested path and description for object schema', () => {
+    const decl: ParamDeclaration[] = [
+      {
+        name: 'options',
+        type: 'object',
+        schema: {
+          level: { type: 'string', required: true, description: '等級 (info / warn / error)' },
+        },
+      },
+    ]
+    const errors = [{ path: ['options', 'level'], message: 'Required' }]
+    expect(formatParamsValidationError(decl, errors)).toBe(
+      'options.level (required): Required — 等級 (info / warn / error)',
+    )
+  })
+
+  it('omits description when not declared', () => {
+    const decl: ParamDeclaration[] = [{ name: 'a', type: 'string', required: true }]
+    const errors = [{ path: ['a'], message: 'Required' }]
+    expect(formatParamsValidationError(decl, errors)).toBe('a (required): Required')
+  })
+
+  it('joins multiple errors with semicolon', () => {
+    const decl: ParamDeclaration[] = [
+      { name: 'a', type: 'string', required: true },
+      { name: 'b', type: 'number', required: true, description: 'B desc' },
+    ]
+    const errors = [
+      { path: ['a'], message: 'Required' },
+      { path: ['b'], message: 'Required' },
+    ]
+    expect(formatParamsValidationError(decl, errors)).toBe(
+      'a (required): Required; b (required): Required — B desc',
+    )
   })
 })

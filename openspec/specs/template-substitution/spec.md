@@ -68,10 +68,10 @@ When resolving a path (e.g. `{{ key.nested }}` or `{{ items[5] }}`), if any inte
 
 ### Requirement: Substitution SHALL use current context at step execution time
 
-Substitution for a step SHALL be performed immediately before executing that step, using the context as it exists at that time (initial params merged with outputs of all previous steps, with later-overwrites-earlier). The same context SHALL be used for both substitution and (where applicable) step execution.
+Substitution for a step SHALL be performed immediately before executing that step, using the context as it exists at that time. Context SHALL have initial params at top level and previous step outputs namespaced by step id (see step-context). The same context SHALL be used for both substitution and (where applicable) step execution.
 
-#### Scenario: Context from prior step
+#### Scenario: Context from prior step (namespaced by step id)
 
-- **WHEN** step 1 (js) returned `outputs: { version: '1.0' }` and step 2 is command with `run: "echo {{ version }}"`
-- **THEN** step 2's run is substituted with context including `version: '1.0'`
+- **WHEN** step 1 with `id: 'step1'` (e.g. js) returned `outputs: { version: '1.0' }` and step 2 is command with `run: "echo {{ step1.version }}"`
+- **THEN** step 2's run is substituted with context including `step1.version === '1.0'`
 - **AND** the command sees `echo 1.0`

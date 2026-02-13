@@ -1,33 +1,30 @@
-# loop-step Specification
+# loop-step — Delta Spec (loop-entry-end-redesign)
 
-## Purpose
+## MODIFIED Requirements
 
-Step type `loop`: runs a **loop body sub-graph** repeatedly, driven by exactly one of `items`, `count`, or `when`. The iteration scope is the **closure from entry** (computed from the flow's steps and dependsOn). The closure is executed by the **same executor** (same DAG, condition, nextSteps semantics) so that body steps can branch, run in DAG order, and **early exit** by returning nextSteps that point outside the closure. No fixed execution order or handler-coupled step id lists; the engine layer runs the closure as a sub-flow each iteration.
-
-## Requirements
-
-### Requirement: Loop step SHALL have exactly one of items, count, or when
+### Requirement: Loop step SHALL have exactly one of items, count, until, or when
 
 A flow step with `type: 'loop'` MUST have exactly one of the following (after template substitution):
 
 - **items**: array to iterate over. Each iteration receives `params.item`, `params.index`, `params.items`.
 - **count**: non-negative number of iterations. Each iteration receives `params.index`, `params.count`.
+- **until**: step id of a condition step. After each iteration run, the engine runs this step; when its result indicates exit (e.g. `nextSteps` matching an exit branch), the loop ends.
 - **when**: string expression. After each iteration run, the engine evaluates it with the current context; when true, the loop ends normally (nextSteps: done).
 
 If none or more than one of these is present, the step SHALL be invalid (validation error or StepResult success: false with error message).
 
 #### Scenario: Invalid loop — missing or multiple drivers
 
-- **WHEN** a loop step has no `items`, no `count`, and no `when` (or two or more of them set)
-- **THEN** validation SHALL fail or the handler SHALL return StepResult with success: false and an error describing the requirement (exactly one of items/count/when)
+- **WHEN** a loop step has no `items`, no `count`, no `until`, and no `when` (or two or more of them set)
+- **THEN** validation SHALL fail or the handler SHALL return StepResult with success: false and an error describing the requirement (exactly one of items/count/until/when)
 
 ### Requirement: Loop step SHALL have entry (entry points only); iteration scope is closure from entry; done and optional end
 
-- **entry** (required): one or more step ids that are the **entry point(s)** of the loop. The iteration scope (steps run each iteration) SHALL be the **forward transitive closure** from entry: start with entry; add any step S such that every id in S's `dependsOn` is either the loop step id or already in the set; repeat until stable. The engine SHALL run this **closure** as a sub-flow each iteration (same executor, DAG order, when/condition/nextSteps). The engine SHALL provide a way (e.g. context.steps and closure computation in the handler) to compute the closure from the flow's steps and dependsOn.
+- **entry** (required): one or more step ids that are the **entry point(s)** of the loop. The iteration scope (steps run each iteration) SHALL be the **forward transitive closure** from entry: start with entry; add any step S such that every id in S's `dependsOn` is either the loop step id or already in the set; repeat until stable. The engine SHALL run this **closure** as a sub-flow each iteration (same executor, DAG order, when/condition/nextSteps). The engine SHALL provide a way (e.g. getLoopClosure on context) to compute the closure from the flow's steps and dependsOn.
 
-- **done** (optional): array of step ids that the loop step **returns as `nextSteps`** when the loop completes **normally** (items exhausted, count reached, or when expression true). On normal completion the loop step's StepResult SHALL include `nextSteps: done`. Done is not run by the loop; it is the branch target.
+- **done** (optional): array of step ids that the loop step **returns as `nextSteps`** when the loop completes **normally** (items exhausted, count reached, until/when indicates exit). On normal completion the loop step's StepResult SHALL include `nextSteps: done`. Done is not run by the loop; it is the branch target.
 
-- **end** (optional): step id or array of step ids used **only for visualization**. When present, the UI SHALL draw an edge from each end step back to the loop step (closed loop). When absent, the UI MAY infer end as the **sink(s) of the closure**. The engine SHALL NOT use end for execution; execution SHALL always run the full closure each iteration (unless early exit).
+- **end** (optional): step id or array of step ids used **only for visualization**. When present, the UI SHALL draw an edge from each end step back to the loop step (closed loop). When absent, the UI MAY infer end as the **sink(s) of the closure** (steps in the closure that no other step in the closure depends on). The engine SHALL NOT use end for execution; execution SHALL always run the full closure each iteration (unless early exit).
 
 #### Scenario: Entry only; closure run each iteration; done on normal completion
 
@@ -56,6 +53,13 @@ When during an iteration any step in the **closure** returns `nextSteps` that in
 - **THEN** the engine exits the loop immediately (early exit)
 - **AND** the current iteration SHALL not run any further steps in the closure; the loop step completes with `nextSteps: [out]`; the executor continues with step `out`
 
+#### Scenario: Early exit with multiple entry — whole iteration stops
+
+- **GIVEN** a loop step with `count: 2`, `entry: [A, G]`, closure {A, B, C, D, G, H, E}; step B can return `nextSteps: [F]`
+- **WHEN** on the second iteration B returns `nextSteps: [F]` (F not in closure)
+- **THEN** the engine SHALL stop the entire iteration (no further steps in the closure run, including G, H, D, E)
+- **AND** the loop step completes with `nextSteps: [F]`; the executor continues with step F
+
 ### Requirement: Loop step SHALL NOT couple execution order to a fixed list
 
 The loop step SHALL NOT require the engine to execute iteration steps in a fixed order. Order SHALL be determined by the **executor** from the sub-graph (closure). The executor SHALL run the closure as a sub-flow so that condition and nextSteps drive branching and early exit.
@@ -69,7 +73,7 @@ The loop step SHALL NOT require the engine to execute iteration steps in a fixed
 
 ### Requirement: Entry, end, and done step ids are in the same flow
 
-Entry step ids SHALL reference steps that exist in the same flow definition; the closure is computed from that flow. Done and end step ids SHALL reference steps in the same flow (done used as nextSteps on normal completion; end used only for visualization). When a handler (e.g. loop) calls `runSubFlow` with ids that are not in the flow, the executor SHALL return an error so the step fails with a clear message (see step-context: runSubFlow SHALL validate body step ids).
+Entry step ids SHALL reference steps that exist in the same flow definition; the closure is computed from that flow. Done and end step ids SHALL reference steps in the same flow (done used as nextSteps on normal completion; end used only for visualization).
 
 #### Scenario: Entry and done reference same-flow steps
 
@@ -77,6 +81,16 @@ Entry step ids SHALL reference steps that exist in the same flow definition; the
 - **THEN** step ids A and C SHALL exist in the same flow definition
 - **AND** the engine SHALL compute the closure from entry using the flow's steps and run that closure each iteration; on normal completion the loop SHALL return nextSteps: [C]
 
-## BREAKING CHANGES
+## REMOVED Requirements
 
-- Previous loop design with **body** (required list of step ids) and **until** (condition step id) is **replaced**. Use **entry** (entry point(s) only) and **items** / **count** / **when** as the single driver. Migration: replace `body: [A, B, C, ...]` with `entry: [A]` (or the true entry point(s)); the engine computes the closure. Remove `until`; use **when** (expression) for expression-based exit.
+### Requirement: Loop body is a sub-graph run by the executor; done is nextSteps (body as required list)
+
+**Reason**: Replaced by entry (entry points only) and closure computed from the flow DAG. Body as a full list is no longer used.
+
+**Migration**: Replace `body: [A, B, C, ...]` with `entry: [A]` (or the true entry point(s)). If the loop had a single logical entry A and the rest were A→B→C→..., use `entry: [A]`; the engine will compute closure {A, B, C, ...}. If multiple entry points, use `entry: [A, G]` etc.
+
+### Requirement: exitWhen / exitThen on loop step
+
+**Reason**: Removed to simplify the model; early exit is only via a step inside the closure returning nextSteps outside the closure. No "check before entry" at loop level.
+
+**Migration**: If a flow used `exitWhen` and `exitThen` to exit to a step (e.g. nap2) before running the rest of the iteration, move that condition inside the closure (e.g. a condition step that returns nextSteps: [nap2]); the loop will early-exit when that step runs and returns.

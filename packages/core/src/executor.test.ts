@@ -81,7 +81,7 @@ describe('run', () => {
     expect(result.steps[0].outputs).toEqual({ s1: { a: '1' } })
   })
 
-  it('context accumulation: previous step outputs merged into params for next step', async () => {
+  it('context accumulation: previous step outputs namespaced by step id for next step', async () => {
     const flow: FlowDefinition = {
       name: 'accum',
       steps: [
@@ -92,7 +92,7 @@ describe('run', () => {
     const result = await run(flow, { registry: createStubRegistry() })
     expect(result.success).toBe(true)
     expect(result.steps[0].outputs).toEqual({ j1: {} })
-    expect(result.steps[1].outputs?.j2).toEqual({ j1: {} })
+    expect(result.steps[1].outputs?.j2).toEqual({ j1: { j1: {} } })
   })
 
   it('step skip true: step skipped, success result pushed, dependents run with current context', async () => {
@@ -110,7 +110,7 @@ describe('run', () => {
     expect(result.steps[0].outputs).toEqual({ a: { skip: true, x: 1 } })
     expect(result.steps[1].success).toBe(true)
     expect(result.steps[1].outputs).toBeUndefined()
-    expect(result.steps[2].outputs?.c).toMatchObject({ a: { skip: true, x: 1 } })
+    expect(result.steps[2].outputs?.c).toMatchObject({ a: { a: { skip: true, x: 1 } } })
   })
 
   it('step skip absent or false: step runs', async () => {
@@ -501,6 +501,8 @@ describe('run', () => {
           return ctx.stepResult(step.id, false, { error: 'need bodyIds' })
         const bodyIds = raw.filter((x): x is string => typeof x === 'string')
         const out = await ctx.runSubFlow(bodyIds, ctx.params)
+        if (out.error)
+          return ctx.stepResult(step.id, false, { error: out.error })
         const success = out.results.every(r => r.success)
         return ctx.stepResult(step.id, success, {
           outputs: { [step.id]: out.newContext },
@@ -509,7 +511,7 @@ describe('run', () => {
       },
     }
 
-    it('runSubFlow with only non-existent body ids completes without running that step and runner succeeds', async () => {
+    it('runSubFlow with non-existent body ids returns error and step fails', async () => {
       const reg = createStubRegistry()
       reg.subflow = subflowRunnerHandler
       const flow: FlowDefinition = {
@@ -519,10 +521,11 @@ describe('run', () => {
         ],
       }
       const result = await run(flow, { registry: reg })
-      expect(result.success).toBe(true)
+      expect(result.success).toBe(false)
       expect(result.steps).toHaveLength(1)
       expect(result.steps[0].stepId).toBe('runner')
-      expect(result.steps[0].success).toBe(true)
+      expect(result.steps[0].success).toBe(false)
+      expect(result.steps[0].error).toMatch(/Step\(s\) not found|nonexistent/)
     })
 
     it('runStepById: unknown step type in subflow returns error and does not throw', async () => {
@@ -647,7 +650,7 @@ describe('run', () => {
       expect(result.steps[0].nextSteps).toEqual(['out'])
     })
 
-    it('runSubFlow: context accumulation across body steps', async () => {
+    it('runSubFlow: context accumulation across body steps (outputs namespaced by step id)', async () => {
       const reg = createStubRegistry()
       reg.subflow = subflowRunnerHandler
       const flow: FlowDefinition = {
@@ -664,7 +667,7 @@ describe('run', () => {
       const runnerOutputs = runnerStep?.outputs as Record<string, Record<string, unknown>>
       expect(runnerOutputs?.runner).toBeDefined()
       expect(runnerOutputs?.runner?.a).toBeDefined()
-      expect(runnerOutputs?.runner?.b).toMatchObject({ a: { x: 1 } })
+      expect(runnerOutputs?.runner?.b).toMatchObject({ b: { a: { a: { x: 1 } } } })
     })
   })
 })

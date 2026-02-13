@@ -3,7 +3,7 @@ import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, Run
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { topologicalSort, validateDAG } from './dag'
 import { loadFromFile } from './loader'
-import { paramsDeclarationToZodSchema } from './paramsSchema'
+import { formatParamsValidationError, paramsDeclarationToZodSchema } from './paramsSchema'
 import { evaluateToBoolean } from './safeExpression'
 import { stepResult } from './stepResult'
 import { substitute } from './substitute'
@@ -138,7 +138,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     const schema = paramsDeclarationToZodSchema(flow.params)
     const parsed = schema.safeParse(options.params ?? {})
     if (!parsed.success) {
-      const msg = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
+      const msg = formatParamsValidationError(flow.params, parsed.error.errors)
       return {
         flowName: flow.name,
         success: false,
@@ -250,11 +250,13 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       runSubFlow: stepContext.runSubFlow,
       stepResult,
       runFlow: stepContext.runFlow,
+      steps: stepContext.steps,
     }
     try {
       const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
       const result = res ?? stepResult(targetStepId, false, { error: 'Handler returned no result' })
-      const newContext = result.outputs && isPlainObject(result.outputs) ? { ...ctx, ...result.outputs } : ctx
+      const outputs = isPlainObject(result.outputs) ? result.outputs : {}
+      const newContext = { ...ctx, [targetStepId]: outputs }
       return { result, newContext }
     }
     catch (e) {
@@ -266,11 +268,20 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     }
   }
 
+  /** Buffered body results per loop step id so we can push loop result before body results in the steps list. */
+  const pendingLoopBodyResultsByStepId: Record<string, StepResult[]> = {}
+
   /** Run body steps as sub-flow (DAG order, skip/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
   const runSubFlow: RunSubFlowFn = async (
     bodyStepIds: string[],
     ctx: Record<string, unknown>,
+    callerStepId?: string,
   ) => {
+    const missing = bodyStepIds.filter(id => !stepByIdMap.has(id))
+    if (missing.length > 0)
+      return { results: [], newContext: ctx, error: `Step(s) not found: ${missing.join(', ')}` }
+
+    const isLoopCaller = callerStepId != null && stepByIdMap.get(callerStepId)?.type === 'loop'
     const scopeSet = new Set(bodyStepIds)
     const subCompleted = new Set<string>()
     for (const id of stepByIdMap.keys()) {
@@ -281,16 +292,27 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     const results: StepResult[] = []
     let currentCtx = ctx
     while (true) {
-      const runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
+      let runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
+      // Steps only used inside subflow may be orphans (not in dagOrder); allow running them.
+      if (runnable.length === 0)
+        runnable = [...scopeSet].filter(id => !subCompleted.has(id))
       if (runnable.length === 0)
         break
       const batch = await Promise.all(runnable.map(stepId => runStepById(stepId, currentCtx)))
       for (const { result } of batch) {
         results.push(result)
-        steps.push(result)
+        if (isLoopCaller && callerStepId) {
+          if (!pendingLoopBodyResultsByStepId[callerStepId])
+            pendingLoopBodyResultsByStepId[callerStepId] = []
+          pendingLoopBodyResultsByStepId[callerStepId].push(result)
+        }
+        else {
+          steps.push(result)
+        }
         if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
           const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
-            return r.outputs && isPlainObject(r.outputs) ? { ...acc, ...r.outputs } : acc
+            const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
+            return { ...acc, [r.stepId]: out }
           }, { ...currentCtx })
           return {
             results,
@@ -303,7 +325,8 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
           subNextSteps[result.stepId] = result.nextSteps
       }
       currentCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
-        return r.outputs && isPlainObject(r.outputs) ? { ...acc, ...r.outputs } : acc
+        const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
+        return { ...acc, [r.stepId]: out }
       }, { ...currentCtx })
     }
     return { results, newContext: currentCtx }
@@ -316,6 +339,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     stepResult,
     runFlow,
     allowedHttpHosts: options.allowedHttpHosts,
+    steps: flow.steps,
   }
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */
@@ -366,12 +390,26 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       break
     const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
     for (const { result, outputs, nextSteps } of batchResults) {
-      steps.push(result)
+      // For loop steps, push loop result first then its body results so the list shows loop -> loopBody order.
+      const pendingBody = pendingLoopBodyResultsByStepId[result.stepId]
+      if (pendingBody?.length) {
+        steps.push(result)
+        for (const r of pendingBody)
+          steps.push(r)
+        delete pendingLoopBodyResultsByStepId[result.stepId]
+      }
+      else {
+        steps.push(result)
+      }
       completed.add(result.stepId)
+      if (result.completedStepIds && Array.isArray(result.completedStepIds)) {
+        for (const id of result.completedStepIds)
+          completed.add(id)
+      }
       if (nextSteps !== undefined && Array.isArray(nextSteps))
         stepNextSteps[result.stepId] = nextSteps
-      if (outputs && isPlainObject(outputs))
-        context = { ...context, ...outputs }
+      const out = outputs && isPlainObject(outputs) ? outputs : {}
+      context = { ...context, [result.stepId]: out }
       if (!result.success)
         success = false
     }

@@ -440,7 +440,7 @@ describe('flow run', () => {
       '    dependsOn: []',
       '  - id: s2',
       '    type: set',
-      '    set: { out: "{{ key }}-{{ n }}" }',
+      '    set: { out: "{{ s1.key }}-{{ s1.n }}" }',
       '    dependsOn: [s1]',
     ].join('\n')
     writeFileSync(flowPath, yaml)
@@ -459,7 +459,7 @@ describe('flow run', () => {
       '  - id: loop',
       '    type: loop',
       '    count: 3',
-      '    body: bodyStep',
+      '    entry: bodyStep',
       '    dependsOn: []',
       '  - id: bodyStep',
       '    type: set',

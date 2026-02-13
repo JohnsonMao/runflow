@@ -54,10 +54,14 @@ export interface FlowStep {
 export type RunSubFlowFn = (
   bodyStepIds: string[],
   ctx: Record<string, unknown>,
+  /** Optional callerStepId: when provided and caller is a loop step, body results are buffered so they appear after the loop result in the steps list. */
+  callerStepId?: string,
 ) => Promise<{
   results: StepResult[]
   newContext: Record<string, unknown>
   earlyExit?: { nextSteps: string[] }
+  /** Set when requested bodyStepIds include id(s) not in the flow; caller should fail the step. */
+  error?: string
 }>
 
 /** Run another flow by path; used by flow step handler. Returns RunResult (validation/load/run failures yield success: false + error). */
@@ -78,6 +82,8 @@ export interface StepContext {
   runFlow?: RunFlowFn
   /** When set and non-empty, http step only allows these hostnames (case-insensitive). Omit or empty = allow all (including localhost/private IP). */
   allowedHttpHosts?: string[]
+  /** Flow steps (provided by executor). Handlers that need the full DAG (e.g. loop for closure) can use this. */
+  steps?: FlowStep[]
 }
 
 export interface FlowDefinition {
@@ -100,6 +106,11 @@ export interface StepResult {
    * return nextSteps so the executor does not need to know step types.
    */
   nextSteps?: string[]
+  /**
+   * When set, these step ids are marked completed in the main flow (e.g. they were run inside this step's sub-flow).
+   * Executor uses this so it does not run them again at top level. Handlers that run sub-flows (e.g. loop) return this.
+   */
+  completedStepIds?: string[]
 }
 
 /** Options for building a StepResult (e.g. via context.stepResult). */
@@ -109,6 +120,7 @@ export interface StepResultOptions {
   error?: string
   outputs?: Record<string, unknown>
   nextSteps?: string[]
+  completedStepIds?: string[]
 }
 
 /** Signature of the stepResult factory, provided by executor on context so handlers use a single format. */

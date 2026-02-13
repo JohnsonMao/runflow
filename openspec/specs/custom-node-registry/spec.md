@@ -14,33 +14,33 @@ The system SHALL define a single handler type `StepHandler` with signature `(ste
 
 - **WHEN** a flow step has `type: 'http'` and the caller-provided registry is used
 - **THEN** the executor looks up the handler for `'http'` in the registry and calls it with the step and context
-- **AND** the returned `StepResult` is appended to the run result and outputs (if any) are merged into context for the next step
+- **AND** the returned `StepResult` is appended to the run result and outputs (if any) are written into context under the step id for the next step (see step-context: namespaced by step id)
 
 #### Scenario: Custom type is executed when registered
 
 - **WHEN** the caller provides a registry that includes a handler for type `'myStep'` and a flow contains a step with `type: 'myStep'`
 - **THEN** the executor calls that handler with the step and context
-- **AND** the handler's returned `StepResult` is used the same way as built-in steps (outputs merged, success affects flow success)
+- **AND** the handler's returned `StepResult` is used the same way as built-in steps (outputs namespaced by step id in context, success affects flow success)
 
 ### Requirement: StepContext SHALL provide params, previous outputs, and flowFilePath
 
 `StepContext` MUST include at least: `params` (or equivalent merged view of initial params and previous step outputs), and `flowFilePath` (optional, for handlers that need to resolve file paths). The engine SHALL pass the same context shape to every handler so that built-in and custom handlers behave consistently.
 
-#### Scenario: Handler receives previous outputs in context
+#### Scenario: Handler receives previous outputs in context under step id
 
-- **WHEN** step A produced `outputs: { x: 1 }` and step B is about to run
-- **THEN** the context passed to step B's handler SHALL include the merged view (e.g. `params.x === 1` or `previousOutputs` containing A's outputs)
+- **WHEN** step A with `id: 'a'` produced `outputs: { x: 1 }` and step B is about to run
+- **THEN** the context passed to step B's handler SHALL include `params.a.x === 1` (A's outputs under `params.a`; initial params remain at top level)
 - **AND** template substitution SHALL have been applied to the step by the executor before invoking the handler (so the handler receives a substituted snapshot)
 
 ### Requirement: StepResult contract SHALL be unchanged
 
-Handlers MUST return a value that conforms to the existing `StepResult` shape: `stepId`, `success`, `stdout`, `stderr`, and optionally `error`, `outputs`. The engine SHALL merge `outputs` into context for the next step when present and when the result is used; flow-level success SHALL be false if any step's `success` is false.
+Handlers MUST return a value that conforms to the existing `StepResult` shape: `stepId`, `success`, `stdout`, `stderr`, and optionally `error`, `outputs`. The engine SHALL assign `context[stepId] = outputs` (or `{}` when absent) for the next step when the result is used; flow-level success SHALL be false if any step's `success` is false. See step-context for namespaced accumulation.
 
 #### Scenario: Handler returns StepResult with outputs
 
 - **WHEN** a handler returns `{ stepId: 's1', success: true, stdout: '', stderr: '', outputs: { key: 'value' } }`
-- **THEN** the engine merges `key: 'value'` into context for subsequent steps
-- **AND** the next step's handler receives context that includes `key: 'value'`
+- **THEN** the engine sets `context.s1 = { key: 'value' }` for subsequent steps (outputs namespaced by step id)
+- **AND** the next step's handler receives context that includes `params.s1.key === 'value'`
 
 ### Requirement: Engine SHALL NOT provide a default registry; registry SHALL be required when flow has steps
 
@@ -83,7 +83,7 @@ If a registered handler throws (or rejects), the engine SHALL catch the exceptio
 
 - **WHEN** a handler throws or returns a rejected promise
 - **THEN** the executor catches it and produces a StepResult with `success: false` and `error` set
-- **AND** no outputs from that step are merged into context
+- **AND** no outputs from that step are written into context (that step id is not updated)
 - **AND** the flow result has `success: false`
 
 ### Requirement: FlowStep SHALL be a generic shape
