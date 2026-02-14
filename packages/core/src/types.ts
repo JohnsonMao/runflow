@@ -54,8 +54,6 @@ export interface FlowStep {
 export type RunSubFlowFn = (
   bodyStepIds: string[],
   ctx: Record<string, unknown>,
-  /** Optional callerStepId: when provided and caller is a loop step, body results are buffered so they appear after the loop result in the steps list. */
-  callerStepId?: string,
 ) => Promise<{
   results: StepResult[]
   newContext: Record<string, unknown>
@@ -84,6 +82,8 @@ export interface StepContext {
   allowedHttpHosts?: string[]
   /** Flow steps (provided by executor). Handlers that need the full DAG (e.g. loop for closure) can use this. */
   steps?: FlowStep[]
+  /** When provided by executor, handler may call during run to append log lines; executor merges them with result.log when handler returns. */
+  appendLog?: (message: string) => void
 }
 
 export interface FlowDefinition {
@@ -111,6 +111,8 @@ export interface StepResult {
    * Executor uses this so it does not run them again at top level. Handlers that run sub-flows (e.g. loop) return this.
    */
   completedStepIds?: string[]
+  /** When present, executor flattens these into main steps with stepId prefix `{parentStepId}.{childStepId}`. */
+  subSteps?: StepResult[]
 }
 
 /** Options for building a StepResult (e.g. via context.stepResult). */
@@ -120,6 +122,8 @@ export interface StepResultOptions {
   log?: string
   nextSteps?: string[]
   completedStepIds?: string[]
+  /** When present, executor flattens into main steps with stepId prefix `{parentStepId}.{childStepId}`. */
+  subSteps?: StepResult[]
 }
 
 /** Signature of the stepResult factory, provided by executor on context so handlers use a single format. */

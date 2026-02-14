@@ -1,7 +1,7 @@
 // @env node
 import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
 import { evaluateToBoolean, normalizeStepIds } from '@runflow/core'
-import { computeLoopClosure } from './loopClosure'
+import { closureIdsThatDependOnDone, computeBackwardClosure, computeLoopClosure } from './loopClosure'
 
 /** Max iterations for when-driven loops to prevent infinite loop DoS. */
 export const DEFAULT_MAX_LOOP_ITERATIONS = 10_000
@@ -23,7 +23,7 @@ export class LoopHandler implements IStepHandler {
     return [
       ...normalizeStepIds(step.entry),
       ...normalizeStepIds(step.done),
-      ...normalizeStepIds(step.end),
+      ...normalizeStepIds(step.connect),
     ]
   }
 
@@ -53,16 +53,25 @@ export class LoopHandler implements IStepHandler {
         error: 'loop step requires steps on context (provided by executor)',
       })
     }
-    let closureIds = computeLoopClosure(flowSteps, entryIds, step.id)
+    const closureIds = computeLoopClosure(flowSteps, entryIds, step.id)
     const doneIds = normalizeStepIds(step.done)
-    const endIds = normalizeStepIds(step.end as string | string[] | undefined)
-    const doneOrEndSet = new Set([...doneIds, ...endIds])
-    const entrySet = new Set(entryIds)
-    if (doneOrEndSet.size > 0)
-      closureIds = closureIds.filter(id => !doneOrEndSet.has(id) || entrySet.has(id))
-    if (closureIds.length === 0) {
+    const connectIds = normalizeStepIds(step.connect)
+    let bodyStepIds: string[]
+    if (connectIds.length > 0) {
+      // connect 定義一輪的終點：closure = 從 entry 到 connect 的路徑 = forward(entry) ∩ backward(connect)
+      const backward = computeBackwardClosure(flowSteps, connectIds)
+      bodyStepIds = closureIds.filter(id => backward.has(id))
+    }
+    else {
+      // 無 connect 時沿用：排除 done 及其下游
+      const excludedFromBody = closureIdsThatDependOnDone(flowSteps, closureIds, doneIds)
+      bodyStepIds = closureIds.filter(id => !excludedFromBody.has(id))
+    }
+    if (bodyStepIds.length === 0) {
       return context.stepResult(step.id, false, {
-        error: 'loop closure is empty; ensure entry ids exist in the flow and have valid dependsOn',
+        error: connectIds.length > 0
+          ? 'loop closure is empty; ensure entry can reach connect (path entry → connect)'
+          : 'loop closure is empty (or only done steps); ensure entry ids exist and are not all in done',
       })
     }
     const closureSet = new Set(closureIds)
@@ -73,23 +82,27 @@ export class LoopHandler implements IStepHandler {
         })
       }
     }
-    const completedStepIds = [...closureIds]
+    // Only body steps were run inside the loop; done and its downstream run after loop returns nextSteps.
+    const completedStepIds = [...bodyStepIds]
     let ctx: Record<string, unknown> = { ...context.params }
     let stepSuccess = true
     let iterationCount = 0
 
-    const runBody = async (bodyCtx: Record<string, unknown>) => runSubFlow(closureIds, bodyCtx, step.id)
+    const runBody = async (bodyCtx: Record<string, unknown>) => runSubFlow(bodyStepIds, bodyCtx)
+    context.appendLog?.('loop start')
 
     if (Array.isArray(step.items)) {
       const items = step.items
       for (let index = 0; index < items.length; index++) {
         const bodyCtx = { ...ctx, item: items[index], index, items }
         const out = await runBody(bodyCtx)
+        context.appendLog?.(`iteration ${index + 1}/${items.length}`)
         ctx = out.newContext
         if (stepSuccess && out.results.some(r => !r.success))
           stepSuccess = false
         iterationCount++
         if (out.earlyExit) {
+          context.appendLog?.('loop complete (early exit)')
           return context.stepResult(step.id, stepSuccess, {
             outputs: { ...ctx, count: iterationCount, items: [...items] },
             nextSteps: out.earlyExit.nextSteps,
@@ -98,6 +111,8 @@ export class LoopHandler implements IStepHandler {
           })
         }
       }
+      context.appendLog?.('loop complete')
+      context.appendLog?.(`completedStepIds: ${completedStepIds.join(', ')}`)
       return context.stepResult(step.id, stepSuccess, {
         outputs: { ...ctx, count: items.length, items: [...items] },
         nextSteps: doneIds.length > 0 ? doneIds : undefined,
@@ -112,11 +127,13 @@ export class LoopHandler implements IStepHandler {
       for (let index = 0; index < n; index++) {
         const bodyCtx = { ...ctx, index, count: n }
         const out = await runBody(bodyCtx)
+        context.appendLog?.(`iteration ${index + 1}/${n}`)
         ctx = out.newContext
         if (stepSuccess && out.results.some(r => !r.success))
           stepSuccess = false
         iterationCount++
         if (out.earlyExit) {
+          context.appendLog?.('loop complete (early exit)')
           return context.stepResult(step.id, stepSuccess, {
             outputs: { ...ctx, count: iterationCount },
             nextSteps: out.earlyExit.nextSteps,
@@ -125,6 +142,7 @@ export class LoopHandler implements IStepHandler {
           })
         }
       }
+      context.appendLog?.('loop complete')
       return context.stepResult(step.id, stepSuccess, {
         outputs: { ...ctx, count: iterationCount },
         nextSteps: doneIds.length > 0 ? doneIds : undefined,
@@ -141,11 +159,13 @@ export class LoopHandler implements IStepHandler {
       while (iterationCount < maxIterations) {
         const bodyCtx = { ...ctx, index: iterationCount, count: maxIterations }
         const out = await runBody(bodyCtx)
+        context.appendLog?.(`iteration ${iterationCount + 1}/${maxIterations}`)
         ctx = out.newContext
         if (stepSuccess && out.results.some(r => !r.success))
           stepSuccess = false
         iterationCount++
         if (out.earlyExit) {
+          context.appendLog?.('loop complete (early exit)')
           return context.stepResult(step.id, stepSuccess, {
             outputs: { ...ctx, count: iterationCount },
             nextSteps: out.earlyExit.nextSteps,
@@ -155,6 +175,8 @@ export class LoopHandler implements IStepHandler {
         }
         try {
           if (evaluateToBoolean(whenExpr, ctx as Record<string, unknown>, { maxLength: 2000 })) {
+            context.appendLog?.('loop complete')
+            context.appendLog?.(`completedStepIds: ${completedStepIds.join(', ')}`)
             return context.stepResult(step.id, stepSuccess, {
               outputs: { ...ctx, count: iterationCount },
               nextSteps: doneIds.length > 0 ? doneIds : undefined,
@@ -172,6 +194,7 @@ export class LoopHandler implements IStepHandler {
           })
         }
       }
+      context.appendLog?.('loop complete (max iterations)')
       return context.stepResult(step.id, false, {
         error: `loop when exceeded max iterations (${maxIterations})`,
         outputs: { ...ctx, count: iterationCount },

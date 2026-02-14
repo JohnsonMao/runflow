@@ -34,21 +34,58 @@ export function computeLoopClosure(
 }
 
 /**
- * Return step ids in closure that are sinks: no other step in closure depends on them.
+ * Compute backward closure: all step ids that are transitive dependencies of targetIds
+ * (steps that must run before any of targetIds). Used with connect to define "one round".
  */
-export function inferLoopEndSinks(steps: FlowStep[], closureIds: string[]): string[] {
-  const closureSet = new Set(closureIds)
-  const dependedOnBy = new Set<string>()
-  for (const step of steps) {
-    if (!closureSet.has(step.id))
-      continue
-    const deps = step.dependsOn
-    if (!Array.isArray(deps))
-      continue
-    for (const dep of deps) {
-      if (closureSet.has(dep))
-        dependedOnBy.add(dep)
+export function computeBackwardClosure(
+  steps: FlowStep[],
+  targetIds: string[],
+): Set<string> {
+  const stepById = new Map(steps.map(s => [s.id, s]))
+  const scope = new Set(targetIds.filter(id => stepById.has(id)))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const id of scope) {
+      const st = stepById.get(id)
+      if (!st || !Array.isArray(st.dependsOn))
+        continue
+      for (const dep of st.dependsOn) {
+        if (!scope.has(dep)) {
+          scope.add(dep)
+          changed = true
+        }
+      }
     }
   }
-  return closureIds.filter(id => !dependedOnBy.has(id))
+  return scope
+}
+
+/**
+ * Return step ids that must be excluded from the loop body: done ids plus any step in closure
+ * that (transitively) depends on a done step. Those run only after the loop returns nextSteps.
+ */
+export function closureIdsThatDependOnDone(
+  steps: FlowStep[],
+  closureIds: string[],
+  doneIds: string[],
+): Set<string> {
+  const stepById = new Map(steps.map(s => [s.id, s]))
+  const excluded = new Set(doneIds)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const id of closureIds) {
+      if (excluded.has(id))
+        continue
+      const st = stepById.get(id)
+      if (!st || !Array.isArray(st.dependsOn))
+        continue
+      if (st.dependsOn.some(dep => excluded.has(dep))) {
+        excluded.add(id)
+        changed = true
+      }
+    }
+  }
+  return excluded
 }

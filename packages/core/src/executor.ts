@@ -115,20 +115,28 @@ function getRunnable(
     }
     if (!depsSatisfied)
       continue
-    let allowedByDeps = true
-    for (const dep of step.dependsOn) {
-      const nextSteps = stepNextSteps[dep]
-      if (nextSteps === undefined)
-        continue
-      if (!nextSteps.includes(stepId)) {
-        allowedByDeps = false
-        break
-      }
-    }
-    if (allowedByDeps)
-      runnable.push(stepId)
+    if (!allowedByNextSteps(stepId, step, stepNextSteps))
+      continue
+    runnable.push(stepId)
   }
   return runnable
+}
+
+/** True if step is allowed by every dep that has nextSteps (step id must be in that dep's nextSteps). */
+function allowedByNextSteps(
+  stepId: string,
+  step: FlowStep,
+  stepNextSteps: Record<string, string[]>,
+): boolean {
+  const deps = step.dependsOn
+  if (!Array.isArray(deps))
+    return true
+  for (const dep of deps) {
+    const next = stepNextSteps[dep]
+    if (next !== undefined && !next.includes(stepId))
+      return false
+  }
+  return true
 }
 
 export async function run(flow: FlowDefinition, options: RunOptions = {}): Promise<RunResult> {
@@ -279,20 +287,12 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     }
   }
 
-  /** Buffered body results per loop step id so we can push loop result before body results in the steps list. */
-  const pendingLoopBodyResultsByStepId: Record<string, StepResult[]> = {}
-
   /** Run body steps as sub-flow (DAG order, skip/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
-  const runSubFlow: RunSubFlowFn = async (
-    bodyStepIds: string[],
-    ctx: Record<string, unknown>,
-    callerStepId?: string,
-  ) => {
+  const runSubFlow: RunSubFlowFn = async (bodyStepIds: string[], ctx: Record<string, unknown>) => {
     const missing = bodyStepIds.filter(id => !stepByIdMap.has(id))
     if (missing.length > 0)
       return { results: [], newContext: ctx, error: `Step(s) not found: ${missing.join(', ')}` }
 
-    const isLoopCaller = callerStepId != null && stepByIdMap.get(callerStepId)?.type === 'loop'
     const scopeSet = new Set(bodyStepIds)
     const subCompleted = new Set<string>()
     for (const id of stepByIdMap.keys()) {
@@ -304,22 +304,29 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     let currentCtx = ctx
     while (true) {
       let runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
-      // Steps only used inside subflow may be orphans (not in dagOrder); allow running them.
-      if (runnable.length === 0)
-        runnable = [...scopeSet].filter(id => !subCompleted.has(id))
+      // Steps only used inside subflow may be orphans (not in dagOrder); allow running them, but still respect nextSteps and deps completed.
+      if (runnable.length === 0) {
+        const remaining = [...scopeSet].filter(id => !subCompleted.has(id))
+        runnable = remaining.filter((id) => {
+          const st = stepByIdMap.get(id)
+          if (!st || !allowedByNextSteps(id, st, subNextSteps))
+            return false
+          const deps = st.dependsOn
+          if (!Array.isArray(deps))
+            return true
+          for (const dep of deps) {
+            if (!subCompleted.has(dep))
+              return false
+          }
+          return true
+        })
+      }
       if (runnable.length === 0)
         break
       const batch = await Promise.all(runnable.map(stepId => runStepById(stepId, currentCtx)))
       for (const { result } of batch) {
         results.push(result)
-        if (isLoopCaller && callerStepId) {
-          if (!pendingLoopBodyResultsByStepId[callerStepId])
-            pendingLoopBodyResultsByStepId[callerStepId] = []
-          pendingLoopBodyResultsByStepId[callerStepId].push(result)
-        }
-        else {
-          steps.push(result)
-        }
+        steps.push(result)
         if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
           const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
             const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
@@ -376,13 +383,20 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       return { result: stepResult(stepId, true) }
     }
     try {
-      const stepContextForRun: StepContext = { ...stepContext, params: ctx }
+      const accumulatedLog: string[] = []
+      const stepContextForRun: StepContext = {
+        ...stepContext,
+        params: ctx,
+        appendLog: (msg: string) => { accumulatedLog.push(msg) },
+      }
       const maxAttempts = Math.max(1, (Number(substitutedStep.retry) ?? 0) + 1)
       const runOne = (): Promise<StepResult> =>
         runWithTimeout(substitutedStep, entry, () => entry.run(substitutedStep, stepContextForRun))
       let toPush: StepResult = await runOne() ?? stepResult(stepId, false, { error: 'Handler returned no result' })
       for (let attempt = 1; attempt < maxAttempts && !toPush.success; attempt++)
         toPush = await runOne() ?? toPush
+      if (accumulatedLog.length > 0)
+        toPush = { ...toPush, log: [...accumulatedLog, toPush.log].filter(Boolean).join('\n') }
       return {
         result: toPush,
         outputs: toPush.outputs && isPlainObject(toPush.outputs) ? toPush.outputs : undefined,
@@ -401,16 +415,10 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       break
     const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
     for (const { result, outputs, nextSteps } of batchResults) {
-      // For loop steps, push loop result first then its body results so the list shows loop -> loopBody order.
-      const pendingBody = pendingLoopBodyResultsByStepId[result.stepId]
-      if (pendingBody?.length) {
-        steps.push(result)
-        for (const r of pendingBody)
-          steps.push(r)
-        delete pendingLoopBodyResultsByStepId[result.stepId]
-      }
-      else {
-        steps.push(result)
+      steps.push(result)
+      if (result.subSteps?.length) {
+        for (const s of result.subSteps)
+          steps.push({ ...s, stepId: `${result.stepId}.${s.stepId}` })
       }
       completed.add(result.stepId)
       if (result.completedStepIds && Array.isArray(result.completedStepIds)) {

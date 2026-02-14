@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { run } from './executor'
+import { stepResult } from './stepResult'
 import { normalizeStepIds } from './utils'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -462,6 +463,57 @@ describe('run', () => {
     expect(result.steps[0].outputs?.f1).toEqual({ hasRunFlow: true })
   })
 
+  it('executor merges appendLog with result.log when handler returns', async () => {
+    const appendLogHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        ctx.appendLog?.('line1')
+        ctx.appendLog?.('line2')
+        return ctx.stepResult(step.id, true, { log: 'done' })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.append = appendLogHandler
+    const flow: FlowDefinition = {
+      name: 'append',
+      steps: [{ id: 's1', type: 'append', dependsOn: [] }],
+    }
+    const result = await run(flow, { registry: reg })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].log).toBe('line1\nline2\ndone')
+  })
+
+  it('executor flattens step result subSteps with prefixed stepId', async () => {
+    const flowHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        const subSteps: StepResult[] = [
+          stepResult('a', true, { log: 'step a' }),
+          stepResult('b', true, { log: 'step b' }),
+        ]
+        return ctx.stepResult(step.id, true, { outputs: {}, subSteps })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.flow = flowHandler
+    const flow: FlowDefinition = {
+      name: 'caller',
+      steps: [{ id: 'f1', type: 'flow', flow: 'sub.yaml', dependsOn: [] }],
+    }
+    const result = await run(flow, { registry: reg })
+    expect(result.success).toBe(true)
+    const stepIds = result.steps.map(s => s.stepId)
+    expect(stepIds).toContain('f1')
+    expect(stepIds).toContain('f1.a')
+    expect(stepIds).toContain('f1.b')
+    const fa = result.steps.find(s => s.stepId === 'f1.a')
+    const fb = result.steps.find(s => s.stepId === 'f1.b')
+    expect(fa?.log).toBe('step a')
+    expect(fb?.log).toBe('step b')
+  })
+
   it('runFlow rejects path traversal (flow path must be under current flow directory)', async () => {
     const flowHandler: IStepHandler = {
       validate: () => true,
@@ -692,6 +744,62 @@ describe('run', () => {
       const result = await run(flow, { registry: reg })
       expect(result.success).toBe(false)
       expect(result.steps[0].error).toContain('Handler returned no result')
+    })
+
+    it('runSubFlow: only steps in condition nextSteps run (noop allowed, nap2 not)', async () => {
+      const condHandler: IStepHandler = {
+        validate: () => true,
+        kill: () => {},
+        run: async (step: FlowStep, ctx: StepContext) =>
+          ctx.stepResult(step.id, true, { nextSteps: ['noop'], log: 'branch: else' }),
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.cond = condHandler
+      reg.step = stubHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['cond', 'noop', 'nap2'], dependsOn: [] },
+          { id: 'cond', type: 'cond', dependsOn: [] },
+          { id: 'noop', type: 'step', dependsOn: ['cond'] },
+          { id: 'nap2', type: 'step', dependsOn: ['cond'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      const stepIds = result.steps.map(s => s.stepId)
+      expect(stepIds).toContain('cond')
+      expect(stepIds).toContain('noop')
+      expect(stepIds).not.toContain('nap2')
+    })
+
+    it('runSubFlow: only steps in condition nextSteps run (nap2 allowed, noop not)', async () => {
+      const condHandler: IStepHandler = {
+        validate: () => true,
+        kill: () => {},
+        run: async (step: FlowStep, ctx: StepContext) =>
+          ctx.stepResult(step.id, true, { nextSteps: ['nap2'], log: 'branch: then' }),
+      }
+      const reg = createStubRegistry()
+      reg.subflow = subflowRunnerHandler
+      reg.cond = condHandler
+      reg.step = stubHandler
+      const flow: FlowDefinition = {
+        name: 'sub',
+        steps: [
+          { id: 'runner', type: 'subflow', bodyIds: ['cond', 'noop', 'nap2'], dependsOn: [] },
+          { id: 'cond', type: 'cond', dependsOn: [] },
+          { id: 'noop', type: 'step', dependsOn: ['cond'] },
+          { id: 'nap2', type: 'step', dependsOn: ['cond'] },
+        ],
+      }
+      const result = await run(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      const stepIds = result.steps.map(s => s.stepId)
+      expect(stepIds).toContain('cond')
+      expect(stepIds).toContain('nap2')
+      expect(stepIds).not.toContain('noop')
     })
 
     it('runSubFlow: early exit when step returns nextSteps outside body', async () => {

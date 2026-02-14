@@ -1,6 +1,6 @@
 import type { FlowStep } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
-import { computeLoopClosure, inferLoopEndSinks } from './loopClosure'
+import { closureIdsThatDependOnDone, computeBackwardClosure, computeLoopClosure } from './loopClosure'
 
 function step(id: string, dependsOn: string[]): FlowStep {
   return { id, type: 'set', dependsOn }
@@ -46,22 +46,52 @@ describe('computeLoopClosure', () => {
   })
 })
 
-describe('inferLoopEndSinks', () => {
-  it('single sink', () => {
+describe('computeBackwardClosure', () => {
+  it('returns target ids plus all transitive dependencies', () => {
     const steps: FlowStep[] = [
-      step('A', ['loop']),
+      step('A', []),
       step('B', ['A']),
       step('C', ['B']),
+      step('D', ['C']),
     ]
-    expect(inferLoopEndSinks(steps, ['A', 'B', 'C'])).toEqual(['C'])
+    const back = computeBackwardClosure(steps, ['D'])
+    expect([...back].sort()).toEqual(['A', 'B', 'C', 'D'])
   })
 
-  it('multiple sinks', () => {
+  it('multiple targets merge ancestors', () => {
     const steps: FlowStep[] = [
-      step('A', ['loop']),
-      step('B', ['A']),
-      step('C', ['A']),
+      step('entry', []),
+      step('L', ['entry']),
+      step('R', ['entry']),
+      step('noop', ['L']),
+      step('nap2', ['R']),
     ]
-    expect(inferLoopEndSinks(steps, ['A', 'B', 'C']).sort()).toEqual(['B', 'C'])
+    const back = computeBackwardClosure(steps, ['noop', 'nap2'])
+    expect([...back].sort()).toEqual(['L', 'R', 'entry', 'nap2', 'noop'])
+  })
+})
+
+describe('closureIdsThatDependOnDone', () => {
+  it('returns done ids plus steps that transitively depend on done', () => {
+    const steps: FlowStep[] = [
+      step('loopBody', ['loop']),
+      step('nap', ['loop']),
+      step('req', ['nap']),
+      step('sub', ['req']),
+      step('summary', ['sub']),
+    ]
+    const closure = ['loopBody', 'nap', 'req', 'sub', 'summary']
+    const excluded = closureIdsThatDependOnDone(steps, closure, ['nap'])
+    expect([...excluded].sort()).toEqual(['nap', 'req', 'sub', 'summary'])
+  })
+
+  it('returns only done when no step in closure depends on done', () => {
+    const steps: FlowStep[] = [
+      step('body', ['loop']),
+      step('after', ['loop']),
+    ]
+    const closure = ['body', 'after']
+    const excluded = closureIdsThatDependOnDone(steps, closure, ['after'])
+    expect([...excluded].sort()).toEqual(['after'])
   })
 })

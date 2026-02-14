@@ -54,19 +54,21 @@ describe('flow handler', () => {
       expect(result.error).toMatch(/runFlow not available/)
     })
 
-    it('calls runFlow with path and params and returns success with merged outputs', async () => {
+    it('calls runFlow with path and params and returns success with merged outputs and subSteps', async () => {
+      const subSteps = [
+        stepResult('a', true, { outputs: { k: 'v1' } }),
+        stepResult('b', true, { outputs: { k: 'v2', x: 1 } }),
+      ]
       const runFlow = async (_path: string, _params: Record<string, unknown>): Promise<RunResult> => ({
         flowName: 'sub',
         success: true,
-        steps: [
-          stepResult('a', true, { outputs: { k: 'v1' } }),
-          stepResult('b', true, { outputs: { k: 'v2', x: 1 } }),
-        ],
+        steps: subSteps,
       })
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', params: { a: 1 }, dependsOn: [] }
       const result = await handler.run(step, ctx(runFlow))
       expect(result.success).toBe(true)
       expect(result.outputs).toEqual({ k: 'v2', x: 1 })
+      expect(result.subSteps).toEqual(subSteps)
     })
 
     it('returns failure when runFlow returns success: false', async () => {

@@ -13,6 +13,7 @@ function ctx(overrides: Partial<{
   params: Record<string, unknown>
   runSubFlow: RunSubFlowFn
   steps: FlowStep[]
+  appendLog: (line: string) => void
 }> = {}) {
   return {
     params: {},
@@ -97,7 +98,29 @@ describe('loop handler', () => {
       expect(result.nextSteps).toEqual(['after'])
       expect(result.outputs).toMatchObject({ count: 3, items: [1, 2, 3] })
       expect(runSubFlow).toHaveBeenCalledTimes(3)
-      expect(runSubFlow).toHaveBeenCalledWith(['body'], expect.any(Object), 'l1')
+      expect(runSubFlow).toHaveBeenCalledWith(['body'], expect.any(Object))
+    })
+
+    it('calls appendLog with loop start, iteration i/N, and loop complete when provided', async () => {
+      const logLines: string[] = []
+      const appendLog = (line: string) => logLines.push(line)
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
+        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        newContext: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        items: [10, 20],
+        entry: ['body'],
+        done: ['after'],
+        dependsOn: [],
+      }
+      await handler.run(step, ctx({ runSubFlow, appendLog }))
+      expect(logLines).toContain('loop start')
+      expect(logLines).toContain('iteration 1/2')
+      expect(logLines).toContain('iteration 2/2')
+      expect(logLines).toContain('loop complete')
     })
 
     it('runs closure N times with count then returns nextSteps: done', async () => {
@@ -165,8 +188,8 @@ describe('loop handler', () => {
         dependsOn: [],
       }
       await handler.run(step, ctx({ runSubFlow }))
-      expect(runSubFlow).toHaveBeenNthCalledWith(1, ['body'], expect.objectContaining({ item: 'a', index: 0, items: ['a', 'b'] }), 'l1')
-      expect(runSubFlow).toHaveBeenNthCalledWith(2, ['body'], expect.objectContaining({ item: 'b', index: 1, items: ['a', 'b'] }), 'l1')
+      expect(runSubFlow).toHaveBeenNthCalledWith(1, ['body'], expect.objectContaining({ item: 'a', index: 0, items: ['a', 'b'] }))
+      expect(runSubFlow).toHaveBeenNthCalledWith(2, ['body'], expect.objectContaining({ item: 'b', index: 1, items: ['a', 'b'] }))
     })
 
     it('items driver with earlyExit returns early with nextSteps and does not run remaining items', async () => {
@@ -277,7 +300,7 @@ describe('loop handler', () => {
       expect(result.nextSteps).toEqual(['E'])
       expect(result.outputs?.count).toBe(2)
       expect(runSubFlow).toHaveBeenCalledTimes(2)
-      expect(runSubFlow).toHaveBeenCalledWith(['A', 'B', 'C', 'D'], expect.any(Object), 'loop')
+      expect(runSubFlow).toHaveBeenCalledWith(['A', 'B', 'C', 'D'], expect.any(Object))
     })
 
     it('entry [A,G] two chains merging at D', async () => {
@@ -336,6 +359,64 @@ describe('loop handler', () => {
       expect(result.nextSteps).toEqual(['F'])
       expect(result.outputs?.count).toBe(2)
       expect(runSubFlow).toHaveBeenCalledTimes(2)
+    })
+
+    it('body excludes done and steps that transitively depend on done (e.g. req→nap)', async () => {
+      const steps: FlowStep[] = [
+        { id: 'loopBody', type: 'set', dependsOn: ['loop'] },
+        { id: 'earlyExitCond', type: 'set', dependsOn: ['loopBody'] },
+        { id: 'noop', type: 'set', set: {}, dependsOn: ['earlyExitCond'] },
+        { id: 'nap2', type: 'sleep', ms: 0, dependsOn: ['earlyExitCond'] },
+        { id: 'nap', type: 'sleep', ms: 0, dependsOn: ['loop'] },
+        { id: 'req', type: 'http', url: 'https://x', method: 'GET', dependsOn: ['nap'] },
+        { id: 'sub', type: 'flow', flow: 'x', dependsOn: ['req'] },
+        { id: 'summary', type: 'set', set: {}, dependsOn: ['sub'] },
+      ]
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
+        results: scopeIds.map(stepId => ({ stepId, success: true })),
+        newContext: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'loop',
+        type: 'loop',
+        count: 1,
+        entry: ['loopBody'],
+        done: ['nap'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toEqual(['nap'])
+      const bodyStepIds = runSubFlow.mock.calls[0][0].slice().sort()
+      expect(bodyStepIds).toEqual(['earlyExitCond', 'loopBody', 'nap2', 'noop'])
+    })
+
+    it('full closure is run: noop and nap2 included when in closure (done steps excluded from body)', async () => {
+      const steps: FlowStep[] = [
+        { id: 'loopBody', type: 'set', dependsOn: ['loop'] },
+        { id: 'earlyExitCond', type: 'set', dependsOn: ['loopBody'] },
+        { id: 'noop', type: 'set', set: {}, dependsOn: ['earlyExitCond'] },
+        { id: 'nap2', type: 'sleep', ms: 0, dependsOn: ['earlyExitCond'] },
+        { id: 'nap', type: 'sleep', ms: 0, dependsOn: ['loop'] },
+      ]
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
+        results: scopeIds.map(stepId => ({ stepId, success: true })),
+        newContext: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'loop',
+        type: 'loop',
+        count: 2,
+        entry: ['loopBody'],
+        done: ['nap'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      expect(result.success).toBe(true)
+      expect(result.nextSteps).toEqual(['nap'])
+      expect(runSubFlow).toHaveBeenCalledTimes(2)
+      const bodyStepIds = runSubFlow.mock.calls[0][0].slice().sort()
+      expect(bodyStepIds).toEqual(['earlyExitCond', 'loopBody', 'nap2', 'noop'])
     })
 
     it('steps missing or empty returns success: false', async () => {

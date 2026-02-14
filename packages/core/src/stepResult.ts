@@ -23,5 +23,7 @@ export function stepResult(
     out.nextSteps = opts.nextSteps
   if (opts.completedStepIds !== undefined)
     out.completedStepIds = opts.completedStepIds
+  if (opts.subSteps !== undefined)
+    out.subSteps = opts.subSteps
   return out
 }

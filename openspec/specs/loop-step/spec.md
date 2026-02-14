@@ -21,13 +21,13 @@ If none or more than one of these is present, the step SHALL be invalid (validat
 - **WHEN** a loop step has no `items`, no `count`, and no `when` (or two or more of them set)
 - **THEN** validation SHALL fail or the handler SHALL return StepResult with success: false and an error describing the requirement (exactly one of items/count/when)
 
-### Requirement: Loop step SHALL have entry (entry points only); iteration scope is closure from entry; done and optional end
+### Requirement: Loop step SHALL have entry (entry points only); iteration scope is closure from entry minus done; done and optional end
 
-- **entry** (required): one or more step ids that are the **entry point(s)** of the loop. The iteration scope (steps run each iteration) SHALL be the **forward transitive closure** from entry: start with entry; add any step S such that every id in S's `dependsOn` is either the loop step id or already in the set; repeat until stable. The engine SHALL run this **closure** as a sub-flow each iteration (same executor, DAG order, when/condition/nextSteps). The engine SHALL provide a way (e.g. context.steps and closure computation in the handler) to compute the closure from the flow's steps and dependsOn.
+- **entry** (required): one or more step ids that are the **entry point(s)** of the loop. The iteration scope (steps run each iteration) SHALL be the **forward transitive closure** from entry, **minus** (1) any step id listed in `done` and (2) any step in the closure that **transitively depends on** a done step. The engine SHALL NOT remove any step id from this closure based on `end` alone. Done and its downstream steps SHALL be excluded from the iteration body so they run **once** when the loop returns nextSteps (after all rounds complete). The engine SHALL run this **closure** as a sub-flow each iteration (same executor, DAG order, when/condition/nextSteps). The engine SHALL provide a way (e.g. context.steps and closure computation in the handler) to compute the closure from the flow's steps and dependsOn.
 
 - **done** (optional): array of step ids that the loop step **returns as `nextSteps`** when the loop completes **normally** (items exhausted, count reached, or when expression true). On normal completion the loop step's StepResult SHALL include `nextSteps: done`. Done is not run by the loop; it is the branch target.
 
-- **end** (optional): step id or array of step ids used **only for visualization**. When present, the UI SHALL draw an edge from each end step back to the loop step (closed loop). When absent, the UI MAY infer end as the **sink(s) of the closure**. The engine SHALL NOT use end for execution; execution SHALL always run the full closure each iteration (unless early exit).
+- **end** (optional): step id or array of step ids denoting **round end**; when present, the UI SHALL draw an edge from each end step back to the loop step (closed loop). When absent, the engine or UI MAY infer end as the **sink(s) of the closure**. The engine SHALL NOT use end to exclude steps from the closure; execution SHALL always run the full closure (minus done and its dependents) each iteration (unless early exit).
 
 #### Scenario: Entry only; closure run each iteration; done on normal completion
 
@@ -44,6 +44,34 @@ If none or more than one of these is present, the step SHALL be invalid (validat
 - **THEN** the closure from [A, G] SHALL include A, B, C, D, G, H
 - **AND** each iteration runs in DAG order (e.g. A and G first, then B and H, then C, then D when both chains are ready)
 - **AND** after 2 iterations the loop step returns `nextSteps: [J]`; the executor continues with step J
+
+#### Scenario: Full closure each round minus done; end as round end only
+
+- **GIVEN** a loop step with `entry: [loopBody]`, `done: [nap]`, closure from loopBody includes loopBody, earlyExitCond, noop, nap2, nap (nap has dependsOn: [loop])
+- **WHEN** the executor runs the loop
+- **THEN** the handler SHALL pass body = closure minus (done ∪ steps that transitively depend on done) (e.g. [loopBody, earlyExitCond, noop, nap2]; nap, req, sub, summary excluded) to runSubFlow each iteration
+- **AND** the handler SHALL exclude `done` and any step that depends on done (transitively) from the iteration body so they run once when the loop returns nextSteps
+- **AND** the handler SHALL NOT exclude any step id based on `end` alone
+- **AND** when `end` is omitted, the engine or UI MAY infer end as the sink nodes of the closure (e.g. [noop, nap2])
+
+### Requirement: Round complete vs control leaves round; done only on round complete
+
+- **Round complete**: When runSubFlow(closureIds) returns **without** earlyExit (no step returned nextSteps containing a step id outside the closure), the round SHALL be considered complete. The engine SHALL then evaluate when/items/count; if the loop is done (items exhausted, count reached, or when expression true), the loop step SHALL return `nextSteps: done` and the executor SHALL run done steps once. Otherwise the engine SHALL run the next round (runSubFlow again).
+
+- **Control leaves round**: When runSubFlow returns **with** earlyExit (a step returned nextSteps that include a step id **not** in the closure), the loop SHALL complete immediately with that same nextSteps. The executor SHALL continue with those steps. The loop step SHALL NOT return done; done SHALL NOT be run.
+
+#### Scenario: Round complete then done
+
+- **GIVEN** a loop step with `count: 2`, `entry: [A]`, `done: [D]`, closure {A, B, C}; no step returns nextSteps outside the closure
+- **WHEN** runSubFlow runs twice and each time returns normally
+- **THEN** after the second round the loop SHALL return `nextSteps: [D]`; the executor SHALL run D once
+
+#### Scenario: Control leaves round; done is not run
+
+- **GIVEN** a loop step with `entry: [A]`, `done: [D]`, closure {A, B, C}; step B returns `nextSteps: [out]` where out is not in the closure
+- **WHEN** B returns that nextSteps during an iteration
+- **THEN** runSubFlow SHALL return earlyExit with that nextSteps; the loop SHALL complete with `nextSteps: [out]`
+- **AND** the executor SHALL continue with step out; step D (done) SHALL NOT be run
 
 ### Requirement: Early exit — use step's nextSteps; entire iteration stops; done is not used
 
@@ -76,6 +104,17 @@ Entry step ids SHALL reference steps that exist in the same flow definition; the
 - **WHEN** a flow has a loop step with `entry: [A]`, `done: [C]`
 - **THEN** step ids A and C SHALL exist in the same flow definition
 - **AND** the engine SHALL compute the closure from entry using the flow's steps and run that closure each iteration; on normal completion the loop SHALL return nextSteps: [C]
+
+### Requirement: When end is omitted, engine MAY infer end as closure sinks
+
+When the loop step does not specify `end`, the engine or UI MAY compute the set of step ids that are sinks of the closure and use that set as the inferred end for visualization and for the "round end" semantic. This inference SHALL NOT change which steps are run; the full closure (minus done and its dependents) SHALL still be run each iteration.
+
+#### Scenario: Infer end when omitted
+
+- **GIVEN** a loop step with `entry: [loopBody]` and no `end` field; closure is {loopBody, earlyExitCond, noop, nap2} where noop and nap2 are sinks
+- **WHEN** the engine or UI needs an end set (e.g. for drawing or round-end semantic)
+- **THEN** it MAY infer end as [noop, nap2]
+- **AND** the handler SHALL still run the full closure each iteration
 
 ## BREAKING CHANGES
 
