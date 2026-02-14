@@ -1,8 +1,9 @@
+import type { RunSubFlowImplDeps } from './executor'
 import type { FlowDefinition, FlowStep, IStepHandler, StepContext, StepResult } from './types'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { run } from './executor'
+import { run, runSubFlowImpl } from './executor'
 import { stepResult } from './stepResult'
 import { normalizeStepIds } from './utils'
 
@@ -36,6 +37,51 @@ function createStubRegistry(): Record<string, IStepHandler> {
   reg.flow = stubHandler
   return reg
 }
+
+describe('runSubFlowImpl', () => {
+  it('returns error when bodyStepIds contain non-existent step id', async () => {
+    const stepByIdMap = new Map<string, FlowStep>([['a', { id: 'a', type: 'step', dependsOn: [] }]])
+    const steps: StepResult[] = []
+    const runStepById = async () => ({ result: stepResult('a', true), newContext: {} })
+    const deps: RunSubFlowImplDeps = {
+      stepByIdMap,
+      dagOrder: ['a'],
+      steps,
+      runStepById,
+    }
+    const out = await runSubFlowImpl(['a', 'nonexistent'], {}, deps)
+    expect(out.error).toBeDefined()
+    expect(out.error).toMatch(/Step\(s\) not found|nonexistent/)
+    expect(out.results).toHaveLength(0)
+  })
+
+  it('pushes each body result to deps.steps and returns results + newContext', async () => {
+    const stepByIdMap = new Map<string, FlowStep>([
+      ['a', { id: 'a', type: 'step', dependsOn: [] }],
+      ['b', { id: 'b', type: 'step', dependsOn: ['a'] }],
+    ])
+    const steps: StepResult[] = []
+    const runStepById = async (id: string, ctx: Record<string, unknown>) => {
+      const result = stepResult(id, true, { outputs: { [id]: ctx } })
+      return { result, newContext: { ...ctx, [id]: result.outputs } }
+    }
+    const deps: RunSubFlowImplDeps = {
+      stepByIdMap,
+      dagOrder: ['a', 'b'],
+      steps,
+      runStepById,
+    }
+    const out = await runSubFlowImpl(['a', 'b'], { init: 1 }, deps)
+    expect(out.error).toBeUndefined()
+    expect(out.results).toHaveLength(2)
+    expect(out.results[0].stepId).toBe('a')
+    expect(out.results[1].stepId).toBe('b')
+    expect(steps).toHaveLength(2)
+    expect(steps[0].stepId).toBe('a')
+    expect(steps[1].stepId).toBe('b')
+    expect(out.newContext).toMatchObject({ init: 1, a: {}, b: {} })
+  })
+})
 
 describe('run', () => {
   it('dryRun returns success without executing handler', async () => {

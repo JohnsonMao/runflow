@@ -235,18 +235,35 @@ export function createConfigLoader(): GetConfigAndRegistry {
   return () => loadConfigOnce()
 }
 
-/** Format run result for MCP tool text content. Shows success/failure and per-step status + log. */
+const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
+
+/** Format stepId for display: loop.iteration_1 → "loop [iteration 1]", loop.iteration_2 → "loop [iteration 2]". */
+function formatStepIdDisplay(stepId: string): string {
+  const m = stepId.match(/^(\w+)\.iteration_(\d+)$/)
+  if (!m)
+    return stepId
+  const [, parent, num] = m
+  return `${parent} [iteration ${num}]`
+}
+
+/** Format run result for MCP tool text content. No code block. Regular steps: "- ✓ id — log: ..." on one line; marker steps (iteration_0, iteration_1, ...): no "- " prefix. */
 export function formatRunResult(result: Awaited<ReturnType<typeof run>>): string {
   const status = result.success ? '**Success**' : '**Failed**'
   const headline = `${status} — Flow "${result.flowName}" (${result.steps.length} step(s)).`
   const stepLines = result.steps.map((s) => {
+    const displayId = formatStepIdDisplay(s.stepId)
+    const isMarker = MARKER_STEP_ID_RE.test(s.stepId)
+    if (isMarker) {
+      return `  ${displayId}`
+    }
     const badge = s.success ? '✓' : '✗'
-    const parts = [`- ${badge} ${s.stepId}`]
+    const extra: string[] = []
     if (!s.success && s.error)
-      parts.push(`  error: ${s.error}`)
+      extra.push(`error: ${s.error}`)
     if (s.log?.trim())
-      parts.push(`  log: ${s.log.trim()}`)
-    return parts.join('\n')
+      extra.push(`log: ${s.log.trim()}`)
+    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
+    return `- ${badge} ${displayId}${suffix}`
   })
   const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
   if (!result.success) {

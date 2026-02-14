@@ -84,6 +84,8 @@ export interface StepContext {
   steps?: FlowStep[]
   /** When provided by executor, handler may call during run to append log lines; executor merges them with result.log when handler returns. */
   appendLog?: (message: string) => void
+  /** When provided by executor, handler may push a marker step (stepId, optional log) to RunResult.steps for timeline display. */
+  pushMarkerStep?: (stepId: string, log?: string) => void
 }
 
 export interface FlowDefinition {

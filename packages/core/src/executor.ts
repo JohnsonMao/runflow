@@ -1,5 +1,5 @@
 // @env node
-import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepRegistry, StepResult } from './types'
+import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, RunSubFlowFn, StepContext, StepRegistry, StepResult, StepResultFn } from './types'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { topologicalSort, validateDAG } from './dag'
 import { loadFromFile } from './loader'
@@ -139,6 +139,151 @@ function allowedByNextSteps(
   return true
 }
 
+/** Dependencies for runStepByIdImpl (injectable for tests). */
+export interface RunStepByIdDeps {
+  stepByIdMap: Map<string, FlowStep>
+  registry: StepRegistry
+  stepResult: StepResultFn
+  stepContext: StepContext
+  runWithTimeout: (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>) => Promise<StepResult>
+  flowFilePath?: string
+}
+
+/** Run a single step by id; used by runSubFlowImpl. Exported for testing. */
+export async function runStepByIdImpl(
+  targetStepId: string,
+  ctx: Record<string, unknown>,
+  deps: RunStepByIdDeps,
+): Promise<{ result: StepResult, newContext: Record<string, unknown> }> {
+  const { stepByIdMap, registry, stepResult, stepContext, runWithTimeout, flowFilePath } = deps
+  const st = stepByIdMap.get(targetStepId)
+  if (!st) {
+    return {
+      result: stepResult(targetStepId, false, { error: `Step not found: ${targetStepId}` }),
+      newContext: ctx,
+    }
+  }
+  const sub = substituteStep(st, ctx)
+  const ent = registry[st.type]
+  if (!ent) {
+    return {
+      result: stepResult(targetStepId, false, { error: `Unknown step type: ${st.type}` }),
+      newContext: ctx,
+    }
+  }
+  const valid = ent.validate(sub)
+  if (valid !== true) {
+    return {
+      result: stepResult(targetStepId, false, { error: valid }),
+      newContext: ctx,
+    }
+  }
+  if (evaluateSkip(sub, ctx)) {
+    return {
+      result: stepResult(targetStepId, true),
+      newContext: ctx,
+    }
+  }
+  const tempStepContext: StepContext = {
+    params: ctx,
+    flowFilePath,
+    runSubFlow: stepContext.runSubFlow,
+    stepResult,
+    runFlow: stepContext.runFlow,
+    steps: stepContext.steps,
+    pushMarkerStep: stepContext.pushMarkerStep,
+  }
+  try {
+    const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
+    const result = res ?? stepResult(targetStepId, false, { error: 'Handler returned no result' })
+    const outputs = isPlainObject(result.outputs) ? result.outputs : {}
+    const newContext = { ...ctx, [targetStepId]: outputs }
+    return { result, newContext }
+  }
+  catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return {
+      result: stepResult(targetStepId, false, { error: message }),
+      newContext: ctx,
+    }
+  }
+}
+
+/** Dependencies for runSubFlowImpl (injectable for tests). */
+export interface RunSubFlowImplDeps {
+  stepByIdMap: Map<string, FlowStep>
+  dagOrder: string[]
+  steps: StepResult[]
+  runStepById: (targetStepId: string, ctx: Record<string, unknown>) => Promise<{ result: StepResult, newContext: Record<string, unknown> }>
+}
+
+/** Run body steps as sub-flow (DAG order, early exit). Exported for testing. */
+export async function runSubFlowImpl(
+  bodyStepIds: string[],
+  ctx: Record<string, unknown>,
+  deps: RunSubFlowImplDeps,
+): Promise<{ results: StepResult[], newContext: Record<string, unknown>, earlyExit?: { nextSteps: string[] }, error?: string }> {
+  const { stepByIdMap, dagOrder, steps, runStepById } = deps
+  const missing = bodyStepIds.filter(id => !stepByIdMap.has(id))
+  if (missing.length > 0)
+    return { results: [], newContext: ctx, error: `Step(s) not found: ${missing.join(', ')}` }
+
+  const scopeSet = new Set(bodyStepIds)
+  const subCompleted = new Set<string>()
+  for (const id of stepByIdMap.keys()) {
+    if (!scopeSet.has(id))
+      subCompleted.add(id)
+  }
+  const subNextSteps: Record<string, string[]> = {}
+  const results: StepResult[] = []
+  let currentCtx = ctx
+  while (true) {
+    let runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
+    if (runnable.length === 0) {
+      const remaining = [...scopeSet].filter(id => !subCompleted.has(id))
+      runnable = remaining.filter((id) => {
+        const st = stepByIdMap.get(id)
+        if (!st || !allowedByNextSteps(id, st, subNextSteps))
+          return false
+        const deps = st.dependsOn
+        if (!Array.isArray(deps))
+          return true
+        for (const dep of deps) {
+          if (!subCompleted.has(dep))
+            return false
+        }
+        return true
+      })
+    }
+    if (runnable.length === 0)
+      break
+    const batch = await Promise.all(runnable.map(stepId => runStepById(stepId, currentCtx)))
+    for (const { result } of batch) {
+      results.push(result)
+      steps.push(result)
+      if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
+        const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
+          const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
+          return { ...acc, [r.stepId]: out }
+        }, { ...currentCtx })
+        return {
+          results,
+          newContext: mergedCtx,
+          earlyExit: { nextSteps: result.nextSteps },
+        }
+      }
+      subCompleted.add(result.stepId)
+      if (result.nextSteps !== undefined && Array.isArray(result.nextSteps))
+        subNextSteps[result.stepId] = result.nextSteps
+    }
+    currentCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
+      const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
+      return { ...acc, [r.stepId]: out }
+    }, { ...currentCtx })
+  }
+  return { results, newContext: currentCtx }
+}
+
 export async function run(flow: FlowDefinition, options: RunOptions = {}): Promise<RunResult> {
   const steps: StepResult[] = []
   let initialParams: Record<string, unknown> = { ...(options.params ?? {}) }
@@ -231,134 +376,34 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const completed = new Set<string>()
   const stepNextSteps: Record<string, string[]> = {}
 
-  let stepContext: StepContext
-
-  /** Run a single step by id with given context; returns result and new context. Used by runSubFlow. */
-  const runStepById = async (targetStepId: string, ctx: Record<string, unknown>): Promise<{ result: StepResult, newContext: Record<string, unknown> }> => {
-    const st = stepByIdMap.get(targetStepId)
-    if (!st) {
-      return {
-        result: stepResult(targetStepId, false, { error: `Step not found: ${targetStepId}` }),
-        newContext: ctx,
-      }
-    }
-    const sub = substituteStep(st, ctx)
-    const ent = registry[st.type]
-    if (!ent) {
-      return {
-        result: stepResult(targetStepId, false, { error: `Unknown step type: ${st.type}` }),
-        newContext: ctx,
-      }
-    }
-    const valid = ent.validate(sub)
-    if (valid !== true) {
-      return {
-        result: stepResult(targetStepId, false, { error: valid }),
-        newContext: ctx,
-      }
-    }
-    if (evaluateSkip(sub, ctx)) {
-      return {
-        result: stepResult(targetStepId, true),
-        newContext: ctx,
-      }
-    }
-    const tempStepContext: StepContext = {
-      params: ctx,
-      flowFilePath: options.flowFilePath,
-      runSubFlow: stepContext.runSubFlow,
-      stepResult,
-      runFlow: stepContext.runFlow,
-      steps: stepContext.steps,
-    }
-    try {
-      const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
-      const result = res ?? stepResult(targetStepId, false, { error: 'Handler returned no result' })
-      const outputs = isPlainObject(result.outputs) ? result.outputs : {}
-      const newContext = { ...ctx, [targetStepId]: outputs }
-      return { result, newContext }
-    }
-    catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      return {
-        result: stepResult(targetStepId, false, { error: message }),
-        newContext: ctx,
-      }
-    }
-  }
-
-  /** Run body steps as sub-flow (DAG order, skip/condition/nextSteps). Returns earlyExit when a step returns nextSteps outside body. */
-  const runSubFlow: RunSubFlowFn = async (bodyStepIds: string[], ctx: Record<string, unknown>) => {
-    const missing = bodyStepIds.filter(id => !stepByIdMap.has(id))
-    if (missing.length > 0)
-      return { results: [], newContext: ctx, error: `Step(s) not found: ${missing.join(', ')}` }
-
-    const scopeSet = new Set(bodyStepIds)
-    const subCompleted = new Set<string>()
-    for (const id of stepByIdMap.keys()) {
-      if (!scopeSet.has(id))
-        subCompleted.add(id)
-    }
-    const subNextSteps: Record<string, string[]> = {}
-    const results: StepResult[] = []
-    let currentCtx = ctx
-    while (true) {
-      let runnable = getRunnable(dagOrder, subCompleted, stepByIdMap, subNextSteps).filter(id => scopeSet.has(id))
-      // Steps only used inside subflow may be orphans (not in dagOrder); allow running them, but still respect nextSteps and deps completed.
-      if (runnable.length === 0) {
-        const remaining = [...scopeSet].filter(id => !subCompleted.has(id))
-        runnable = remaining.filter((id) => {
-          const st = stepByIdMap.get(id)
-          if (!st || !allowedByNextSteps(id, st, subNextSteps))
-            return false
-          const deps = st.dependsOn
-          if (!Array.isArray(deps))
-            return true
-          for (const dep of deps) {
-            if (!subCompleted.has(dep))
-              return false
-          }
-          return true
-        })
-      }
-      if (runnable.length === 0)
-        break
-      const batch = await Promise.all(runnable.map(stepId => runStepById(stepId, currentCtx)))
-      for (const { result } of batch) {
-        results.push(result)
-        steps.push(result)
-        if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
-          const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
-            const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
-            return { ...acc, [r.stepId]: out }
-          }, { ...currentCtx })
-          return {
-            results,
-            newContext: mergedCtx,
-            earlyExit: { nextSteps: result.nextSteps },
-          }
-        }
-        subCompleted.add(result.stepId)
-        if (result.nextSteps !== undefined && Array.isArray(result.nextSteps))
-          subNextSteps[result.stepId] = result.nextSteps
-      }
-      currentCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
-        const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
-        return { ...acc, [r.stepId]: out }
-      }, { ...currentCtx })
-    }
-    return { results, newContext: currentCtx }
-  }
-
-  stepContext = {
+  const stepContext: StepContext = {
     params: context,
     flowFilePath: options.flowFilePath,
-    runSubFlow,
+    runSubFlow: (() => { throw new Error('runSubFlow not set') }) as RunSubFlowFn,
     stepResult,
     runFlow,
     allowedHttpHosts: options.allowedHttpHosts,
     steps: flow.steps,
+    pushMarkerStep: (stepId: string, log?: string) => steps.push({ stepId, success: true, ...(log !== undefined && { log }) }),
   }
+  const runStepByIdDeps: RunStepByIdDeps = {
+    stepByIdMap,
+    registry,
+    stepResult,
+    stepContext,
+    runWithTimeout,
+    flowFilePath: options.flowFilePath,
+  }
+  const runStepById = (targetStepId: string, ctx: Record<string, unknown>) =>
+    runStepByIdImpl(targetStepId, ctx, runStepByIdDeps)
+  const runSubFlowImplDeps: RunSubFlowImplDeps = {
+    stepByIdMap,
+    dagOrder,
+    steps,
+    runStepById,
+  }
+  stepContext.runSubFlow = (bodyStepIds: string[], ctx: Record<string, unknown>) =>
+    runSubFlowImpl(bodyStepIds, ctx, runSubFlowImplDeps)
 
   /** Run a single step in the current wave (same context). Used to run all runnable steps in parallel. */
   const runOneStepInWave = async (
@@ -367,6 +412,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   ): Promise<{ result: StepResult, outputs?: Record<string, unknown>, nextSteps?: string[] }> => {
     const step = stepByIdMap.get(stepId)!
     const substitutedStep = substituteStep(step, ctx)
+    // Dispatch by step.type only for registry lookup; all behavior uses IStepHandler interface (validate, run, getAllowedDependentIds, etc.).
     const entry = registry[step.type]
     if (!entry) {
       return {

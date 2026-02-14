@@ -65,6 +65,23 @@ describe('formatRunResult', () => {
     expect(text).toContain('**Failed**')
     expect(text).toContain('Unknown error')
   })
+
+  it('formats marker steps (iteration_1, iteration_2) without bullet and regular steps with id — log on one line', () => {
+    const text = formatRunResult({
+      flowName: 'f',
+      success: true,
+      steps: [
+        { stepId: 'init', success: true, log: 'ready' },
+        { stepId: 'loop.iteration_1', success: true },
+        { stepId: 'loop.iteration_2', success: true },
+        { stepId: 'loop', success: true, log: 'done, 2 iteration(s)' },
+      ],
+    })
+    expect(text).toContain('- ✓ init — log: ready')
+    expect(text).toContain('  loop [iteration 1]')
+    expect(text).toContain('  loop [iteration 2]')
+    expect(text).toContain('- ✓ loop — log: done, 2 iteration(s)')
+  })
 })
 
 describe('findFlowFiles', () => {

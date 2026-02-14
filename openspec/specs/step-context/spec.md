@@ -89,15 +89,30 @@ StepContext SHALL include an optional `appendLog?: (message: string) => void`. W
 - **THEN** the StepResult for that step SHALL have log equal to the concatenation of accumulated lines and the returned log (e.g. "start\niteration 1/3\niteration 2/3\niteration 3/3\ncomplete\niterations: 3" or equivalent)
 - **AND** the formatter SHALL display that log so that lifecycle and final summary are both visible
 
-### Requirement: runSubFlow body results SHALL be pushed immediately when shouldBufferSubFlowResults is false
+### Requirement: runSubFlow body results SHALL be pushed immediately
 
-When a handler that invokes runSubFlow does not implement `shouldBufferSubFlowResults` or returns false, the executor SHALL push each body step result to the main steps array as soon as that body step completes (immediate push). The caller step's own result SHALL be pushed when the handler returns, so it may appear after its body steps in the final steps order.
+When a handler invokes runSubFlow, the executor SHALL push each body step result to the main steps array as soon as that body step completes (immediate push). The caller step's own result SHALL be pushed when the handler returns, so it may appear after its body steps in the final steps order.
 
 #### Scenario: Loop body steps appear in execution order before loop step
 
-- **WHEN** a loop step runs and its handler does not buffer (shouldBufferSubFlowResults omitted or false), and the body runs three iterations producing body step results R1, R2, R3
+- **WHEN** a loop step runs and the body runs three iterations producing body step results R1, R2, R3
 - **THEN** the main RunResult.steps SHALL contain R1, R2, R3 in that order, followed by the loop step's own result
 - **AND** the loop step MAY use appendLog to record "loop start", "iteration 1/3", etc., and "loop complete" in its result.log
+
+### Requirement: StepContext MAY provide pushMarkerStep for marker steps in execution order
+
+StepContext SHALL include an optional `pushMarkerStep?: (stepId: string, log?: string) => void`. When the executor provides it, calling it SHALL append a marker step to the main RunResult.steps array with shape `{ stepId, success: true, ...(log !== undefined && { log }) }` (no outputs, no nextSteps). The executor SHALL provide the same steps array reference to both pushMarkerStep and runSubFlow so that markers and body step results appear in invocation order. Handlers (e.g. loop) MAY call pushMarkerStep at appropriate times so that GUI/Server/CLI can reconstruct the execution timeline from steps alone.
+
+#### Scenario: pushMarkerStep appends marker to main steps in order
+
+- **WHEN** a handler calls `context.pushMarkerStep?.('loop.iteration_1')`, then `context.runSubFlow(bodyIds, ctx)` which pushes body results, then `context.pushMarkerStep?.('loop.iteration_2')`
+- **THEN** RunResult.steps SHALL contain in order: a step with stepId `loop.iteration_1` and success true, then the body step results from the first runSubFlow, then a step with stepId `loop.iteration_2`, then the next body results
+- **AND** each marker step SHALL have success: true and no outputs or nextSteps
+
+#### Scenario: pushMarkerStep absent when not provided by executor
+
+- **WHEN** the executor does not set pushMarkerStep on context (e.g. in an environment where steps are not collected)
+- **THEN** handlers that call `context.pushMarkerStep?.('id', log)` SHALL not throw and SHALL have no effect (optional chaining)
 
 ### Requirement: Command steps and outputs (reserved)
 

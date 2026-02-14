@@ -116,6 +116,23 @@ When the loop step does not specify `end`, the engine or UI MAY compute the set 
 - **THEN** it MAY infer end as [noop, nap2]
 - **AND** the handler SHALL still run the full closure each iteration
 
+### Requirement: Loop handler MAY push marker steps between body iterations for timeline display
+
+When the executor provides `context.pushMarkerStep`, the loop handler MAY call it so that RunResult.steps reflects execution order with markers between body rounds. The handler MAY push an iteration marker (e.g. `${step.id}.iteration_1`, `iteration_2`, ...) before each runSubFlow so that steps order is: iteration_1 → body round 1 → iteration_2 → body round 2 → … → loop step result. Completion (done or early exit) SHALL be indicated via the loop step's result.log (e.g. "done, N iteration(s)" or "early exit after N iteration(s)"). Marker stepIds SHALL be chosen so they do not collide with flow step ids.
+
+#### Scenario: Loop with marker steps yields ordered steps
+
+- **GIVEN** a loop step with `count: 2`, `entry: [A]`, closure {A}; executor provides pushMarkerStep
+- **WHEN** the loop handler runs and pushes iteration_1, runs runSubFlow (round 1), pushes iteration_2, runs runSubFlow (round 2), then returns StepResult with log "done, 2 iteration(s)"
+- **THEN** RunResult.steps SHALL contain in order: marker (iteration_1), step A result (round 1), marker (iteration_2), step A result (round 2), then the loop step's own result
+- **AND** a consumer that renders steps in array order SHALL see the correct execution timeline
+
+#### Scenario: Loop without pushMarkerStep behaves unchanged
+
+- **WHEN** the executor does not provide pushMarkerStep (or handler does not call it)
+- **THEN** RunResult.steps SHALL contain body step results in execution order followed by the loop step result, as before
+- **AND** the loop step MAY set result.log to indicate completion (e.g. "done, N iteration(s)" or "early exit after N iteration(s)")
+
 ## BREAKING CHANGES
 
 - Previous loop design with **body** (required list of step ids) and **until** (condition step id) is **replaced**. Use **entry** (entry point(s) only) and **items** / **count** / **when** as the single driver. Migration: replace `body: [A, B, C, ...]` with `entry: [A]` (or the true entry point(s)); the engine computes the closure. Remove `until`; use **when** (expression) for expression-based exit.

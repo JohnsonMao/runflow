@@ -1,4 +1,4 @@
-import type { FlowStep, RunSubFlowFn } from '@runflow/core'
+import type { FlowStep, RunSubFlowFn, StepResult } from '@runflow/core'
 import { stepResult } from '@runflow/core'
 import { describe, expect, it, vi } from 'vitest'
 import { LoopHandler } from './loop'
@@ -14,6 +14,7 @@ function ctx(overrides: Partial<{
   runSubFlow: RunSubFlowFn
   steps: FlowStep[]
   appendLog: (line: string) => void
+  pushMarkerStep: (stepId: string, log?: string) => void
 }> = {}) {
   return {
     params: {},
@@ -101,26 +102,30 @@ describe('loop handler', () => {
       expect(runSubFlow).toHaveBeenCalledWith(['body'], expect.any(Object))
     })
 
-    it('calls appendLog with loop start, iteration i/N, and loop complete when provided', async () => {
-      const logLines: string[] = []
-      const appendLog = (line: string) => logLines.push(line)
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-        newContext: { ...runCtx },
-      }))
+    it('pushMarkerStep: steps order is iteration_1 → body → iteration_2 → body (no start/complete; complete via loop log)', async () => {
+      const steps: StepResult[] = []
+      const pushMarkerStep = (stepId: string, log?: string) => steps.push({ stepId, success: true, ...(log !== undefined && { log }) })
+      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+        steps.push({ stepId: 'body', success: true, outputs: { ...runCtx } })
+        return {
+          results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+          newContext: { ...runCtx },
+        }
+      })
       const step: FlowStep = {
         id: 'l1',
         type: 'loop',
-        items: [10, 20],
+        count: 2,
         entry: ['body'],
         done: ['after'],
         dependsOn: [],
       }
-      await handler.run(step, ctx({ runSubFlow, appendLog }))
-      expect(logLines).toContain('loop start')
-      expect(logLines).toContain('iteration 1/2')
-      expect(logLines).toContain('iteration 2/2')
-      expect(logLines).toContain('loop complete')
+      const result = await handler.run(step, ctx({ runSubFlow, pushMarkerStep }))
+      const stepIds = steps.map(s => s.stepId)
+      expect(stepIds).toEqual(['l1.iteration_1', 'body', 'l1.iteration_2', 'body'])
+      expect(steps[0].log).toBeUndefined()
+      expect(steps[2].log).toBeUndefined()
+      expect(result.log).toBe('done, 2 iteration(s)')
     })
 
     it('runs closure N times with count then returns nextSteps: done', async () => {
