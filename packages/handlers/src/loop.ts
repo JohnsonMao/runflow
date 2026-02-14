@@ -94,6 +94,7 @@ export class LoopHandler implements IStepHandler {
             outputs: { ...ctx, count: iterationCount, items: [...items] },
             nextSteps: out.earlyExit.nextSteps,
             completedStepIds,
+            log: `items: ${items.length}, ran ${iterationCount}`,
           })
         }
       }
@@ -101,6 +102,7 @@ export class LoopHandler implements IStepHandler {
         outputs: { ...ctx, count: items.length, items: [...items] },
         nextSteps: doneIds.length > 0 ? doneIds : undefined,
         completedStepIds,
+        log: `items: ${items.length}`,
       })
     }
 
@@ -119,6 +121,7 @@ export class LoopHandler implements IStepHandler {
             outputs: { ...ctx, count: iterationCount },
             nextSteps: out.earlyExit.nextSteps,
             completedStepIds,
+            log: `iterations: ${iterationCount}`,
           })
         }
       }
@@ -126,6 +129,7 @@ export class LoopHandler implements IStepHandler {
         outputs: { ...ctx, count: iterationCount },
         nextSteps: doneIds.length > 0 ? doneIds : undefined,
         completedStepIds,
+        log: `iterations: ${iterationCount}`,
       })
     }
 
@@ -146,6 +150,7 @@ export class LoopHandler implements IStepHandler {
             outputs: { ...ctx, count: iterationCount },
             nextSteps: out.earlyExit.nextSteps,
             completedStepIds,
+            log: `iterations: ${iterationCount}`,
           })
         }
         try {
@@ -154,6 +159,7 @@ export class LoopHandler implements IStepHandler {
               outputs: { ...ctx, count: iterationCount },
               nextSteps: doneIds.length > 0 ? doneIds : undefined,
               completedStepIds,
+              log: `iterations: ${iterationCount}`,
             })
           }
         }

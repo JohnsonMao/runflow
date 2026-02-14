@@ -235,7 +235,7 @@ export function createConfigLoader(): GetConfigAndRegistry {
   return () => loadConfigOnce()
 }
 
-/** Format run result for MCP tool text content. Shows success/failure and per-step status + outputs. */
+/** Format run result for MCP tool text content. Shows success/failure and per-step status + log. */
 export function formatRunResult(result: Awaited<ReturnType<typeof run>>): string {
   const status = result.success ? '**Success**' : '**Failed**'
   const headline = `${status} — Flow "${result.flowName}" (${result.steps.length} step(s)).`
@@ -244,12 +244,8 @@ export function formatRunResult(result: Awaited<ReturnType<typeof run>>): string
     const parts = [`- ${badge} ${s.stepId}`]
     if (!s.success && s.error)
       parts.push(`  error: ${s.error}`)
-    if (s.stdout?.trim())
-      parts.push(`  stdout: ${s.stdout.trim().split('\n')[0]!.slice(0, 200)}${s.stdout.length > 200 ? '…' : ''}`)
-    if (s.stderr?.trim())
-      parts.push(`  stderr: ${s.stderr.trim().split('\n')[0]!.slice(0, 200)}${s.stderr.length > 200 ? '…' : ''}`)
-    if (s.outputs && Object.keys(s.outputs).length > 0)
-      parts.push(`  outputs: ${JSON.stringify(s.outputs)}`)
+    if (s.log?.trim())
+      parts.push(`  log: ${s.log.trim()}`)
     return parts.join('\n')
   })
   const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''

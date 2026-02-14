@@ -20,7 +20,7 @@ describe('formatRunResult', () => {
     const text = formatRunResult({
       flowName: 'my-flow',
       success: true,
-      steps: [{ stepId: 'a', success: true, stdout: '', stderr: '' }],
+      steps: [{ stepId: 'a', success: true }],
     })
     expect(text).toContain('**Success**')
     expect(text).toContain('my-flow')
@@ -34,8 +34,8 @@ describe('formatRunResult', () => {
       success: false,
       error: 'Flow failed',
       steps: [
-        { stepId: 'a', success: true, stdout: '', stderr: '' },
-        { stepId: 'b', success: false, stdout: '', stderr: '', error: 'step b failed' },
+        { stepId: 'a', success: true },
+        { stepId: 'b', success: false, error: 'step b failed' },
       ],
     })
     expect(text).toContain('**Failed**')
@@ -49,7 +49,7 @@ describe('formatRunResult', () => {
       flowName: 'x',
       success: false,
       error: 'Unknown error',
-      steps: [{ stepId: 'a', success: true, stdout: '', stderr: '' }],
+      steps: [{ stepId: 'a', success: true }],
     })
     expect(text).toContain('**Failed**')
     expect(text).toContain('Unknown error')
@@ -210,7 +210,7 @@ describe('loadConfigOnce', () => {
       'export default {',
       '  validate() { return true },',
       '  kill() {},',
-      '  async run(step) { return { stepId: step.id, success: true, stdout: "", stderr: "" }; }',
+      '  async run(step) { return { stepId: step.id, success: true }; }',
       '}',
     ].join('\n'))
     process.chdir(dir)

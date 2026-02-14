@@ -33,6 +33,9 @@ export class SleepHandler implements IStepHandler {
     await new Promise<void>((resolve) => {
       this.timer = setTimeout(resolve, durationMs)
     })
-    return context.stepResult(step.id, true)
+    const logMsg = typeof seconds === 'number' && seconds >= 0
+      ? `slept ${seconds}s`
+      : `slept ${durationMs}ms`
+    return context.stepResult(step.id, true, { log: logMsg })
   }
 }

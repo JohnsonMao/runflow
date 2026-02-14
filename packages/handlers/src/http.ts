@@ -87,7 +87,9 @@ export class HttpHandler implements IStepHandler {
         bodyValue = await response.text()
       }
       const responseObject = { statusCode, headers: headersObj, body: bodyValue }
-      return context.stepResult(step.id, true, { outputs: { [outputKey]: responseObject } })
+      const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
+      const log = `${methodStr} ${url} → ${statusCode}`
+      return context.stepResult(step.id, true, { outputs: { [outputKey]: responseObject }, log })
     }
     catch (e) {
       this.abortController = null

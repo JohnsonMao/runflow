@@ -81,7 +81,7 @@ describe('loop handler', () => {
   describe('run', () => {
     it('runs closure per item then returns nextSteps: done', async () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -102,7 +102,7 @@ describe('loop handler', () => {
 
     it('runs closure N times with count then returns nextSteps: done', async () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -127,7 +127,7 @@ describe('loop handler', () => {
         callCount++
         if (callCount === 1) {
           return {
-            results: [{ stepId: 'b', success: true, stdout: '', stderr: '' }],
+            results: [{ stepId: 'b', success: true }],
             newContext: { ...runCtx },
             earlyExit: { nextSteps: ['early'] },
           }
@@ -154,7 +154,7 @@ describe('loop handler', () => {
 
     it('passes item, index, items in body context for items driver', async () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { seen: runCtx } }],
+        results: [{ stepId: 'body', success: true, outputs: { seen: runCtx } }],
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -175,7 +175,7 @@ describe('loop handler', () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
         callCount++
         if (callCount === 1)
-          return { results: [{ stepId: 'b', success: true, stdout: '', stderr: '' }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['out'] } }
+          return { results: [{ stepId: 'b', success: true }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['out'] } }
         return { results: [], newContext: runCtx }
       })
       const step: FlowStep = {
@@ -194,7 +194,7 @@ describe('loop handler', () => {
 
     it('items driver without done returns no nextSteps', async () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -212,7 +212,7 @@ describe('loop handler', () => {
 
     it('count driver without done returns no nextSteps', async () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs: { ...runCtx } }],
+        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -234,7 +234,7 @@ describe('loop handler', () => {
         const index = runCtx.index as number
         const outputs = { iterIndex: String(index), iterCount: String(runCtx.count) }
         return {
-          results: [{ stepId: 'body', success: true, stdout: '', stderr: '', outputs }],
+          results: [{ stepId: 'body', success: true, outputs }],
           newContext: { ...runCtx, body: outputs },
         }
       })
@@ -261,7 +261,7 @@ describe('loop handler', () => {
         { id: 'D', type: 'set', dependsOn: ['C'] },
       ]
       const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true, stdout: '', stderr: '', outputs: { ...runCtx } })),
+        results: scopeIds.map(stepId => ({ stepId, success: true, outputs: { ...runCtx } })),
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -290,7 +290,7 @@ describe('loop handler', () => {
         { id: 'D', type: 'set', dependsOn: ['C', 'H'] },
       ]
       const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true, stdout: '', stderr: '' })),
+        results: scopeIds.map(stepId => ({ stepId, success: true })),
         newContext: { ...runCtx },
       }))
       const step: FlowStep = {
@@ -317,9 +317,9 @@ describe('loop handler', () => {
       const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => {
         callCount++
         if (callCount === 2)
-          return { results: [{ stepId: 'B', success: true, stdout: '', stderr: '' }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['F'] } }
+          return { results: [{ stepId: 'B', success: true }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['F'] } }
         return {
-          results: scopeIds.map(stepId => ({ stepId, success: true, stdout: '', stderr: '' })),
+          results: scopeIds.map(stepId => ({ stepId, success: true })),
           newContext: { ...runCtx },
         }
       })

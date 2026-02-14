@@ -26,7 +26,8 @@ export class ConditionHandler implements IStepHandler {
     try {
       const value = evaluateToBoolean(when, context.params, { maxLength: 2000 })
       const nextSteps = value ? normalizeStepIds(step.then) : normalizeStepIds(step.else)
-      return context.stepResult(step.id, true, { nextSteps })
+      const branch = value ? 'then' : 'else'
+      return context.stepResult(step.id, true, { nextSteps, log: `branch: ${branch}` })
     }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e)

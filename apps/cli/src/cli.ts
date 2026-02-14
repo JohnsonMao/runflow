@@ -174,10 +174,8 @@ program
     })
     if (options.verbose) {
       for (const step of result.steps) {
-        if (step.stdout)
-          process.stdout.write(step.stdout)
-        if (step.stderr)
-          process.stderr.write(step.stderr)
+        if (step.log)
+          process.stdout.write(`${step.log}\n`)
         if (step.outputs && Object.keys(step.outputs).length > 0)
           process.stdout.write(`${JSON.stringify(step.outputs)}\n`)
         if (step.error)

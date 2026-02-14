@@ -47,7 +47,7 @@ describe('run', () => {
     expect(result.success).toBe(true)
     expect(result.steps).toHaveLength(1)
     expect(result.steps[0].success).toBe(true)
-    expect(result.steps[0].stdout).toBe('')
+    expect(result.steps[0].stepId).toBeDefined()
   })
 
   it('registry required when flow has steps', async () => {

@@ -28,9 +28,9 @@ export class FlowHandler implements IStepHandler {
           Object.assign(mergedOutputs, sr.outputs)
       }
       if (result.success)
-        return context.stepResult(step.id, true, { outputs: mergedOutputs })
+        return context.stepResult(step.id, true, { outputs: mergedOutputs, log: `flow ${path} → success` })
       const errorMessage = result.error ?? result.steps.find(s => !s.success)?.error ?? 'callee flow failed'
-      return context.stepResult(step.id, false, { error: errorMessage, outputs: Object.keys(mergedOutputs).length > 0 ? mergedOutputs : undefined })
+      return context.stepResult(step.id, false, { error: errorMessage, outputs: Object.keys(mergedOutputs).length > 0 ? mergedOutputs : undefined, log: `flow ${path} → failed` })
     }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e)

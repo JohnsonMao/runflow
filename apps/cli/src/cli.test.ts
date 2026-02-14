@@ -359,7 +359,7 @@ describe('flow run', () => {
       'export default {',
       '  validate() { return true },',
       '  kill() {},',
-      '  async run(step) { const m = step.message != null ? String(step.message) : step.id; return { stepId: step.id, success: true, stdout: m + "\\n", stderr: "" }; }',
+      '  async run(step) { const m = step.message != null ? String(step.message) : step.id; return { stepId: step.id, success: true, log: m }; }',
       '}',
     ].join('\n'))
     const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)
@@ -586,7 +586,7 @@ describe('flow run', () => {
       '  kill() {},',
       '  async run(step) {',
       '    const msg = step.message != null ? String(step.message) : step.id;',
-      '    return { stepId: step.id, success: true, stdout: msg + "\\n", stderr: "" };',
+      '    return { stepId: step.id, success: true, log: msg };',
       '  }',
       '}',
     ].join('\n')
@@ -619,7 +619,7 @@ describe('flow run', () => {
       '    kill() {},',
       '    async run(step) {',
       '      const msg = step.message != null ? String(step.message) : step.id;',
-      '      return { stepId: step.id, success: true, stdout: msg + "\\n", stderr: "" };',
+      '      return { stepId: step.id, success: true, log: msg };',
       '    }',
       '  }',
       '}',

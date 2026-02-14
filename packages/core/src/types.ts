@@ -96,10 +96,10 @@ export interface FlowDefinition {
 export interface StepResult {
   stepId: string
   success: boolean
-  stdout: string
-  stderr: string
   error?: string
   outputs?: Record<string, unknown>
+  /** Optional one-line summary for display (e.g. MCP execute, CLI --verbose). Handlers set this instead of stdout/stderr. */
+  log?: string
   /**
    * When set, only these step ids (among steps that depend on this step) are scheduled next.
    * When omitted, all dependents are scheduled (default). Handlers that control branching (e.g. condition)
@@ -115,10 +115,9 @@ export interface StepResult {
 
 /** Options for building a StepResult (e.g. via context.stepResult). */
 export interface StepResultOptions {
-  stdout?: string
-  stderr?: string
   error?: string
   outputs?: Record<string, unknown>
+  log?: string
   nextSteps?: string[]
   completedStepIds?: string[]
 }

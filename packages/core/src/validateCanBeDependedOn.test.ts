@@ -38,7 +38,7 @@ describe('validateCanBeDependedOn', () => {
       getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
       validate: () => true,
       kill: () => {},
-      run: async () => ({ stepId: 'c', success: true, stdout: '', stderr: '' }),
+      run: async () => ({ stepId: 'c', success: true }),
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -59,7 +59,7 @@ describe('validateCanBeDependedOn', () => {
       getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
       validate: () => true,
       kill: () => {},
-      run: async () => ({ stepId: 'c', success: true, stdout: '', stderr: '' }),
+      run: async () => ({ stepId: 'c', success: true }),
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -88,7 +88,7 @@ describe('validateCanBeDependedOn', () => {
       ],
       validate: () => true,
       kill: () => {},
-      run: async () => ({ stepId: 'l', success: true, stdout: '', stderr: '' }),
+      run: async () => ({ stepId: 'l', success: true }),
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -113,7 +113,7 @@ describe('validateCanBeDependedOn', () => {
       ],
       validate: () => true,
       kill: () => {},
-      run: async () => ({ stepId: 'l', success: true, stdout: '', stderr: '' }),
+      run: async () => ({ stepId: 'l', success: true }),
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -138,7 +138,7 @@ describe('validateCanBeDependedOn', () => {
       getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
       validate: () => true,
       kill: () => {},
-      run: async () => ({ stepId: 'c', success: true, stdout: '', stderr: '' }),
+      run: async () => ({ stepId: 'c', success: true }),
     }
     const flow: FlowDefinition = {
       name: 'f',

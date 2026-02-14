@@ -12,13 +12,13 @@ export function stepResult(
   const out: StepResult = {
     stepId,
     success,
-    stdout: opts.stdout ?? '',
-    stderr: opts.stderr ?? '',
   }
   if (opts.error !== undefined)
     out.error = opts.error
   if (opts.outputs !== undefined)
     out.outputs = opts.outputs
+  if (opts.log !== undefined)
+    out.log = opts.log
   if (opts.nextSteps !== undefined)
     out.nextSteps = opts.nextSteps
   if (opts.completedStepIds !== undefined)
