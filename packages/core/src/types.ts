@@ -22,7 +22,7 @@ export interface ParamDeclaration {
 /**
  * Generic step shape: id and type required, rest preserved for the handler.
  *
- * Engine-reserved fields (id, type, dependsOn, skip, timeout, retry) have fixed semantics.
+ * Engine-reserved fields (id, type, dependsOn, skip, timeout, retry, outputKey) have fixed semantics.
  * Handler-specific fields (e.g. when, then, else for condition) are documented per handler.
  * Extending this interface with your own step types and overlapping the same keys is normal:
  * you narrow types (e.g. when: string) or add constraints; the index signature [key: string]: unknown
@@ -42,6 +42,8 @@ export interface FlowStep {
   timeout?: number
   /** Number of retries on failure (engine). Total attempts = retry + 1. */
   retry?: number
+  /** Key under which the step's outputs are written to context. When absent, the executor uses step id. */
+  outputKey?: string
   [key: string]: unknown
 }
 

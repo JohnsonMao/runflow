@@ -41,8 +41,8 @@ describe('http handler', () => {
       const step: FlowStep = { id: 'fetch', type: 'http', url: 'https://example.com/json', dependsOn: [] }
       const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(true)
-      expect(result.outputs?.fetch).toBeDefined()
-      const resp = result.outputs!.fetch as { statusCode: number, body: unknown }
+      expect(result.outputs).toBeDefined()
+      const resp = result.outputs as { statusCode: number, body: unknown }
       expect(resp.statusCode).toBe(200)
       expect(resp.body).toEqual({ key: 'value' })
     })
@@ -56,10 +56,10 @@ describe('http handler', () => {
       const step: FlowStep = { id: 'fetch', type: 'http', url: 'https://example.com/404', dependsOn: [] }
       const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(true)
-      expect((result.outputs?.fetch as { statusCode: number }).statusCode).toBe(404)
+      expect((result.outputs as { statusCode: number }).statusCode).toBe(404)
     })
 
-    it('uses step id as output key when outputKey omitted', async () => {
+    it('returns response object as outputs (context key is applied by executor)', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
@@ -67,11 +67,11 @@ describe('http handler', () => {
       } as Response)
       const step: FlowStep = { id: 'myFetch', type: 'http', url: 'https://example.com', dependsOn: [] }
       const result = await handler.run(step, emptyContext)
-      expect(result.outputs?.myFetch).toBeDefined()
-      expect(result.outputs?.fetch).toBeUndefined()
+      expect(result.outputs).toBeDefined()
+      expect(result.outputs).toMatchObject({ statusCode: 200, headers: expect.any(Object), body: {} })
     })
 
-    it('uses step.outputKey when provided', async () => {
+    it('returns response object as outputs regardless of outputKey (key applied by executor)', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
@@ -85,8 +85,8 @@ describe('http handler', () => {
         dependsOn: [],
       }
       const result = await handler.run(step, emptyContext)
-      expect(result.outputs?.apiResult).toBeDefined()
-      expect(result.outputs?.x).toBeUndefined()
+      expect(result.outputs).toBeDefined()
+      expect(result.outputs).toMatchObject({ statusCode: 200 })
     })
 
     it('returns image response body as base64', async () => {
@@ -100,7 +100,7 @@ describe('http handler', () => {
       const step: FlowStep = { id: 'img', type: 'http', url: 'https://example.com/image.png', dependsOn: [] }
       const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(true)
-      const resp = result.outputs!.img as { statusCode: number, body: string }
+      const resp = result.outputs as { statusCode: number, body: string }
       expect(resp.statusCode).toBe(200)
       expect(typeof resp.body).toBe('string')
       expect(resp.body.length).toBeGreaterThan(0)

@@ -197,7 +197,8 @@ export async function runStepByIdImpl(
     const res = await runWithTimeout(sub, ent, () => ent.run(sub, tempStepContext))
     const result = res ?? stepResult(targetStepId, false, { error: 'Handler returned no result' })
     const outputs = isPlainObject(result.outputs) ? result.outputs : {}
-    const newContext = { ...ctx, [targetStepId]: outputs }
+    const effectiveKey = (st && typeof st.outputKey === 'string') ? st.outputKey : targetStepId
+    const newContext = { ...ctx, [effectiveKey]: outputs }
     return { result, newContext }
   }
   catch (e) {
@@ -264,7 +265,9 @@ export async function runSubFlowImpl(
       if (result.nextSteps !== undefined && Array.isArray(result.nextSteps) && result.nextSteps.some(id => !scopeSet.has(id))) {
         const mergedCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
           const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
-          return { ...acc, [r.stepId]: out }
+          const step = stepByIdMap.get(r.stepId)
+          const effectiveKey = (step && typeof step.outputKey === 'string') ? step.outputKey : r.stepId
+          return { ...acc, [effectiveKey]: out }
         }, { ...currentCtx })
         return {
           results,
@@ -278,7 +281,9 @@ export async function runSubFlowImpl(
     }
     currentCtx = batch.reduce<Record<string, unknown>>((acc, { result: r }) => {
       const out = r.outputs && isPlainObject(r.outputs) ? r.outputs : {}
-      return { ...acc, [r.stepId]: out }
+      const step = stepByIdMap.get(r.stepId)
+      const effectiveKey = (step && typeof step.outputKey === 'string') ? step.outputKey : r.stepId
+      return { ...acc, [effectiveKey]: out }
     }, { ...currentCtx })
   }
   return { results, newContext: currentCtx }
@@ -474,7 +479,9 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
       if (nextSteps !== undefined && Array.isArray(nextSteps))
         stepNextSteps[result.stepId] = nextSteps
       const out = outputs && isPlainObject(outputs) ? outputs : {}
-      context = { ...context, [result.stepId]: out }
+      const step = stepByIdMap.get(result.stepId)
+      const effectiveKey = (step && typeof step.outputKey === 'string') ? step.outputKey : result.stepId
+      context = { ...context, [effectiveKey]: out }
       if (!result.success)
         success = false
     }

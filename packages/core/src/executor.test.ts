@@ -31,6 +31,17 @@ const stubHandlerWithStepSnapshot: IStepHandler = {
   },
 }
 
+/** Returns a plain outputs object (no key wrapper); used to verify executor writes to effectiveKey (outputKey ?? id). */
+const plainOutputHandler: IStepHandler = {
+  validate: () => true,
+  kill: () => {},
+  run: async (step: FlowStep, context: StepContext): Promise<StepResult> => {
+    return context.stepResult(step.id, true, {
+      outputs: { value: step.id, from: 'plain' },
+    })
+  },
+}
+
 function createStubRegistry(): Record<string, IStepHandler> {
   const reg: Record<string, IStepHandler> = {}
   reg.step = stubHandler
@@ -206,6 +217,37 @@ describe('run', () => {
     expect(result.success).toBe(true)
     expect(result.steps[0].outputs).toEqual({ j1: {} })
     expect(result.steps[1].outputs?.j2).toEqual({ j1: { j1: {} } })
+  })
+
+  it('effectiveKey: step with outputKey writes to context under outputKey for downstream step', async () => {
+    const reg = createStubRegistry()
+    reg.plain = plainOutputHandler
+    const flow: FlowDefinition = {
+      name: 'outputKey-flow',
+      steps: [
+        { id: 'a', type: 'plain', outputKey: 'customKey', dependsOn: [] },
+        { id: 'b', type: 'step', dependsOn: ['a'] },
+      ],
+    }
+    const result = await run(flow, { registry: reg })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toMatchObject({ value: 'a', from: 'plain' })
+    expect(result.steps[1].outputs?.b).toMatchObject({ customKey: { value: 'a', from: 'plain' } })
+  })
+
+  it('effectiveKey: step without outputKey writes to context under step id', async () => {
+    const reg = createStubRegistry()
+    reg.plain = plainOutputHandler
+    const flow: FlowDefinition = {
+      name: 'no-outputKey-flow',
+      steps: [
+        { id: 'a', type: 'plain', dependsOn: [] },
+        { id: 'b', type: 'step', dependsOn: ['a'] },
+      ],
+    }
+    const result = await run(flow, { registry: reg })
+    expect(result.success).toBe(true)
+    expect(result.steps[1].outputs?.b).toMatchObject({ a: { value: 'a', from: 'plain' } })
   })
 
   it('step skip true: step skipped, success result pushed, dependents run with current context', async () => {

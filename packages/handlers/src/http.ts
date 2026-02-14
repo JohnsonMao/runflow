@@ -38,11 +38,10 @@ export class HttpHandler implements IStepHandler {
       if (!allowed)
         return context.stepResult(step.id, false, { error: `http step host not allowed: ${url.hostname}. Allowed: ${allowedHosts.join(', ')}` })
     }
-    const outputKey = (typeof step.outputKey === 'string' ? step.outputKey : step.id) as string
-    return this.doRequest(step, context, urlRaw, outputKey)
+    return this.doRequest(step, context, urlRaw)
   }
 
-  private async doRequest(step: FlowStep, context: StepContext, url: string, outputKey: string): Promise<StepResult> {
+  private async doRequest(step: FlowStep, context: StepContext, url: string): Promise<StepResult> {
     const method = (typeof step.method === 'string' ? step.method : 'GET')
     const headers: Record<string, string> = {}
     if (step.headers !== undefined && isPlainObject(step.headers)) {
@@ -89,7 +88,7 @@ export class HttpHandler implements IStepHandler {
       const responseObject = { statusCode, headers: headersObj, body: bodyValue }
       const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
       const log = `${methodStr} ${url} → ${statusCode}`
-      return context.stepResult(step.id, true, { outputs: { [outputKey]: responseObject }, log })
+      return context.stepResult(step.id, true, { outputs: responseObject, log })
     }
     catch (e) {
       this.abortController = null
