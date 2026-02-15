@@ -3,8 +3,7 @@ import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { openApiToFlows } from '@runflow/convention-openapi'
-import { loadFromFile, run } from '@runflow/core'
+import { run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
@@ -16,7 +15,7 @@ import {
   getDiscoverEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
-  resolveFlowId,
+  resolveAndLoadFlow,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
 
@@ -89,6 +88,69 @@ async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry
   return registry
 }
 
+interface RunCommandOptions {
+  dryRun?: boolean
+  verbose?: boolean
+  param?: string[]
+  paramsFile?: string
+  f?: string
+  config?: string
+}
+
+async function handleRunCommand(flowId: string, options: RunCommandOptions): Promise<void> {
+  const cwd = process.cwd()
+  const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
+  const config = configPath ? await loadConfig(configPath) : null
+  const configDir = configPath ? path.dirname(configPath) : cwd
+
+  let flow: Awaited<ReturnType<typeof resolveAndLoadFlow>>
+  try {
+    flow = await resolveAndLoadFlow(flowId, config, configDir, cwd)
+  }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`Error: ${msg}`)
+    process.exit(1)
+  }
+
+  const paramsPath = options.paramsFile ?? options.f
+  let params: Record<string, unknown> = { ...(config?.params ?? {}) }
+  if (paramsPath)
+    params = { ...params, ...loadParamsFile(paramsPath) }
+  if (options.param?.length) {
+    const cliParams = parseParamPairs(options.param)
+    params = { ...params, ...cliParams }
+  }
+
+  const registry = configPath ? await buildRegistryFromConfig(configPath) : createBuiltinRegistry()
+  const resolveFlow = createResolveFlow(config, configDir, cwd)
+  const result = await run(flow.flow, {
+    dryRun: options.dryRun,
+    params: Object.keys(params).length ? params : undefined,
+    flowFilePath: flow.flowFilePath,
+    registry,
+    resolveFlow,
+  })
+
+  if (options.verbose) {
+    for (const step of result.steps) {
+      if (step.log)
+        process.stdout.write(`${step.log}\n`)
+      if (step.outputs && Object.keys(step.outputs).length > 0)
+        process.stdout.write(`${JSON.stringify(step.outputs)}\n`)
+      if (step.error)
+        console.error(`Step ${step.stepId}: ${step.error}`)
+    }
+  }
+
+  if (!result.success) {
+    if (result.error)
+      console.error(`Error: ${result.error}`)
+    console.error(`Flow "${result.flowName}" failed.`)
+    process.exit(1)
+  }
+}
+
 program
   .command('run [flowId]')
   .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or prefix-operation (e.g. my-api-get-users) from config openapi')
@@ -98,82 +160,12 @@ program
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
-  .action(async (flowId: string | undefined, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string }) => {
-    const cwd = process.cwd()
+  .action(async (flowId: string | undefined, options: RunCommandOptions) => {
     if (!flowId) {
       console.error('Error: flowId is required (file path or prefix-operation e.g. my-api-get-users).')
       process.exit(1)
     }
-    const configPath = options.config
-      ? path.resolve(cwd, options.config)
-      : findConfigFile(cwd)
-    const config = configPath ? await loadConfig(configPath) : null
-    const configDir = configPath ? path.dirname(configPath) : cwd
-    const resolved = resolveFlowId(flowId, config, configDir, cwd)
-    let flow: Awaited<ReturnType<typeof loadFromFile>>
-    let flowFilePath: string | undefined
-    if (resolved.type === 'openapi') {
-      if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile()) {
-        console.error(`Error: OpenAPI spec not found: ${resolved.specPath}`)
-        process.exit(1)
-      }
-      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
-      const selected = flows.get(resolved.operation)
-      if (!selected) {
-        const keys = [...flows.keys()].slice(0, 10).join(', ')
-        console.error(`Error: Operation "${resolved.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
-        process.exit(1)
-      }
-      flow = selected
-      flowFilePath = resolved.specPath
-    }
-    else {
-      if (!existsSync(resolved.path) || !statSync(resolved.path).isFile()) {
-        console.error(`Error: File not found or not a regular file: ${resolved.path}`)
-        process.exit(1)
-      }
-      flow = loadFromFile(resolved.path)
-      flowFilePath = resolved.path
-    }
-    if (!flow) {
-      console.error('Error: Invalid or unreadable flow file.')
-      process.exit(1)
-    }
-    const paramsPath = options.paramsFile ?? options.f
-    let params: Record<string, unknown> = { ...(config?.params ?? {}) }
-    if (paramsPath)
-      params = { ...params, ...loadParamsFile(paramsPath) }
-    if (options.param?.length) {
-      const cliParams = parseParamPairs(options.param)
-      params = { ...params, ...cliParams }
-    }
-    const registry: StepRegistry = configPath
-      ? await buildRegistryFromConfig(configPath)
-      : createBuiltinRegistry()
-    const resolveFlow = createResolveFlow(config, configDir, cwd)
-    const result = await run(flow, {
-      dryRun: options.dryRun,
-      params: Object.keys(params).length ? params : undefined,
-      flowFilePath,
-      registry,
-      resolveFlow,
-    })
-    if (options.verbose) {
-      for (const step of result.steps) {
-        if (step.log)
-          process.stdout.write(`${step.log}\n`)
-        if (step.outputs && Object.keys(step.outputs).length > 0)
-          process.stdout.write(`${JSON.stringify(step.outputs)}\n`)
-        if (step.error)
-          console.error(`Step ${step.stepId}: ${step.error}`)
-      }
-    }
-    if (!result.success) {
-      if (result.error)
-        console.error(`Error: ${result.error}`)
-      console.error(`Flow "${result.flowName}" failed.`)
-      process.exit(1)
-    }
+    await handleRunCommand(flowId, options)
   })
 
 program

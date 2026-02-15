@@ -22,4 +22,6 @@ export {
 export type { DiscoverEntry, FindFlowFilesOptions } from './discover'
 export { findFlowFiles } from './discover'
 export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'
+export { loadFlowFromResolved, resolveAndLoadFlow } from './loadFlow'
+export type { LoadedFlow } from './loadFlow'
 export { createResolveFlow } from './resolveFlow'
