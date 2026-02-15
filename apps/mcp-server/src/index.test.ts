@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FIXTURES_DIR } from './fixtures'
 import {
   createConfigLoader,
-  discoverTool,
+  discoverFlowDetailTool,
+  discoverFlowListTool,
   executeTool,
   findFlowFiles,
   formatRunResult,
@@ -367,7 +368,7 @@ describe('executeTool', () => {
   })
 })
 
-describe('discoverTool', () => {
+describe('discoverFlowListTool', () => {
   const getConfig = createConfigLoader()
   let originalCwd: string
 
@@ -381,17 +382,17 @@ describe('discoverTool', () => {
   it('returns "No flows found" when flowsDir/cwd has no yaml files', async () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'mcp-disc-empty-'))
     process.chdir(emptyDir)
-    const result = await discoverTool({}, getConfig)
+    const result = await discoverFlowListTool({}, getConfig)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toMatch(/No flows found/)
   })
 
-  it('returns flow list when flowsDir/cwd has flow files', async () => {
+  it('returns flow list as Markdown table with flowId, name', async () => {
     process.chdir(FIXTURES_DIR)
-    const result = await discoverTool({}, getConfig)
+    const result = await discoverFlowListTool({}, getConfig)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).not.toMatch(/^No flows found/)
-    expect(text).toContain('- **flowId**:')
+    expect(text).toContain('| flowId | name |')
     expect(text).toContain('fixture-flow')
   })
 
@@ -404,7 +405,7 @@ describe('discoverTool', () => {
     writeFileSync(configPath, 'export default { flowsDir: "flows" }\n')
     writeFileSync(flowPath, 'name: flows-dir-flow\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({}, getConfig)
+    const result = await discoverFlowListTool({}, getConfig)
     unlinkSync(configPath)
     unlinkSync(flowPath)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
@@ -417,14 +418,14 @@ describe('discoverTool', () => {
     writeFileSync(join(dir, 'b.yaml'), 'name: flow-b\nsteps: []')
     writeFileSync(join(dir, 'c.yaml'), 'name: flow-c\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({ limit: 2 }, getConfig)
+    const result = await discoverFlowListTool({ limit: 2 }, getConfig)
     unlinkSync(join(dir, 'a.yaml'))
     unlinkSync(join(dir, 'b.yaml'))
     unlinkSync(join(dir, 'c.yaml'))
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toMatch(/Total: 3 flows\. Showing 1-2\./)
-    const blocks = text.split(/\n---\n/).filter(b => b.includes('- **flowId**:'))
-    expect(blocks).toHaveLength(2)
+    const tableRows = text.split('\n').filter(line => line.startsWith('|') && !line.includes('flowId') && !line.includes('---'))
+    expect(tableRows).toHaveLength(2)
   })
 
   it('returns total count and respects offset for pagination', async () => {
@@ -433,14 +434,12 @@ describe('discoverTool', () => {
     writeFileSync(join(dir, 'b.yaml'), 'name: flow-b\nsteps: []')
     writeFileSync(join(dir, 'c.yaml'), 'name: flow-c\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({ limit: 2, offset: 1 }, getConfig)
+    const result = await discoverFlowListTool({ limit: 2, offset: 1 }, getConfig)
     unlinkSync(join(dir, 'a.yaml'))
     unlinkSync(join(dir, 'b.yaml'))
     unlinkSync(join(dir, 'c.yaml'))
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toMatch(/Total: 3 flows\. Showing 2-3\./)
-    const blocks = text.split(/\n---\n/).filter(b => b.includes('- **flowId**:'))
-    expect(blocks).toHaveLength(2)
     expect(text).toContain('flow-b')
     expect(text).toContain('flow-c')
     expect(text).not.toContain('flow-a')
@@ -451,11 +450,25 @@ describe('discoverTool', () => {
     writeFileSync(join(dir, 'a.yaml'), 'name: flow-a\nsteps: []')
     writeFileSync(join(dir, 'b.yaml'), 'name: flow-b\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({ limit: 10, offset: 10 }, getConfig)
+    const result = await discoverFlowListTool({ limit: 10, offset: 10 }, getConfig)
     unlinkSync(join(dir, 'a.yaml'))
     unlinkSync(join(dir, 'b.yaml'))
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toMatch(/Total: 2 flows\. No flows in this range \(offset 10\)\./)
+  })
+
+  it('includes pagination hint when more results exist', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-disc-pagination-'))
+    writeFileSync(join(dir, 'a.yaml'), 'name: flow-a\nsteps: []')
+    writeFileSync(join(dir, 'b.yaml'), 'name: flow-b\nsteps: []')
+    writeFileSync(join(dir, 'c.yaml'), 'name: flow-c\nsteps: []')
+    process.chdir(dir)
+    const result = await discoverFlowListTool({ limit: 2 }, getConfig)
+    unlinkSync(join(dir, 'a.yaml'))
+    unlinkSync(join(dir, 'b.yaml'))
+    unlinkSync(join(dir, 'c.yaml'))
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(text).toMatch(/Next: offset=2/)
   })
 
   it('filters by keyword (file name, name, or description, case-insensitive)', async () => {
@@ -464,12 +477,10 @@ describe('discoverTool', () => {
     writeFileSync(join(dir, 'nomatch.yaml'), 'name: Other\nsteps: []')
     writeFileSync(join(dir, 'desc.yaml'), 'name: x\ndescription: Secret KEYWORD here\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({ keyword: 'world' }, getConfig)
+    const result = await discoverFlowListTool({ keyword: 'world' }, getConfig)
     let text = result.content[0]?.type === 'text' ? result.content[0].text : ''
-    const blocks = text.split(/\n---\n/).filter(b => b.includes('- **flowId**:'))
-    expect(blocks).toHaveLength(1)
     expect(text).toContain('Hello World')
-    const result2 = await discoverTool({ keyword: 'KEYWORD' }, getConfig)
+    const result2 = await discoverFlowListTool({ keyword: 'KEYWORD' }, getConfig)
     text = result2.content[0]?.type === 'text' ? result2.content[0].text : ''
     expect(text).toContain('x')
     unlinkSync(join(dir, 'match.yaml'))
@@ -482,18 +493,28 @@ describe('discoverTool', () => {
     writeFileSync(join(dir, 'hello-flow.yaml'), 'name: Other\nsteps: []')
     writeFileSync(join(dir, 'other.yaml'), 'name: Other\nsteps: []')
     process.chdir(dir)
-    const result = await discoverTool({ keyword: 'hello-flow' }, getConfig)
+    const result = await discoverFlowListTool({ keyword: 'hello-flow' }, getConfig)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
-    const blocks = text.split(/\n---\n/).filter(b => b.includes('- **flowId**:'))
-    expect(blocks).toHaveLength(1)
     expect(text).toContain('hello-flow')
     expect(text).toContain('Other')
     unlinkSync(join(dir, 'hello-flow.yaml'))
     unlinkSync(join(dir, 'other.yaml'))
   })
+})
 
-  it('discover result is Markdown and includes params when flow has params', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mcp-disc-params-'))
+describe('discoverFlowDetailTool', () => {
+  const getConfig = createConfigLoader()
+  let originalCwd: string
+
+  beforeEach(() => {
+    originalCwd = process.cwd()
+  })
+  afterEach(() => {
+    process.chdir(originalCwd)
+  })
+
+  it('returns flow detail with name, description, params when flow exists', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-disc-detail-'))
     writeFileSync(join(dir, 'with-params.yaml'), [
       'name: flow-with-params',
       'params:',
@@ -505,11 +526,21 @@ describe('discoverTool', () => {
       'steps: []',
     ].join('\n'))
     process.chdir(dir)
-    const result = await discoverTool({}, getConfig)
+    const result = await discoverFlowDetailTool({ flowId: 'with-params.yaml' }, getConfig)
     unlinkSync(join(dir, 'with-params.yaml'))
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toContain('- **flowId**:')
     expect(text).toContain('flow-with-params')
     expect(text).toMatch(/\*\*id\*\* \(string.*required\)|\*\*count\*\* \(number\)/)
+    expect(result.isError).not.toBe(true)
+  })
+
+  it('returns error when flowId not in catalog', async () => {
+    process.chdir(FIXTURES_DIR)
+    const result = await discoverFlowDetailTool({ flowId: 'nonexistent-flow-id' }, getConfig)
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(text).toMatch(/Flow not found/)
+    expect(text).toContain('nonexistent-flow-id')
+    expect(result.isError).toBe(true)
   })
 })

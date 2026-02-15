@@ -174,6 +174,15 @@ async function getDiscoverCatalog(getConfig: GetConfigAndRegistry): Promise<Disc
   return catalog
 }
 
+const DEFAULT_DISCOVER_LIMIT = 10
+const MAX_DISCOVER_LIMIT = 10
+
+const listFlowsInputSchema = {
+  limit: z.number().int().min(1).max(MAX_DISCOVER_LIMIT).optional().describe(`Max number of flows to return (max ${MAX_DISCOVER_LIMIT}). Default: ${DEFAULT_DISCOVER_LIMIT}`),
+  offset: z.number().int().min(0).optional().describe('Number of flows to skip (for pagination). Default: 0.'),
+  keyword: z.string().optional().describe('Filter by file name, flow name, or description containing this string (case-insensitive). Omit to list all.'),
+}
+
 const API_PARAM_INS = new Set<ParamDeclaration['in']>(['path', 'query', 'body'])
 
 function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
@@ -204,7 +213,13 @@ function formatParamsSummary(params: ParamDeclaration[] | undefined): string {
   return lines.join('\n')
 }
 
-function formatDiscoverMarkdown(entries: DiscoverEntry[], limit: number, offset: number): string {
+/** Escape pipe for Markdown table cell so cell content does not break table. */
+function escapeTableCell(s: string): string {
+  return s.replace(/\n/g, ' ').replace(/\|/g, '\\|')
+}
+
+/** Format discover_flow_list output: Total line, Markdown table (flowId | name), optional pagination hint. */
+function formatDiscoverFlowListMarkdown(entries: DiscoverEntry[], limit: number, offset: number): string {
   const total = entries.length
   const slice = entries.slice(offset, offset + limit)
   if (slice.length === 0)
@@ -212,22 +227,37 @@ function formatDiscoverMarkdown(entries: DiscoverEntry[], limit: number, offset:
   const start = offset + 1
   const end = offset + slice.length
   const rangeLine = `Total: ${total} flows. Showing ${start}-${end}.\n\n`
-  const intro = `${rangeLine}flowId 若有斜線：檔案型為相對於 flowsDir 的相對路徑（子目錄會有斜線）；OpenAPI 型為 prefix-operation。\n\n`
-  const blocks = slice.map((e) => {
-    const flowId = e.flowId.replace(/\n/g, ' ')
-    const name = (e.name ?? '').replace(/\n/g, ' ')
-    const desc = (e.description ?? '').replace(/\n/g, ' ')
-    const paramsBlock = formatParamsSummary(e.params)
-    const parts = [
-      `- **flowId**: ${flowId}`,
-      `- **name**: ${name}`,
-      `- **description**: ${desc}`,
-    ]
-    if (paramsBlock)
-      parts.push(`- **params**:\n${paramsBlock.split('\n').map(l => `  ${l}`).join('\n')}`)
-    return parts.join('\n')
-  })
-  return `${intro}${blocks.join('\n\n---\n\n')}`
+  const header = '| flowId | name |'
+  const separator = '| --- | --- |'
+  const rows = slice.map(e =>
+    `| ${escapeTableCell(e.flowId)} | ${escapeTableCell(e.name ?? '')} |`,
+  )
+  const table = [header, separator, ...rows].join('\n')
+  const hasMore = offset + limit < total
+  const nextOffset = offset + limit
+  const paginationHint = hasMore ? `\n\nNext: offset=${nextOffset}` : ''
+  return `${rangeLine}${table}${paginationHint}`
+}
+
+/** discover_flow_list tool handler: list flows as compact table (flowId, name) with pagination hint. */
+export async function discoverFlowListTool(
+  args: { limit?: number, offset?: number, keyword?: string },
+  getConfig: GetConfigAndRegistry = getConfigAndRegistry,
+): Promise<CallToolResult> {
+  const { limit = DEFAULT_DISCOVER_LIMIT, offset = 0, keyword } = args
+  const catalog = await getDiscoverCatalog(getConfig)
+  const keywordLower = keyword?.toLowerCase()
+  const filtered = keywordLower == null
+    ? catalog
+    : catalog.filter(e =>
+        e.flowId.toLowerCase().includes(keywordLower)
+        || (e.name ?? '').toLowerCase().includes(keywordLower)
+        || (e.description ?? '').toLowerCase().includes(keywordLower),
+      )
+  const text = formatDiscoverFlowListMarkdown(filtered, limit, offset)
+  return {
+    content: [{ type: 'text' as const, text }],
+  }
 }
 
 /** Returns a function that loads config from current cwd on each call (no cache). Use when cwd or config may change between calls. */
@@ -348,7 +378,7 @@ export async function executeTool(
 }
 
 server.registerTool(
-  'execute',
+  'executor_flow',
   {
     description: 'Run a flow by flowId (file path or prefix-operation from config openapi). Returns success summary or error message.',
     inputSchema: runFlowInputSchema,
@@ -424,43 +454,62 @@ export function findFlowFiles(
   return out
 }
 
-const DEFAULT_DISCOVER_LIMIT = 10
-const MAX_DISCOVER_LIMIT = 10
+server.registerTool(
+  'discover_flow_list',
+  {
+    description: 'List flows from config (flowsDir YAML + OpenAPI) as compact table: flowId, name, type (file|openapi). Use keyword, limit, offset; pagination hint when more results exist.',
+    inputSchema: listFlowsInputSchema,
+  },
+  args => discoverFlowListTool(args),
+)
 
-const listFlowsInputSchema = {
-  limit: z.number().int().min(1).max(MAX_DISCOVER_LIMIT).optional().describe(`Max number of flows to return (max ${MAX_DISCOVER_LIMIT}). Default: ${DEFAULT_DISCOVER_LIMIT}`),
-  offset: z.number().int().min(0).optional().describe('Number of flows to skip (for pagination). Default: 0.'),
-  keyword: z.string().optional().describe('Filter by file name, flow name, or description containing this string (case-insensitive). Omit to list all.'),
+const discoverFlowDetailInputSchema = {
+  flowId: z.string().describe('Flow identifier to look up in the catalog (file path or prefix-operation).'),
 }
 
-/** Discover tool handler: lists flows from cached catalog (flowsDir + OpenAPI). Filter by keyword; optional offset for pagination; output includes total count and flowId, name, description, params (path/query/body only; body expanded). */
-export async function discoverTool(
-  args: { limit?: number, offset?: number, keyword?: string },
+/** Format single flow for discover_flow_detail: name, description, params (path/query/body expanded). */
+function formatFlowDetailMarkdown(entry: DiscoverEntry): string {
+  const flowId = entry.flowId.replace(/\n/g, ' ')
+  const name = (entry.name ?? '').replace(/\n/g, ' ')
+  const desc = (entry.description ?? '').replace(/\n/g, ' ')
+  const paramsBlock = formatParamsSummary(entry.params)
+  const parts = [
+    `- **flowId**: ${flowId}`,
+    `- **name**: ${name}`,
+    `- **description**: ${desc}`,
+  ]
+  if (paramsBlock)
+    parts.push(`- **params**:\n${paramsBlock.split('\n').map(l => `  ${l}`).join('\n')}`)
+  return parts.join('\n')
+}
+
+/** discover_flow_detail tool handler: return one flow's name, description, params by flowId. */
+export async function discoverFlowDetailTool(
+  args: { flowId: string },
   getConfig: GetConfigAndRegistry = getConfigAndRegistry,
 ): Promise<CallToolResult> {
-  const { limit = DEFAULT_DISCOVER_LIMIT, offset = 0, keyword } = args
+  const { flowId } = args
   const catalog = await getDiscoverCatalog(getConfig)
-  const keywordLower = keyword?.toLowerCase()
-  const filtered = keywordLower == null
-    ? catalog
-    : catalog.filter(e =>
-        e.flowId.toLowerCase().includes(keywordLower)
-        || (e.name ?? '').toLowerCase().includes(keywordLower)
-        || (e.description ?? '').toLowerCase().includes(keywordLower),
-      )
-  const text = formatDiscoverMarkdown(filtered, limit, offset)
+  const entry = catalog.find(e => e.flowId === flowId)
+  if (!entry) {
+    return {
+      content: [{ type: 'text' as const, text: `Flow not found: ${flowId}` }],
+      isError: true,
+    }
+  }
+  const text = formatFlowDetailMarkdown(entry)
   return {
     content: [{ type: 'text' as const, text }],
   }
 }
 
 server.registerTool(
-  'discover',
+  'discover_flow_detail',
   {
-    description: 'List flows from config (flowsDir YAML + OpenAPI). Returns total count and list: flowId, name, description, params (path/query/body only). Default limit 10, max 10. Use offset for pagination; keyword to filter (case-insensitive).',
-    inputSchema: listFlowsInputSchema,
+    description: 'Get one flow\'s full detail (name, description, params) by flowId from the catalog.',
+    inputSchema: discoverFlowDetailInputSchema,
   },
-  args => discoverTool(args),
+  args => discoverFlowDetailTool(args),
 )
 
 async function main() {

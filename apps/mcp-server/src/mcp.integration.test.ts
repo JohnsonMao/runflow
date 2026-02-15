@@ -28,9 +28,9 @@ describe('mcp over stdio (integration)', () => {
       await client.close()
   })
 
-  it.skipIf(!serverBuilt)('execute tool runs flow via client.callTool', async () => {
+  it.skipIf(!serverBuilt)('executor_flow tool runs flow via client.callTool', async () => {
     const response = await client!.callTool({
-      name: 'execute',
+      name: 'executor_flow',
       arguments: { flowId: 'flow.yaml' },
     }) as CallToolResult
     expect(response.isError).toBe(false)
@@ -39,9 +39,9 @@ describe('mcp over stdio (integration)', () => {
     expect(text).toMatch(/\*\*Success\*\*|step\(s\)/)
   })
 
-  it.skipIf(!serverBuilt)('execute tool returns error when flow file not found', async () => {
+  it.skipIf(!serverBuilt)('executor_flow tool returns error when flow file not found', async () => {
     const response = await client!.callTool({
-      name: 'execute',
+      name: 'executor_flow',
       arguments: { flowId: 'nonexistent.yaml' },
     }) as CallToolResult
     expect(response.isError).toBe(true)
@@ -49,14 +49,14 @@ describe('mcp over stdio (integration)', () => {
     expect(text).toMatch(/not found|File not found/)
   })
 
-  it.skipIf(!serverBuilt)('discover tool lists flows via client.callTool', async () => {
+  it.skipIf(!serverBuilt)('discover_flow_list tool lists flows via client.callTool', async () => {
     const response = await client!.callTool({
-      name: 'discover',
+      name: 'discover_flow_list',
       arguments: {},
     }) as CallToolResult
     const text = getTextContent(response)
     expect(text).not.toMatch(/^No flows found/)
-    expect(text).toContain('- **flowId**:')
+    expect(text).toContain('| flowId | name |')
     expect(text).toContain('fixture-flow')
   })
 })
