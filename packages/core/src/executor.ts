@@ -346,17 +346,38 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     }
   }
 
-  const runFlow = async (filePath: string, params: Record<string, unknown>): Promise<RunResult> => {
+  const runFlow = async (flowIdOrPath: string, params: Record<string, unknown>): Promise<RunResult> => {
+    if (flowCallDepth >= maxFlowCallDepth)
+      return { flowName: flow.name, success: false, steps: [], error: 'max flow-call depth exceeded' }
+
+    if (options.resolveFlow) {
+      try {
+        const resolved = await options.resolveFlow(flowIdOrPath)
+        if (!resolved)
+          return { flowName: flowIdOrPath, success: false, steps: [], error: 'flow not found or failed to load' }
+        return run(resolved.flow, {
+          params,
+          flowFilePath: resolved.flowFilePath,
+          flowCallDepth: flowCallDepth + 1,
+          maxFlowCallDepth,
+          registry,
+          resolveFlow: options.resolveFlow,
+        })
+      }
+      catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        return { flowName: flowIdOrPath, success: false, steps: [], error: message }
+      }
+    }
+
     const baseDir = options.flowFilePath ? resolve(dirname(options.flowFilePath)) : resolve(process.cwd())
-    const resolvedPath = isAbsolute(filePath) ? resolve(filePath) : resolve(baseDir, filePath)
+    const resolvedPath = isAbsolute(flowIdOrPath) ? resolve(flowIdOrPath) : resolve(baseDir, flowIdOrPath)
     const rel = relative(baseDir, resolvedPath)
     if (rel.startsWith('..') || rel === '..')
       return { flowName: flow.name, success: false, steps: [], error: 'flow path must be under current flow directory' }
-    if (flowCallDepth >= maxFlowCallDepth)
-      return { flowName: flow.name, success: false, steps: [], error: 'max flow-call depth exceeded' }
     const loaded = loadFromFile(resolvedPath)
     if (!loaded)
-      return { flowName: filePath, success: false, steps: [], error: 'flow not found or failed to load' }
+      return { flowName: flowIdOrPath, success: false, steps: [], error: 'flow not found or failed to load' }
     return run(loaded, {
       params,
       flowFilePath: resolvedPath,

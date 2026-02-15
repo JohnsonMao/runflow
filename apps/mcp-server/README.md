@@ -31,7 +31,7 @@ To use a specific config file:
 node apps/mcp-server/dist/index.js --config ./runflow.config.mjs
 ```
 
-Or set `RUNFLOW_CONFIG` to the config path (relative to cwd or absolute). The server discovers config from `--config`, `RUNFLOW_CONFIG`, or `runflow.config.mjs` / `runflow.config.js` in cwd.
+Config is resolved from `--config` or `runflow.config.mjs` / `runflow.config.js` in the current working directory.
 
 The server uses **stdio** transport: it reads JSON-RPC from stdin and writes responses to stdout. MCP clients spawn this process and connect via stdio.
 
@@ -51,8 +51,10 @@ Same format as the CLI:
 
   Result is returned as text: success summary or error message (and step id when a step fails).
 
+  When a flow contains a **flow step** (type `flow`), the step's `flow` field is resolved as a **flowId** (workspace path or prefix-operation) using the same config, so callee flows can be any file under flowsDir or any OpenAPI flow.
+
 - **discover** – List flows from config (flowsDir YAML files + OpenAPI-derived flows). Uses a cached catalog built when config is loaded.
-  - **limit** (optional): Max number of flows to return (default **20**, max 1000).
+  - **limit** (optional): Max number of flows to return (default **10**, max **10**).
   - **keyword** (optional): Filter by flowId, flow name, or description (case-insensitive). Omit to list all.
 
   Returns **Markdown** text in **list format**: each flow is a block with **flowId**, **name**, **description**, **params**. Params for API flows show only **path**, **query**, and **body** (no headers); **body** is expanded into key–value with type and description. Each param includes its description when present. **flowId** may contain slashes: for file flows it is the path relative to flowsDir (or cwd), so subdirectories yield slashes (e.g. `payment/flow.yaml`); for OpenAPI flows it is `prefix-operation`. When no flows match, returns a short message (e.g. "No flows found.").

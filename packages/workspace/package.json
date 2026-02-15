@@ -1,5 +1,5 @@
 {
-  "name": "@runflow/config",
+  "name": "@runflow/workspace",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@runflow/convention-openapi": "workspace:^"
+    "@runflow/convention-openapi": "workspace:^",
+    "@runflow/core": "workspace:*"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",

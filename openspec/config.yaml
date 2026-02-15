@@ -5,11 +5,12 @@ context: |
   Tech stack: TypeScript, Vitest, ESLint (@antfu/eslint-config), pnpm catalogs.
   
   Structure:
-  - apps/cli: flow run <file>; apps/mcp-server: MCP server (future GUI will reuse core).
+  - apps/cli: flow run/list/detail (no params subcommand; no --registry); config via --config or cwd.
+  - apps/mcp-server: MCP server (executor_flow, discover_flow_list, discover_flow_detail); config via --config or cwd (future GUI will reuse core).
   - packages/core: Flow engine – single source of truth for flow semantics. Defines FlowDefinition, FlowStep (types.ts), DAG (dag.ts), executor (executor.ts), loader, parser. Steps with dependsOn are in the DAG; today dependsOn: [] = root (trigger), no dependsOn = orphan (excluded).
   - packages/handlers: Step handlers (loop, http, condition, set, flow, …); consume FlowStep only, do not define flow structure.
   - packages/convention-openapi: OpenAPI → FlowDefinition (produces flow YAML with steps).
-  - packages/runflow-config: config schema/loading.
+  - packages/workspace: Workspace data and resolution only. Config (findConfigFile, loadConfig, resolveFlowId), discover (findFlowFiles, buildDiscoverCatalog, getDiscoverEntry; DEFAULT_DISCOVER_LIMIT and MAX_DISCOVER_LIMIT both 10), format (formatListAsMarkdown, formatDetailAsMarkdown), createResolveFlow for core. CLI and MCP consume workspace; registry comes from config.handlers only.
 
   Flow YAML: name, optional description, params, steps (id, type, dependsOn, …). Conventions: mao skill (types in types.ts, constants in constants.ts, describe/it, lint:fix).
   Future: MCP Server and GUI will reuse @runflow/core.

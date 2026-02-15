@@ -87,9 +87,6 @@ importers:
 
   apps/cli:
     dependencies:
-      '@runflow/config':
-        specifier: workspace:*
-        version: link:../../packages/runflow-config
       '@runflow/convention-openapi':
         specifier: workspace:^
         version: link:../../packages/convention-openapi
@@ -99,6 +96,9 @@ importers:
       '@runflow/handlers':
         specifier: workspace:^
         version: link:../../packages/handlers
+      '@runflow/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       commander:
         specifier: catalog:prod
         version: 12.1.0
@@ -133,9 +133,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: catalog:prod
         version: 1.26.0(zod@3.25.76)
-      '@runflow/config':
-        specifier: workspace:*
-        version: link:../../packages/runflow-config
       '@runflow/convention-openapi':
         specifier: workspace:^
         version: link:../../packages/convention-openapi
@@ -145,6 +142,9 @@ importers:
       '@runflow/handlers':
         specifier: workspace:^
         version: link:../../packages/handlers
+      '@runflow/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       commander:
         specifier: catalog:prod
         version: 12.1.0
@@ -276,11 +276,14 @@ importers:
         specifier: catalog:dev
         version: 2.1.9(@types/node@22.19.9)
 
-  packages/runflow-config:
+  packages/workspace:
     dependencies:
       '@runflow/convention-openapi':
         specifier: workspace:^
         version: link:../convention-openapi
+      '@runflow/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@antfu/eslint-config':
         specifier: catalog:dev

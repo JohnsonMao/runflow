@@ -64,7 +64,17 @@ export type RunSubFlowFn = (
   error?: string
 }>
 
-/** Run another flow by path; used by flow step handler. Returns RunResult (validation/load/run failures yield success: false + error). */
+/** Result of resolving a flowId to a runnable flow. Returned by optional RunOptions.resolveFlow. */
+export interface ResolvedFlow {
+  flow: FlowDefinition
+  /** Optional path for the flow (file path or spec path); used as flowFilePath for nested run. */
+  flowFilePath?: string
+}
+
+/** Resolver that turns a flowId (path or prefix-operation) into a flow. Used when provided in RunOptions. */
+export type ResolveFlowFn = (flowId: string) => Promise<ResolvedFlow | null>
+
+/** Run another flow by path or flowId; used by flow step handler. Returns RunResult (validation/load/run failures yield success: false + error). */
 export type RunFlowFn = (
   filePath: string,
   params: Record<string, unknown>,
@@ -163,6 +173,8 @@ export interface RunOptions {
   flowCallDepth?: number
   /** When set and non-empty, http steps only allow these hostnames (case-insensitive). Omit or empty = allow all. */
   allowedHttpHosts?: string[]
+  /** When set, flow steps resolve the step's flow string via this resolver (flowId → flow); allows workspace-wide and OpenAPI flows. When absent, path is resolved relative to caller's directory and loadFromFile only. */
+  resolveFlow?: ResolveFlowFn
 }
 
 export interface RunResult {

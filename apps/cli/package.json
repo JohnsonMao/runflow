@@ -17,10 +17,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@runflow/config": "workspace:*",
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
+    "@runflow/workspace": "workspace:*",
     "commander": "catalog:prod",
     "yaml": "catalog:prod"
   },

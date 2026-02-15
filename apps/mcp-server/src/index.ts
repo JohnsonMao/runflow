@@ -1,16 +1,27 @@
 // @env node
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { RunflowConfig } from '@runflow/config'
-import type { IStepHandler, ParamDeclaration, StepRegistry } from '@runflow/core'
-import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
+import type { IStepHandler, StepRegistry } from '@runflow/core'
+import type { DiscoverEntry, RunflowConfig } from '@runflow/workspace'
+import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { findConfigFile, loadConfig, resolveFlowId } from '@runflow/config'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile, run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
+import {
+  buildDiscoverCatalog,
+  createResolveFlow,
+  DEFAULT_DISCOVER_LIMIT,
+  findConfigFile,
+  formatDetailAsMarkdown,
+  formatListAsMarkdown,
+  getDiscoverEntry,
+  loadConfig,
+  MAX_DISCOVER_LIMIT,
+  resolveFlowId,
+} from '@runflow/workspace'
 import { createCommand } from 'commander'
 import { z } from 'zod'
 
@@ -28,9 +39,6 @@ const server = new McpServer({
 
 function getConfigPath(): string | null {
   const cwd = process.cwd()
-  const envPath = process.env.RUNFLOW_CONFIG
-  if (envPath)
-    return path.isAbsolute(envPath) ? envPath : path.resolve(cwd, envPath)
   const configPath = program.opts().config
   if (configPath)
     return path.isAbsolute(configPath) ? configPath : path.resolve(cwd, configPath)
@@ -88,77 +96,8 @@ function getConfigAndRegistry(): Promise<ConfigAndRegistry> {
   return loadPromise
 }
 
-export const DEFAULT_MAX_DEPTH = 32
-export const DEFAULT_MAX_FILES = 1000
-
-export interface DiscoverEntry {
-  flowId: string
-  name: string
-  description?: string
-  params?: ParamDeclaration[]
-}
-
-/** Build discover catalog: file flows from flowsDir + OpenAPI flows from config.openapi. Same lifecycle as config (no invalidation). */
-export async function buildDiscoverCatalog(
-  config: RunflowConfig | null,
-  configDir: string,
-  cwd: string,
-): Promise<DiscoverEntry[]> {
-  const baseDir = config?.flowsDir ? path.resolve(configDir, config.flowsDir) : cwd
-  const entries: DiscoverEntry[] = []
-
-  const flowFiles = findFlowFiles(baseDir, ['.yaml'], {
-    allowedRoot: baseDir,
-    maxDepth: DEFAULT_MAX_DEPTH,
-    maxFiles: DEFAULT_MAX_FILES,
-  })
-  for (const filePath of flowFiles) {
-    const flow = loadFromFile(filePath)
-    if (!flow)
-      continue
-    const flowId = path.relative(baseDir, filePath)
-    entries.push({
-      flowId: flowId || filePath,
-      name: flow.name,
-      description: flow.description,
-      params: flow.params,
-    })
-  }
-
-  const openapi = config?.openapi && typeof config.openapi === 'object' ? config.openapi : null
-  if (openapi) {
-    for (const [prefix, entry] of Object.entries(openapi)) {
-      if (!entry || typeof entry.specPath !== 'string')
-        continue
-      const specPath = path.isAbsolute(entry.specPath) ? entry.specPath : path.resolve(configDir, entry.specPath)
-      if (!existsSync(specPath) || !statSync(specPath).isFile())
-        continue
-      try {
-        const options: Parameters<typeof openApiToFlows>[1] = { output: 'memory' }
-        if (entry.baseUrl !== undefined)
-          options.baseUrl = entry.baseUrl
-        if (entry.operationFilter !== undefined)
-          options.operationFilter = entry.operationFilter
-        if (entry.hooks !== undefined)
-          options.hooks = entry.hooks
-        const flows = await openApiToFlows(specPath, options)
-        for (const [operationKey, flow] of flows) {
-          entries.push({
-            flowId: `${prefix}-${operationKey}`,
-            name: flow.name,
-            description: flow.description,
-            params: flow.params,
-          })
-        }
-      }
-      catch {
-        // skip failed prefix
-      }
-    }
-  }
-
-  return entries
-}
+export { DEFAULT_MAX_DEPTH, DEFAULT_MAX_FILES, findFlowFiles } from '@runflow/workspace'
+export type { DiscoverEntry, FindFlowFilesOptions } from '@runflow/workspace'
 
 let cachedCatalog: DiscoverEntry[] | null = null
 let catalogConfigSnapshot: { configDir: string, cwd: string } | null = null
@@ -174,69 +113,10 @@ async function getDiscoverCatalog(getConfig: GetConfigAndRegistry): Promise<Disc
   return catalog
 }
 
-const DEFAULT_DISCOVER_LIMIT = 10
-const MAX_DISCOVER_LIMIT = 10
-
 const listFlowsInputSchema = {
   limit: z.number().int().min(1).max(MAX_DISCOVER_LIMIT).optional().describe(`Max number of flows to return (max ${MAX_DISCOVER_LIMIT}). Default: ${DEFAULT_DISCOVER_LIMIT}`),
   offset: z.number().int().min(0).optional().describe('Number of flows to skip (for pagination). Default: 0.'),
   keyword: z.string().optional().describe('Filter by file name, flow name, or description containing this string (case-insensitive). Omit to list all.'),
-}
-
-const API_PARAM_INS = new Set<ParamDeclaration['in']>(['path', 'query', 'body'])
-
-function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
-  const lines: string[] = []
-  const req = p.required === true ? ', required' : ''
-  const desc = p.description ? ` — ${p.description.replace(/\n/g, ' ')}` : ''
-  lines.push(`${indent}- **${p.name}** (${p.type}${req})${desc}`)
-  if (p.type === 'object' && p.schema && Object.keys(p.schema).length > 0) {
-    for (const [k, v] of Object.entries(p.schema)) {
-      const req2 = v.required === true ? ', required' : ''
-      const desc2 = v.description ? ` — ${v.description.replace(/\n/g, ' ')}` : ''
-      lines.push(`${indent}  - **${k}** (${v.type}${req2})${desc2}`)
-    }
-  }
-  return lines
-}
-
-function formatParamsSummary(params: ParamDeclaration[] | undefined): string {
-  if (!params?.length)
-    return ''
-  const hasIn = params.some(p => p.in != null)
-  const filtered = hasIn ? params.filter(p => p.in != null && API_PARAM_INS.has(p.in)) : params
-  if (!filtered.length)
-    return ''
-  const lines: string[] = []
-  for (const p of filtered)
-    lines.push(...formatOneParam(p))
-  return lines.join('\n')
-}
-
-/** Escape pipe for Markdown table cell so cell content does not break table. */
-function escapeTableCell(s: string): string {
-  return s.replace(/\n/g, ' ').replace(/\|/g, '\\|')
-}
-
-/** Format discover_flow_list output: Total line, Markdown table (flowId | name), optional pagination hint. */
-function formatDiscoverFlowListMarkdown(entries: DiscoverEntry[], limit: number, offset: number): string {
-  const total = entries.length
-  const slice = entries.slice(offset, offset + limit)
-  if (slice.length === 0)
-    return total === 0 ? 'No flows found.' : `Total: ${total} flows. No flows in this range (offset ${offset}).`
-  const start = offset + 1
-  const end = offset + slice.length
-  const rangeLine = `Total: ${total} flows. Showing ${start}-${end}.\n\n`
-  const header = '| flowId | name |'
-  const separator = '| --- | --- |'
-  const rows = slice.map(e =>
-    `| ${escapeTableCell(e.flowId)} | ${escapeTableCell(e.name ?? '')} |`,
-  )
-  const table = [header, separator, ...rows].join('\n')
-  const hasMore = offset + limit < total
-  const nextOffset = offset + limit
-  const paginationHint = hasMore ? `\n\nNext: offset=${nextOffset}` : ''
-  return `${rangeLine}${table}${paginationHint}`
 }
 
 /** discover_flow_list tool handler: list flows as compact table (flowId, name) with pagination hint. */
@@ -254,7 +134,7 @@ export async function discoverFlowListTool(
         || (e.name ?? '').toLowerCase().includes(keywordLower)
         || (e.description ?? '').toLowerCase().includes(keywordLower),
       )
-  const text = formatDiscoverFlowListMarkdown(filtered, limit, offset)
+  const text = formatListAsMarkdown(filtered, limit, offset)
   return {
     content: [{ type: 'text' as const, text }],
   }
@@ -355,12 +235,14 @@ export async function executeTool(
       isError: true,
     }
   }
+  const resolveFlow = createResolveFlow(config, configDir, cwd)
   const effectiveParams = { ...(config?.params ?? {}), ...(params ?? {}) }
   try {
     const result = await run(flow, {
       registry,
       params: Object.keys(effectiveParams).length ? effectiveParams : undefined,
       flowFilePath,
+      resolveFlow,
     })
     const text = formatRunResult(result)
     return {
@@ -386,74 +268,6 @@ server.registerTool(
   args => executeTool(args),
 )
 
-export interface FindFlowFilesOptions {
-  /** If set, baseDir must be under this path (resolved); otherwise returns []. */
-  allowedRoot?: string
-  /** Maximum recursion depth (default DEFAULT_MAX_DEPTH). */
-  maxDepth?: number
-  /** Stop after collecting this many file paths (default DEFAULT_MAX_FILES). */
-  maxFiles?: number
-}
-
-/** Recursively find flow files in baseDir by extension. Does not follow symlinks. */
-export function findFlowFiles(
-  baseDir: string,
-  extensions: readonly string[],
-  options: FindFlowFilesOptions = {},
-): string[] {
-  const base = path.resolve(baseDir)
-  if (!existsSync(base))
-    return []
-  const stat = lstatSync(base)
-  if (stat.isSymbolicLink())
-    return []
-  if (!stat.isDirectory())
-    return []
-  const allowedRoot = options.allowedRoot != null ? path.resolve(options.allowedRoot) : undefined
-  if (allowedRoot != null) {
-    const rel = path.relative(allowedRoot, base)
-    if (rel.startsWith('..') || path.isAbsolute(rel))
-      return []
-  }
-  const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
-  const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES
-  const out: string[] = []
-  const state = { stopped: false }
-  const walk = (d: string, depth: number) => {
-    if (state.stopped || depth > maxDepth) {
-      return
-    }
-    let entries: Array<{ name: string, isDirectory: () => boolean, isFile: () => boolean, isSymbolicLink: () => boolean }>
-    try {
-      entries = readdirSync(d, { withFileTypes: true }) as typeof entries
-    }
-    catch {
-      return
-    }
-    for (const e of entries) {
-      if (state.stopped) {
-        break
-      }
-      if (e.isSymbolicLink()) {
-        continue
-      }
-      const name = String(e.name)
-      const full = path.join(d, name)
-      if (e.isDirectory() && name !== 'node_modules' && !name.startsWith('.')) {
-        walk(full, depth + 1)
-      }
-      else if (e.isFile() && extensions.some(ext => name.toLowerCase().endsWith(ext))) {
-        out.push(full)
-        if (out.length >= maxFiles) {
-          state.stopped = true
-        }
-      }
-    }
-  }
-  walk(base, 0)
-  return out
-}
-
 server.registerTool(
   'discover_flow_list',
   {
@@ -467,22 +281,6 @@ const discoverFlowDetailInputSchema = {
   flowId: z.string().describe('Flow identifier to look up in the catalog (file path or prefix-operation).'),
 }
 
-/** Format single flow for discover_flow_detail: name, description, params (path/query/body expanded). */
-function formatFlowDetailMarkdown(entry: DiscoverEntry): string {
-  const flowId = entry.flowId.replace(/\n/g, ' ')
-  const name = (entry.name ?? '').replace(/\n/g, ' ')
-  const desc = (entry.description ?? '').replace(/\n/g, ' ')
-  const paramsBlock = formatParamsSummary(entry.params)
-  const parts = [
-    `- **flowId**: ${flowId}`,
-    `- **name**: ${name}`,
-    `- **description**: ${desc}`,
-  ]
-  if (paramsBlock)
-    parts.push(`- **params**:\n${paramsBlock.split('\n').map(l => `  ${l}`).join('\n')}`)
-  return parts.join('\n')
-}
-
 /** discover_flow_detail tool handler: return one flow's name, description, params by flowId. */
 export async function discoverFlowDetailTool(
   args: { flowId: string },
@@ -490,14 +288,14 @@ export async function discoverFlowDetailTool(
 ): Promise<CallToolResult> {
   const { flowId } = args
   const catalog = await getDiscoverCatalog(getConfig)
-  const entry = catalog.find(e => e.flowId === flowId)
+  const entry = getDiscoverEntry(catalog, flowId)
   if (!entry) {
     return {
       content: [{ type: 'text' as const, text: `Flow not found: ${flowId}` }],
       isError: true,
     }
   }
-  const text = formatFlowDetailMarkdown(entry)
+  const text = formatDetailAsMarkdown(entry)
   return {
     content: [{ type: 'text' as const, text }],
   }

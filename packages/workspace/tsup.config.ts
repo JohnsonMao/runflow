@@ -7,5 +7,4 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   sourcemap: true,
-  external: ['@runflow/convention-openapi'],
 })

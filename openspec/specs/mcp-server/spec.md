@@ -50,7 +50,7 @@ The server SHALL depend on @runflow/core (loader, run, types) and @runflow/handl
 
 ### Requirement: MCP Server MAY read runflow.config
 
-The server MAY load runflow.config (e.g. runflow.config.mjs, runflow.config.js, or runflow.config.json) from the process working directory or from a path supplied at server startup (e.g. via argv or env). When present, the config SHALL be used for flowId resolution and optional registry extension.
+The server MAY load runflow.config (e.g. runflow.config.mjs, runflow.config.js, or runflow.config.json) from the process working directory or from a path supplied at server startup (e.g. via argv `--config`). When present, the config SHALL be used for flowId resolution and optional registry extension (handlers only; no extra registry module).
 
 #### Scenario: Config with flowsDir
 
@@ -81,7 +81,7 @@ When the server exposes the **discover_flow_list** tool, the server SHALL build 
 1. **File flows**: All valid flow files under config.flowsDir (or cwd when flowsDir is not set), discovered by scanning for `.yaml` files with the same rules as today (e.g. recursive, no symlinks, within allowedRoot).
 2. **OpenAPI flows**: For each prefix in config.openapi, the server SHALL load the corresponding spec (specPath) and SHALL convert operations to flows using the same convention as executor_flow (e.g. openApiToFlows). Each such flow SHALL be represented in the catalog with flowId equal to `prefix-operation`.
 
-The discover_flow_list tool SHALL query this catalog (with optional keyword, limit, and offset) and SHALL NOT re-scan the filesystem or re-parse OpenAPI specs on each call. The catalog MAY be built lazily (e.g. on first list/detail or first config load) and MAY be invalidated when config is reloaded (if the server supports config reload).
+The discover_flow_list tool SHALL query this catalog (with optional keyword, limit, and offset). The default and maximum value for limit SHALL be 10 (DEFAULT_DISCOVER_LIMIT and MAX_DISCOVER_LIMIT). The catalog SHALL NOT be re-scanned or re-parsed on each call. The catalog MAY be built lazily (e.g. on first list/detail or first config load) and MAY be invalidated when config is reloaded (if the server supports config reload).
 
 #### Scenario: discover_flow_list returns file flows and OpenAPI flows
 

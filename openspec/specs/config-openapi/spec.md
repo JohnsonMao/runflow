@@ -8,7 +8,7 @@
 
 ### Requirement: Config file format and discovery
 
-The runflow config SHALL be loaded from a file. The implementation SHALL discover config by looking for the first existing file in the current working directory (or from a path given by `--config` or env) in this order: **runflow.config.mjs**, **runflow.config.js**, **runflow.config.json**. When the file extension is **.json**, the file SHALL be valid JSON and the root object SHALL be the config (no `default` export). When the extension is **.mjs** or **.js**, the module SHALL export a default object (the config). Paths inside the config SHALL be resolved relative to the directory of the config file.
+The runflow config SHALL be loaded from a file. The implementation SHALL discover config by looking for the first existing file in the current working directory (or from a path given by `--config`) in this order: **runflow.config.mjs**, **runflow.config.js**, **runflow.config.json**. When the file extension is **.json**, the file SHALL be valid JSON and the root object SHALL be the config (no `default` export). When the extension is **.mjs** or **.js**, the module SHALL export a default object (the config). Paths inside the config SHALL be resolved relative to the directory of the config file.
 
 #### Scenario: Config discovered by file order in cwd
 

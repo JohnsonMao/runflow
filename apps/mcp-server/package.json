@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:prod",
-    "@runflow/config": "workspace:*",
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
+    "@runflow/workspace": "workspace:*",
     "commander": "catalog:prod",
     "zod": "catalog:prod"
   },

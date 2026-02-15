@@ -696,6 +696,74 @@ describe('run', () => {
     expect(out?.error).toMatch(/not found|failed to load/)
   })
 
+  it('runFlow with injected resolveFlow resolves flowId and runs returned flow; nested flow step uses same resolver', async () => {
+    const calleeFlow: FlowDefinition = {
+      name: 'resolved-callee',
+      steps: [{ id: 'c1', type: 'step', dependsOn: [] }],
+    }
+    const resolveFlow = async (flowId: string) => {
+      if (flowId === 'my-flow-id')
+        return { flow: calleeFlow, flowFilePath: '/virtual/resolved.yaml' }
+      return null
+    }
+    const flowHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        if (!ctx.runFlow)
+          return ctx.stepResult(step.id, false, { error: 'no runFlow' })
+        const flowId = step.flow as string
+        const runResult = await ctx.runFlow(flowId, {})
+        return ctx.stepResult(step.id, runResult.success, {
+          outputs: runResult.success ? { merged: true } : { error: runResult.error },
+          subSteps: runResult.steps,
+        })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.flow = flowHandler
+    const flow: FlowDefinition = {
+      name: 'caller',
+      steps: [{ id: 'f1', type: 'flow', flow: 'my-flow-id', dependsOn: [] }],
+    }
+    const result = await run(flow, {
+      registry: reg,
+      resolveFlow,
+    })
+    expect(result.success).toBe(true)
+    const f1 = result.steps.find(s => s.stepId === 'f1')
+    expect(f1?.success).toBe(true)
+    expect(f1?.outputs?.merged).toBe(true)
+    const c1 = result.steps.find(s => s.stepId === 'f1.c1')
+    expect(c1).toBeDefined()
+    expect(c1?.success).toBe(true)
+  })
+
+  it('runFlow with resolveFlow returning null yields flow not found error', async () => {
+    const resolveFlow = async (): Promise<{ flow: FlowDefinition, flowFilePath?: string } | null> => null
+    const flowHandler: IStepHandler = {
+      validate: () => true,
+      kill: () => {},
+      run: async (step: FlowStep, ctx: StepContext) => {
+        if (!ctx.runFlow)
+          return ctx.stepResult(step.id, false, { error: 'no runFlow' })
+        const runResult = await ctx.runFlow('unknown-id', {})
+        return ctx.stepResult(step.id, runResult.success, { error: runResult.error })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.flow = flowHandler
+    const flow: FlowDefinition = {
+      name: 'caller',
+      steps: [{ id: 'f1', type: 'flow', flow: 'unknown-id', dependsOn: [] }],
+    }
+    const result = await run(flow, { registry: reg, resolveFlow })
+    expect(result.success).toBe(false)
+    const f1 = result.steps.find(s => s.stepId === 'f1')
+    expect(f1?.success).toBe(false)
+    expect(f1?.error).toMatch(/not found|failed to load/)
+  })
+
   describe('runSubFlow / runStepById (via handler that calls runSubFlow)', () => {
     /** Handler that runs body step ids as a subflow and returns aggregated result. */
     const subflowRunnerHandler: IStepHandler = {

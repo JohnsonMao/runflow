@@ -6,5 +6,5 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   sourcemap: true,
-  external: ['@runflow/config', '@runflow/convention-openapi', '@runflow/core', '@runflow/handlers', 'yaml'],
+  external: ['@runflow/convention-openapi', '@runflow/core', '@runflow/handlers', '@runflow/workspace', 'yaml'],
 })

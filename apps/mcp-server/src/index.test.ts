@@ -366,6 +366,41 @@ describe('executeTool', () => {
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
     expect(text).toMatch(/Run error|error/i)
   })
+
+  it('flow step can call another flow by workspace path when resolveFlow is passed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-flow-step-ws-'))
+    const flowsDir = join(dir, 'flows')
+    mkdirSync(flowsDir, { recursive: true })
+    const configPath = join(dir, 'runflow.config.mjs')
+    writeFileSync(configPath, 'export default { flowsDir: "flows" }\n')
+    const mainPath = join(flowsDir, 'main.yaml')
+    const subPath = join(flowsDir, 'sub.yaml')
+    writeFileSync(mainPath, [
+      'name: main-flow',
+      'steps:',
+      '  - id: call',
+      '    type: flow',
+      '    flow: sub.yaml',
+      '    dependsOn: []',
+    ].join('\n'))
+    writeFileSync(subPath, [
+      'name: sub-flow',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { x: 1 }',
+      '    dependsOn: []',
+    ].join('\n'))
+    process.chdir(dir)
+    const result = await executeTool({ flowId: 'main.yaml' }, getConfig)
+    unlinkSync(configPath)
+    unlinkSync(mainPath)
+    unlinkSync(subPath)
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(result.isError).toBe(false)
+    expect(text).toMatch(/\*\*Success\*\*|main-flow|step\(s\)/)
+    expect(text).toMatch(/call\.s1|call/)
+  })
 })
 
 describe('discoverFlowListTool', () => {

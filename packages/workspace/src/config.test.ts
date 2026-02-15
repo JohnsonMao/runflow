@@ -1,4 +1,4 @@
-import type { ResolvedFileFlow, ResolvedOpenApiFlow, RunflowConfig } from './index'
+import type { ResolvedFileFlow, ResolvedOpenApiFlow, RunflowConfig } from './config'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -8,7 +8,7 @@ import {
   findConfigFile,
   loadConfig,
   resolveFlowId,
-} from './index'
+} from './config'
 
 describe('loadConfig', () => {
   it('returns null when path does not exist', async () => {

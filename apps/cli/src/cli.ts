@@ -3,10 +3,21 @@ import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { findConfigFile, loadConfig, resolveFlowId } from '@runflow/config'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile, run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
+import {
+  buildDiscoverCatalog,
+  createResolveFlow,
+  DEFAULT_DISCOVER_LIMIT,
+  findConfigFile,
+  formatDetailAsMarkdown,
+  formatListAsMarkdown,
+  getDiscoverEntry,
+  loadConfig,
+  MAX_DISCOVER_LIMIT,
+  resolveFlowId,
+} from '@runflow/workspace'
 import { createCommand } from 'commander'
 
 export const program = createCommand()
@@ -87,8 +98,7 @@ program
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
-  .option('--registry <path>', 'Path to a JS/ESM module that exports default (StepRegistry); merged after config handlers', undefined)
-  .action(async (flowId: string | undefined, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string, registry?: string }) => {
+  .action(async (flowId: string | undefined, options: { dryRun?: boolean, verbose?: boolean, param?: string[], paramsFile?: string, f?: string, config?: string }) => {
     const cwd = process.cwd()
     if (!flowId) {
       console.error('Error: flowId is required (file path or prefix-operation e.g. my-api-get-users).')
@@ -137,40 +147,16 @@ program
       const cliParams = parseParamPairs(options.param)
       params = { ...params, ...cliParams }
     }
-    let registry: StepRegistry
-    if (configPath) {
-      registry = await buildRegistryFromConfig(configPath)
-    }
-    else {
-      registry = createBuiltinRegistry()
-    }
-    if (options.registry) {
-      const resolved = path.resolve(cwd, options.registry)
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-        console.error(`Error: Registry file not found: ${resolved}`)
-        process.exit(1)
-      }
-      try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: StepRegistry }
-        const extra = mod.default
-        if (extra && typeof extra === 'object') {
-          for (const [type, handler] of Object.entries(extra)) {
-            if (handler && typeof handler.run === 'function')
-              registry[type] = handler
-          }
-        }
-      }
-      catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        console.error(`Error: Failed to load registry: ${msg}`)
-        process.exit(1)
-      }
-    }
+    const registry: StepRegistry = configPath
+      ? await buildRegistryFromConfig(configPath)
+      : createBuiltinRegistry()
+    const resolveFlow = createResolveFlow(config, configDir, cwd)
     const result = await run(flow, {
       dryRun: options.dryRun,
       params: Object.keys(params).length ? params : undefined,
       flowFilePath,
       registry,
+      resolveFlow,
     })
     if (options.verbose) {
       for (const step of result.steps) {
@@ -191,52 +177,58 @@ program
   })
 
 program
-  .command('params <flowId>')
-  .description('List parameters declared by a flow (flowId: file path or prefix-operation)')
+  .command('list')
+  .description('List flows (file flows under flowsDir/cwd + OpenAPI flows from config), same as MCP discover_flow_list')
+  .option('--limit <n>', 'Max number of flows to return', (v: string) => Number.parseInt(v, 10), DEFAULT_DISCOVER_LIMIT)
+  .option('--offset <n>', 'Number of flows to skip (pagination)', (v: string) => Number.parseInt(v, 10), 0)
+  .option('--keyword <s>', 'Filter by flowId, name, or description (case-insensitive)', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs', undefined)
-  .action(async (flowId: string, options: { config?: string }) => {
+  .option('--json', 'Output raw JSON (entries + total) for programmatic use', false)
+  .action(async (options: { limit?: number, offset?: number, keyword?: string, config?: string, json?: boolean }) => {
     const cwd = process.cwd()
-    const configPath = options.config
-      ? path.resolve(cwd, options.config)
-      : findConfigFile(cwd)
+    const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
     const config = configPath ? await loadConfig(configPath) : null
     const configDir = configPath ? path.dirname(configPath) : cwd
-    const resolved = resolveFlowId(flowId, config, configDir, cwd)
-    let flow: Awaited<ReturnType<typeof loadFromFile>>
-    if (resolved.type === 'openapi') {
-      if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile()) {
-        console.error(`Error: OpenAPI spec not found: ${resolved.specPath}`)
-        process.exit(1)
-      }
-      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
-      flow = flows.get(resolved.operation) ?? null
-    }
-    else {
-      if (!existsSync(resolved.path) || !statSync(resolved.path).isFile()) {
-        console.error(`Error: File not found or not a regular file: ${resolved.path}`)
-        process.exit(1)
-      }
-      flow = loadFromFile(resolved.path)
-    }
-    if (!flow) {
-      console.error('Error: Invalid or unreadable flow.')
-      process.exit(1)
-    }
-    if (!flow.params?.length) {
-      console.log('No params declared.')
+    const catalog = await buildDiscoverCatalog(config, configDir, cwd)
+    const keywordLower = options.keyword?.toLowerCase()
+    const filtered = keywordLower == null
+      ? catalog
+      : catalog.filter(e =>
+          e.flowId.toLowerCase().includes(keywordLower)
+          || (e.name ?? '').toLowerCase().includes(keywordLower)
+          || (e.description ?? '').toLowerCase().includes(keywordLower),
+        )
+    const limit = Math.min(Math.max(1, options.limit ?? DEFAULT_DISCOVER_LIMIT), MAX_DISCOVER_LIMIT)
+    const offset = Math.max(0, options.offset ?? 0)
+    if (options.json) {
+      const slice = filtered.slice(offset, offset + limit)
+      console.log(JSON.stringify({ total: filtered.length, entries: slice }, null, 2))
       return
     }
-    for (const p of flow.params) {
-      const parts = [
-        `  ${p.name}:`,
-        `    type: ${p.type}`,
-        p.required === true ? '    required: true' : null,
-        p.default !== undefined ? `    default: ${JSON.stringify(p.default)}` : null,
-        p.enum?.length ? `    enum: [${p.enum.map(v => JSON.stringify(v)).join(', ')}]` : null,
-        p.description ? `    description: ${p.description}` : null,
-      ].filter(Boolean)
-      console.log(parts.join('\n'))
+    console.log(formatListAsMarkdown(filtered, limit, offset))
+  })
+
+program
+  .command('detail <flowId>')
+  .description('Show one flow\'s detail (name, description, params) by flowId, same as MCP discover_flow_detail')
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .option('--json', 'Output raw JSON (entry) for programmatic use', false)
+  .action(async (flowId: string, options: { config?: string, json?: boolean }) => {
+    const cwd = process.cwd()
+    const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
+    const config = configPath ? await loadConfig(configPath) : null
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    const catalog = await buildDiscoverCatalog(config, configDir, cwd)
+    const entry = getDiscoverEntry(catalog, flowId)
+    if (!entry) {
+      console.error(`Error: Flow not found: ${flowId}`)
+      process.exit(1)
     }
+    if (options.json) {
+      console.log(JSON.stringify(entry, null, 2))
+      return
+    }
+    console.log(formatDetailAsMarkdown(entry))
   })
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
