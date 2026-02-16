@@ -43,7 +43,7 @@ describe('flowDefinitionToGraphForVisualization', () => {
     expect(graph.edges.some(e => e.target === 'loop' && e.source === 'orphan')).toBe(false)
   })
 
-  it('connect nodes get shape process not end (multiple connect)', () => {
+  it('adds loopBack from multiple connect nodes and gives them shape process', () => {
     const flow: FlowDefinition = {
       name: 'multi-connect',
       steps: [
@@ -56,10 +56,8 @@ describe('flowDefinitionToGraphForVisualization', () => {
     const graph = flowDefinitionToGraphForVisualization(flow)
     expect(graph.edges).toContainEqual({ source: 'A3', target: 'loop', kind: 'loopBack' })
     expect(graph.edges).toContainEqual({ source: 'nodeB', target: 'loop', kind: 'loopBack' })
-    const nodeA3 = graph.nodes.find(n => n.id === 'A3')
-    const nodeB = graph.nodes.find(n => n.id === 'nodeB')
-    expect(nodeA3?.shape).toBe('process')
-    expect(nodeB?.shape).toBe('process')
+    expect(graph.nodes.find(n => n.id === 'A3')?.shape).toBe('process')
+    expect(graph.nodes.find(n => n.id === 'nodeB')?.shape).toBe('process')
   })
 
   it('merges connect and end so both get loopBack and shape process', () => {

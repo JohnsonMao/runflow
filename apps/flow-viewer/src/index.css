@@ -111,19 +111,8 @@
   @apply h-screen w-screen;
 }
 
-/* React Flow DOM overrides (no direct class on nodes) */
-.react-flow__edge-label {
-  @apply text-[13px] font-bold fill-foreground;
-}
-.react-flow__edge-labelwrapper {
-  @apply rounded-md border border-border bg-card p-1.5 shadow-sm;
-}
-.react-flow__edge-labelwrapper .react-flow__edge-label {
-  @apply text-[13px];
-}
-
 .react-flow__edge.flow-edge-loop-back path {
-  stroke-dasharray: 8 6;
+  stroke-dasharray: 4 8;
   stroke: oklch(0.7 0.2 280);
 }
 .dark .react-flow__edge.flow-edge-loop-back path {

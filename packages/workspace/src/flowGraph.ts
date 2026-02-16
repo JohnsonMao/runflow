@@ -44,24 +44,31 @@ function getEdgeKind(edge: FlowGraphEdge, flow: FlowDefinition): FlowGraphEdgeKi
   return undefined
 }
 
+/** Derive node shape for CLI (mermaid) and view; single source of truth. */
 function nodeShape(
   node: { id: string, type?: string },
   dagEdges: FlowGraphEdge[],
+  connectSourceIds: Set<string>,
 ): FlowGraphNodeShape {
   if (node.type === 'condition')
     return 'decision'
+  if (node.type === 'loop')
+    return 'loop'
   const inDegree = dagEdges.filter(e => e.target === node.id).length
   const outDegree = dagEdges.filter(e => e.source === node.id).length
   if (inDegree === 0)
     return 'start'
-  if (outDegree === 0)
+  if (outDegree === 0) {
+    if (connectSourceIds.has(node.id))
+      return 'process'
     return 'end'
+  }
   return 'process'
 }
 
 /**
- * Build flow graph including loop back edges and edge kinds (loopBack, done, then, else) for visualization.
- * Node shape: condition → decision (diamond), no incoming edge → start (stadium), no outgoing edge → end (stadium), else process (rect).
+ * Build flow graph including loop back edges, edge kinds (loopBack, done, then, else), and node shape.
+ * Shape is set here so both CLI (mermaid) and flow-viewer get a consistent graph.
  */
 export function flowDefinitionToGraphForVisualization(flow: FlowDefinition): FlowGraph {
   const graph = flowDefinitionToGraph(flow)
@@ -72,12 +79,10 @@ export function flowDefinitionToGraphForVisualization(flow: FlowDefinition): Flo
     return kind ? { ...e, kind } : e
   })
   const connectSourceIds = new Set(loopBackEdges.map(e => e.source))
-  const nodes = graph.nodes.map((n) => {
-    let shape = nodeShape(n, dagEdgesWithKind)
-    if (shape === 'end' && connectSourceIds.has(n.id))
-      shape = 'process'
-    return { ...n, shape }
-  })
+  const nodes = graph.nodes.map(n => ({
+    ...n,
+    shape: nodeShape(n, dagEdgesWithKind, connectSourceIds),
+  }))
   return {
     ...graph,
     nodes,

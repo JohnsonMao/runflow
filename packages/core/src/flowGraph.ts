@@ -1,8 +1,8 @@
 import type { FlowDefinition, FlowStep } from './types'
 import { buildDAG } from './dag'
 
-/** Node shape for visualization: process (rect), decision (diamond), start/end (stadium). */
-export type FlowGraphNodeShape = 'process' | 'decision' | 'start' | 'end'
+/** Node shape for visualization: process (rect), decision (diamond), start/end (stadium), loop (rect). */
+export type FlowGraphNodeShape = 'process' | 'decision' | 'start' | 'end' | 'loop'
 
 /** Node in a flow graph (flow-graph-format). */
 export interface FlowGraphNode {
@@ -115,6 +115,7 @@ export function flowGraphToMermaid(graph: FlowGraph): string {
       case 'end':
         lines.push(`  ${safeId}(["${label}"])`)
         break
+      case 'loop':
       default:
         lines.push(`  ${safeId}["${label}"]`)
     }

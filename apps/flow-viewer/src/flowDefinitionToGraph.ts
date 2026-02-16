@@ -24,7 +24,11 @@ export interface FlowDefinitionInput {
   }>
 }
 
-function nodeShape(
+/**
+ * Derive node shape from graph structure and node type/label. For use by the view at render time.
+ * API (workspace) does not set shape; the view computes it when building the canvas.
+ */
+export function getNodeShape(
   node: { id: string, type?: string, label?: string },
   dagEdges: FlowGraphInput['edges'],
   connectSourceIds?: Set<string>,
@@ -33,6 +37,8 @@ function nodeShape(
     || (typeof node.label === 'string' && node.label.includes('(condition)'))
   if (isCondition)
     return 'decision'
+  if (node.type === 'loop')
+    return 'loop'
   const inDegree = dagEdges.filter(e => e.target === node.id).length
   const outDegree = dagEdges.filter(e => e.source === node.id).length
   if (inDegree === 0)
@@ -43,21 +49,6 @@ function nodeShape(
     return 'end'
   }
   return 'process'
-}
-
-/**
- * Fill missing node shape from graph structure and node type/label. Use after parsing graph JSON that may lack shape.
- */
-export function ensureNodeShapes(graph: FlowGraphInput): FlowGraphInput {
-  const dag = graph.edges.filter(e => e.kind !== 'loopBack')
-  const connectSourceIds = new Set(
-    graph.edges.filter(e => e.kind === 'loopBack').map(e => e.source),
-  )
-  const nodes = graph.nodes.map(n => ({
-    ...n,
-    shape: n.shape ?? nodeShape(n, dag, connectSourceIds),
-  }))
-  return { ...graph, nodes }
 }
 
 /**
@@ -112,7 +103,7 @@ export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraphInput
   }
   const nodesWithShape = nodes.map(n => ({
     ...n,
-    shape: nodeShape(n, edges.filter(e => e.kind !== 'loopBack'), connectSourceIds),
+    shape: getNodeShape(n, edges.filter(e => e.kind !== 'loopBack'), connectSourceIds),
   }))
   return {
     nodes: nodesWithShape,

@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FlowCanvas } from './FlowCanvas'
-import { ensureNodeShapes } from './flowDefinitionToGraph'
 
 interface WorkspaceStatus {
   workspaceRoot: string
@@ -131,7 +130,7 @@ export function App(): React.ReactElement {
           flowDescription: raw.flowDescription,
         }
         if (graphInput.nodes.length > 0)
-          setGraph(ensureNodeShapes(graphInput))
+          setGraph(graphInput)
         else
           setGraph(null)
       })

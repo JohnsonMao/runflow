@@ -148,7 +148,7 @@ function buildTreeFromCatalog(
 }
 
 function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, configDir: string } {
-  const env = process.env[WORKSPACE_ROOT_ENV]
+  const env = process.env[WORKSPACE_ROOT_ENV] || '../../workspace'
   const base = env && env.trim() ? path.resolve(env) : process.cwd()
 
   if (existsSync(base) && statSync(base).isFile()) {
