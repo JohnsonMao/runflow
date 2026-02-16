@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+#root {
+  @apply h-screen w-screen;
+}
+
+/* React Flow 輸出的 DOM，僅覆寫樣式（無法在元件上直接加 class） */
+.react-flow__edge-label {
+  @apply text-[13px] font-bold fill-slate-900;
+}
+.react-flow__edge-labelwrapper {
+  @apply rounded-md border border-slate-300 bg-white p-1.5 shadow-sm;
+}
+.react-flow__edge-labelwrapper .react-flow__edge-label {
+  @apply text-[13px];
+}
+
+.react-flow__edge.flow-edge-loop-back path {
+  stroke-dasharray: 8 6;
+  stroke: #7c3aed;
+}

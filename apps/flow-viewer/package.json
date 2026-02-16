@@ -1,0 +1,30 @@
+{
+  "name": "@runflow/flow-viewer",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dagre": "catalog:dev",
+    "react": "catalog:frontend",
+    "react-dom": "catalog:frontend",
+    "reactflow": "catalog:frontend"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
+    "@tailwindcss/vite": "catalog:frontend",
+    "@types/dagre": "catalog:dev",
+    "@types/react": "catalog:frontend",
+    "@types/react-dom": "catalog:frontend",
+    "@vitejs/plugin-react": "catalog:dev",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:dev",
+    "vite": "catalog:dev"
+  }
+}

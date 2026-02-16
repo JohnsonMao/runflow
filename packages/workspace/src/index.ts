@@ -21,6 +21,7 @@ export {
 } from './discover'
 export type { DiscoverEntry, FindFlowFilesOptions } from './discover'
 export { findFlowFiles } from './discover'
+export { flowDefinitionToGraphForVisualization } from './flowGraph'
 export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'
 export { loadFlowFromResolved, resolveAndLoadFlow } from './loadFlow'
 export type { LoadedFlow } from './loadFlow'

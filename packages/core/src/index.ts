@@ -1,5 +1,7 @@
 export { topologicalSort, validateDAG } from './dag'
 export { run } from './executor'
+export { flowDefinitionToGraph, flowGraphToJson, flowGraphToMermaid } from './flowGraph'
+export type { FlowGraph, FlowGraphEdge, FlowGraphEdgeKind, FlowGraphJson, FlowGraphNode, FlowGraphNodeShape } from './flowGraph'
 export { loadFromFile } from './loader'
 export { parse } from './parser'
 export { evaluate, evaluateToBoolean, SafeExpressionError } from './safeExpression'

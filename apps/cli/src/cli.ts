@@ -3,13 +3,14 @@ import type { IStepHandler, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { run } from '@runflow/core'
+import { flowGraphToJson, flowGraphToMermaid, run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   createResolveFlow,
   DEFAULT_DISCOVER_LIMIT,
   findConfigFile,
+  flowDefinitionToGraphForVisualization,
   formatDetailAsMarkdown,
   formatListAsMarkdown,
   getDiscoverEntry,
@@ -221,6 +222,37 @@ program
       return
     }
     console.log(formatDetailAsMarkdown(entry))
+  })
+
+type ViewOutputFormat = 'mermaid' | 'json'
+
+program
+  .command('view <flowId>')
+  .description('Output flow graph as Mermaid or JSON (flow-graph-format)')
+  .option('--output <format>', 'Output format: mermaid (default) or json', 'mermaid')
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .action(async (flowId: string, options: { output?: string, config?: string }) => {
+    const cwd = process.cwd()
+    const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
+    const config = configPath ? await loadConfig(configPath) : null
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    let loaded: Awaited<ReturnType<typeof resolveAndLoadFlow>>
+    try {
+      loaded = await resolveAndLoadFlow(flowId, config, configDir, cwd)
+    }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`Error: ${msg}`)
+      process.exit(1)
+    }
+    const graph = flowDefinitionToGraphForVisualization(loaded.flow)
+    const format = (options.output ?? 'mermaid').toLowerCase() as ViewOutputFormat
+    if (format === 'json') {
+      console.log(JSON.stringify(flowGraphToJson(graph), null, 2))
+    }
+    else {
+      console.log(flowGraphToMermaid(graph))
+    }
   })
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
