@@ -50,6 +50,17 @@ export function formatListAsMarkdown(entries: DiscoverEntry[], limit: number, of
   return `${rangeLine}${table}${paginationHint}`
 }
 
+function formatStepsSummary(steps: DiscoverEntry['steps']): string {
+  if (!steps?.length)
+    return ''
+  const lines = steps.map((s) => {
+    const namePart = s.name ? ` — ${escapeTableCell(s.name)}` : ''
+    const descPart = s.description ? `\n    ${escapeTableCell(s.description).replace(/\\n/g, '\n    ')}` : ''
+    return `  - **${s.id}**${s.type ? ` (${s.type})` : ''}${namePart}${descPart}`
+  })
+  return `- **steps**:\n${lines.join('\n')}`
+}
+
 export function formatDetailAsMarkdown(entry: DiscoverEntry): string {
   const flowId = entry.flowId.replace(/\n/g, ' ')
   const name = (entry.name ?? '').replace(/\n/g, ' ')
@@ -62,5 +73,8 @@ export function formatDetailAsMarkdown(entry: DiscoverEntry): string {
   ]
   if (paramsBlock)
     parts.push(`- **params**:\n${paramsBlock.split('\n').map(l => `  ${l}`).join('\n')}`)
+  const stepsBlock = formatStepsSummary(entry.steps)
+  if (stepsBlock)
+    parts.push(stepsBlock)
   return parts.join('\n')
 }

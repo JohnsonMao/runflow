@@ -1,5 +1,5 @@
 import type { Edge, Node, NodeProps } from 'reactflow'
-import type { FlowGraphInput } from './types'
+import type { FlowGraphInput, FlowGraphInputNode } from './types'
 import {
   Background,
   Controls,
@@ -12,12 +12,13 @@ import {
 } from 'reactflow'
 import { getNodeShape } from './flowDefinitionToGraph'
 import { layoutGraph } from './layout'
+import { cn } from './lib/utils'
 
 interface FlowCanvasProps {
   graph: FlowGraphInput
 }
 
-function nodeType(shape?: FlowGraphInput['nodes'][number]['shape']): string {
+function nodeType(shape?: FlowGraphInputNode['shape']): string {
   if (shape === 'decision')
     return 'decision'
   if (shape === 'loop')
@@ -27,23 +28,29 @@ function nodeType(shape?: FlowGraphInput['nodes'][number]['shape']): string {
   return 'process'
 }
 
-function ProcessNode({ data }: NodeProps): React.ReactElement {
+function ProcessNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
   return (
-    <div className="flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm">
+    <div
+      className="flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm"
+      title={data.description}
+    >
       <Handle type="target" position={Position.Top} />
       <div className="max-w-[140px] wrap-break-words text-center text-xs font-normal text-slate-800">
-        {data.label as string}
+        {data.label}
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>
   )
 }
 
-function DecisionNode({ data }: NodeProps): React.ReactElement {
+function DecisionNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
   return (
-    <div className="relative flex min-w-20 items-center justify-center rounded border-2 border-violet-600 bg-violet-100 px-3.5 py-2">
+    <div
+      className="relative flex min-w-20 items-center justify-center rounded border-2 border-violet-600 bg-violet-100 px-3.5 py-2"
+      title={data.description}
+    >
       <div className="max-w-[200px] wrap-break-words text-center text-xs font-semibold text-slate-800">
-        {data.label as string}
+        {data.label}
       </div>
       <Handle type="target" position={Position.Top} id="in" />
       <Handle type="source" position={Position.Right} id="then" />
@@ -55,12 +62,15 @@ function DecisionNode({ data }: NodeProps): React.ReactElement {
 }
 
 /** Loop：上進入（含 loopBack）、下 loop 出去、右 done；版型與 process 一致 */
-function LoopNode({ data }: NodeProps): React.ReactElement {
+function LoopNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
   return (
-    <div className="relative flex min-w-20 items-center justify-center rounded border-2 border-amber-600 bg-amber-50 px-3.5 py-2 shadow-sm">
+    <div
+      className="relative flex min-w-20 items-center justify-center rounded border-2 border-amber-600 bg-amber-50 px-3.5 py-2 shadow-sm"
+      title={data.description}
+    >
       <Handle type="target" position={Position.Top} id="in" />
       <div className="max-w-[140px] wrap-break-words text-center text-xs font-semibold text-amber-900">
-        {data.label as string}
+        {data.label}
       </div>
       <Handle type="source" position={Position.Bottom} id="out" />
       <Handle type="source" position={Position.Right} id="done" />
@@ -70,21 +80,23 @@ function LoopNode({ data }: NodeProps): React.ReactElement {
   )
 }
 
-function StartEndNode({ data }: NodeProps): React.ReactElement {
-  const shape = data.shape as 'start' | 'end' | undefined
+function StartEndNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
+  const { shape, description, label } = data
   const isStart = shape === 'start'
   const isEnd = shape === 'end'
-  const wrapperClass = [
-    'flex min-w-[72px] items-center justify-center rounded border-2 px-4 py-2 shadow-sm',
-    isStart && 'border-green-600 bg-green-100 font-semibold',
-    isEnd && 'border-blue-600 bg-blue-100 font-semibold',
-    !isStart && !isEnd && 'border-slate-400 bg-white',
-  ].filter(Boolean).join(' ')
   return (
-    <div className={wrapperClass}>
+    <div
+      className={cn(
+        'flex min-w-[72px] items-center justify-center rounded border-2 px-4 py-2 shadow-sm',
+        isStart && 'border-green-600 bg-green-100 font-semibold',
+        isEnd && 'border-blue-600 bg-blue-100 font-semibold',
+        !isStart && !isEnd && 'border-slate-400 bg-white',
+      )}
+      title={description}
+    >
       <Handle type="target" position={Position.Top} />
       <div className="text-center text-[13px] text-slate-800">
-        {data.label as string}
+        {label}
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -103,7 +115,7 @@ function graphToReactFlow(graph: FlowGraphInput): { nodes: Node[], edges: Edge[]
   const connectSourceIds = new Set(
     graph.edges.filter(e => e.kind === 'loopBack').map(e => e.source),
   )
-  const getShape = (n: FlowGraphInput['nodes'][number]) =>
+  const getShape = (n: FlowGraphInputNode) =>
     n.shape ?? getNodeShape(n, dag, connectSourceIds)
   const nodeShapes = new Map(graph.nodes.map(n => [n.id, getShape(n)]))
 
@@ -115,7 +127,8 @@ function graphToReactFlow(graph: FlowGraphInput): { nodes: Node[], edges: Edge[]
       type: nodeType(shape),
       position: positions.get(n.id) ?? { x: 0, y: i * 60 },
       data: {
-        label: n.label ?? n.type ? `${n.id} (${n.type})` : n.id,
+        label: n.label ?? (n.type ? `${n.id} (${n.type})` : n.id),
+        ...(n.description ? { description: n.description } : {}),
         ...(shape ? { shape } : {}),
       },
     }

@@ -19,7 +19,7 @@ export {
   getDiscoverEntry,
   MAX_DISCOVER_LIMIT,
 } from './discover'
-export type { DiscoverEntry, FindFlowFilesOptions } from './discover'
+export type { DiscoverEntry, DiscoverStepSummary, FindFlowFilesOptions } from './discover'
 export { findFlowFiles } from './discover'
 export { flowDefinitionToGraphForVisualization } from './flowGraph'
 export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'

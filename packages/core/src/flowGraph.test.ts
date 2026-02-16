@@ -83,6 +83,45 @@ describe('flowDefinitionToGraph', () => {
     expect(g.edges).toContainEqual({ source: 'a', target: 'c' })
     expect(g.edges).toContainEqual({ source: 'b', target: 'c' })
   })
+
+  it('uses step.name as node label when present', () => {
+    const flow: FlowDefinition = {
+      name: 'named',
+      steps: [
+        { id: 'fetch', type: 'http', name: 'Fetch user', dependsOn: [] },
+        { id: 'b', type: 'set', set: {}, dependsOn: ['fetch'] },
+      ],
+    }
+    const g = flowDefinitionToGraph(flow)
+    const nodeFetch = g.nodes.find(n => n.id === 'fetch')
+    const nodeB = g.nodes.find(n => n.id === 'b')
+    expect(nodeFetch?.label).toBe('Fetch user')
+    expect(nodeB?.label).toBe('b (set)')
+  })
+
+  it('uses fallback label when step has no name', () => {
+    const flow: FlowDefinition = {
+      name: 'no-name',
+      steps: [{ id: 'a', type: 'set', set: {}, dependsOn: [] }],
+    }
+    const g = flowDefinitionToGraph(flow)
+    expect(g.nodes[0].label).toBe('a (set)')
+  })
+
+  it('sets node.description from step.description when present', () => {
+    const flow: FlowDefinition = {
+      name: 'with-desc',
+      steps: [
+        { id: 'a', type: 'set', set: {}, description: 'Initialize state.', dependsOn: [] },
+        { id: 'b', type: 'set', set: {}, dependsOn: ['a'] },
+      ],
+    }
+    const g = flowDefinitionToGraph(flow)
+    const nodeA = g.nodes.find(n => n.id === 'a')
+    const nodeB = g.nodes.find(n => n.id === 'b')
+    expect(nodeA?.description).toBe('Initialize state.')
+    expect(nodeB?.description).toBeUndefined()
+  })
 })
 
 describe('flowGraphToMermaid', () => {

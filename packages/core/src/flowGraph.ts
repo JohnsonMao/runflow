@@ -9,6 +9,8 @@ export interface FlowGraphNode {
   id: string
   type?: string
   label?: string
+  /** Optional description from step for tooltips or detail views. */
+  description?: string
   /** When set, used for Mermaid/viewer shape (process=rect, decision=diamond, start/end=stadium). */
   shape?: FlowGraphNodeShape
 }
@@ -52,8 +54,14 @@ export function flowDefinitionToGraph(flow: FlowDefinition): FlowGraph {
   for (const [stepId, deps] of idToDepIds) {
     const step = stepMap.get(stepId)
     const type = step && typeof step.type === 'string' ? step.type : undefined
-    const label = type ? `${stepId} (${type})` : stepId
-    nodes.push({ id: stepId, type, label })
+    const labelFallback = type ? `${stepId} (${type})` : stepId
+    const label = step && typeof step.name === 'string' && step.name !== ''
+      ? step.name
+      : labelFallback
+    const node: FlowGraphNode = { id: stepId, type, label }
+    if (step && typeof step.description === 'string')
+      node.description = step.description
+    nodes.push(node)
     for (const dep of deps)
       edges.push({ source: dep, target: stepId })
   }

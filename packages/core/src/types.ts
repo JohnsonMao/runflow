@@ -44,6 +44,10 @@ export interface FlowStep {
   retry?: number
   /** Key under which the step's outputs are written to context. When absent, the executor uses step id. */
   outputKey?: string
+  /** Display/documentation only: short label for UI (e.g. node title, lists). Not used by engine. */
+  name?: string
+  /** Display/documentation only: longer description for tooltips, detail views. Not used by engine. */
+  description?: string
   [key: string]: unknown
 }
 

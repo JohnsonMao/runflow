@@ -10,11 +10,21 @@ export const DEFAULT_MAX_FILES = 1000
 export const DEFAULT_DISCOVER_LIMIT = 10
 export const MAX_DISCOVER_LIMIT = 10
 
+/** Step summary for detail view (id, type, optional name/description). */
+export interface DiscoverStepSummary {
+  id: string
+  type?: string
+  name?: string
+  description?: string
+}
+
 export interface DiscoverEntry {
   flowId: string
   name: string
   description?: string
   params?: ParamDeclaration[]
+  /** Step summaries for detail view; when present, may include name/description. */
+  steps?: DiscoverStepSummary[]
   openapiPrefix?: string
 }
 
@@ -98,6 +108,12 @@ export async function buildDiscoverCatalog(
       name: flow.name,
       description: flow.description,
       params: flow.params,
+      steps: flow.steps.map(s => ({
+        id: s.id,
+        type: s.type,
+        ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
+        ...(s.description != null ? { description: s.description } : {}),
+      })),
     })
   }
   const openapi = config?.openapi && typeof config.openapi === 'object' ? config.openapi : null
@@ -123,6 +139,12 @@ export async function buildDiscoverCatalog(
             name: flow.name,
             description: flow.description,
             params: flow.params,
+            steps: flow.steps.map(s => ({
+              id: s.id,
+              type: s.type,
+              ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
+              ...(s.description != null ? { description: s.description } : {}),
+            })),
             openapiPrefix: prefix,
           })
         }

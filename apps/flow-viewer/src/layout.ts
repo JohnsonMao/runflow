@@ -1,4 +1,4 @@
-import type { FlowGraphInput } from './types'
+import type { FlowGraphInput, FlowGraphInputEdge } from './types'
 import dagre from 'dagre'
 
 const RANK_SEP = 72
@@ -27,14 +27,14 @@ function nodeDimensions(label: string | undefined): { width: number, height: num
 }
 
 /** DAG edges only (exclude loopBack) so dagre gets acyclic graph. */
-function dagEdges(edges: FlowGraphInput['edges']): FlowGraphInput['edges'] {
+function dagEdges(edges: FlowGraphInputEdge[]): FlowGraphInputEdge[] {
   return edges.filter(e => e.kind !== 'loopBack')
 }
 
 /** Order DAG edges so else-branch is added before then-branch; dagre often orders same-rank nodes by edge order. */
-function orderedDagEdges(edges: FlowGraphInput['edges']): FlowGraphInput['edges'] {
+function orderedDagEdges(edges: FlowGraphInputEdge[]): FlowGraphInputEdge[] {
   const dag = dagEdges(edges)
-  const elseFirst = (a: FlowGraphInput['edges'][number], b: FlowGraphInput['edges'][number]) => {
+  const elseFirst = (a: FlowGraphInputEdge, b: FlowGraphInputEdge) => {
     if (a.kind === 'else' && b.kind === 'then')
       return -1
     if (a.kind === 'then' && b.kind === 'else')
@@ -97,7 +97,7 @@ export function layoutGraph(graph: FlowGraphInput): Map<string, { x: number, y: 
 /** Swap x of else/then targets when they are in the same rank and else is to the right of then. */
 function applyElseLeftThenRight(
   positions: Map<string, { x: number, y: number }>,
-  edges: FlowGraphInput['edges'],
+  edges: FlowGraphInputEdge[],
 ): void {
   const sameRankTolerance = 2
   const bySource = new Map<string, { elseTarget?: string, thenTarget?: string }>()

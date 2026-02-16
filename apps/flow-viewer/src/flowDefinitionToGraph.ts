@@ -1,4 +1,4 @@
-import type { FlowGraphEdgeKind, FlowGraphInput, FlowGraphNodeShape } from './types'
+import type { FlowGraphEdgeKind, FlowGraphInput, FlowGraphInputEdge, FlowGraphInputNode, FlowGraphNodeShape } from './types'
 
 function normalizeStepIds(v: unknown): string[] {
   if (typeof v === 'string')
@@ -30,7 +30,7 @@ export interface FlowDefinitionInput {
  */
 export function getNodeShape(
   node: { id: string, type?: string, label?: string },
-  dagEdges: FlowGraphInput['edges'],
+  dagEdges: FlowGraphInputEdge[],
   connectSourceIds?: Set<string>,
 ): FlowGraphNodeShape {
   const isCondition = node.type === 'condition'
@@ -56,8 +56,8 @@ export function getNodeShape(
  * Only steps with dependsOn are included. Node shape: condition → decision, no incoming → start, no outgoing → end, else process.
  */
 export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraphInput {
-  const nodes: FlowGraphInput['nodes'] = []
-  const edges: FlowGraphInput['edges'] = []
+  const nodes: FlowGraphInputNode[] = []
+  const edges: FlowGraphInputEdge[] = []
   const idToDeps = new Map<string, string[]>()
   for (const step of flow.steps) {
     if (step.dependsOn == null || !Array.isArray(step.dependsOn))
