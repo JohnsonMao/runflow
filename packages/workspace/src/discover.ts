@@ -15,6 +15,7 @@ export interface DiscoverEntry {
   name: string
   description?: string
   params?: ParamDeclaration[]
+  openapiPrefix?: string
 }
 
 export interface FindFlowFilesOptions {
@@ -122,6 +123,7 @@ export async function buildDiscoverCatalog(
             name: flow.name,
             description: flow.description,
             params: flow.params,
+            openapiPrefix: prefix,
           })
         }
       }

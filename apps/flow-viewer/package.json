@@ -11,13 +11,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "class-variance-authority": "catalog:frontend",
+    "clsx": "catalog:frontend",
     "dagre": "catalog:dev",
+    "lucide-react": "catalog:frontend",
+    "radix-ui": "catalog:frontend",
     "react": "catalog:frontend",
     "react-dom": "catalog:frontend",
-    "reactflow": "catalog:frontend"
+    "reactflow": "catalog:frontend",
+    "tailwind-merge": "catalog:frontend",
+    "tw-animate-css": "catalog:frontend",
+    "yaml": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
+    "@runflow/workspace": "workspace:^",
     "@tailwindcss/vite": "catalog:frontend",
     "@types/dagre": "catalog:dev",
     "@types/react": "catalog:frontend",

@@ -138,6 +138,20 @@ describe('resolveFlowId', () => {
     expect(spec.specPath).toBe('/project/openapi.yaml')
   })
 
+  it('uses longest matching openapi prefix when multiple prefixes match (e.g. admin and admin-delivery)', () => {
+    const config: RunflowConfig = {
+      openapi: {
+        'admin': { specPath: './admin.yaml' },
+        'admin-delivery': { specPath: './admin-delivery.yaml' },
+      },
+    }
+    const r = resolveFlowId('admin-delivery-getOrders', config, configDir, cwd)
+    const spec = r as ResolvedOpenApiFlow
+    expect(spec.type).toBe('openapi')
+    expect(spec.operation).toBe('getOrders')
+    expect(spec.specPath).toBe('/project/admin-delivery.yaml')
+  })
+
   it('resolves openapi flowId with baseUrl, operationFilter, hooks in options', () => {
     const operationFilter = { method: 'post' as const }
     const config: RunflowConfig = {

@@ -35,7 +35,7 @@ function ProcessNode({ data }: NodeProps): React.ReactElement {
   return (
     <div className="flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm">
       <Handle type="target" position={Position.Top} />
-      <div className="max-w-[140px] break-words text-center text-xs font-normal text-slate-800">
+      <div className="max-w-[140px] wrap-break-words text-center text-xs font-normal text-slate-800">
         {data.label as string}
       </div>
       <Handle type="source" position={Position.Bottom} />
@@ -49,7 +49,7 @@ function DecisionNode({ data }: NodeProps): React.ReactElement {
       className="flex h-14 w-[88px] items-center justify-center border-[3px] border-violet-600 bg-violet-100 [-webkit-clip-path:polygon(50%_0%,100%_50%,50%_100%,0%_50%)] [clip-path:polygon(50%_0%,100%_50%,50%_100%,0%_50%)] [box-shadow:0_2px_6px_rgb(109_40_217/0.25)]"
     >
       <Handle type="target" position={Position.Top} id="in" />
-      <div className="max-w-[76px] break-words text-center text-[11px] font-semibold text-slate-800">
+      <div className="max-w-[76px] wrap-break-words text-center text-[11px] font-semibold text-slate-800">
         {data.label as string}
       </div>
       <Handle type="source" position={Position.Right} id="then" />
@@ -101,7 +101,13 @@ function graphToReactFlow(graph: FlowGraphInput): { nodes: Node[], edges: Edge[]
   const edges: Edge[] = graph.edges.map((e, i) => {
     const sourceNode = nodeById.get(e.source)
     const isFromDecision = sourceNode?.shape === 'decision'
-    const sourceHandle = isFromDecision && e.kind === 'then' ? 'then' : isFromDecision && e.kind === 'else' ? 'else' : undefined
+    let sourceHandle: 'then' | 'else' | undefined
+    if (isFromDecision && e.kind === 'then')
+      sourceHandle = 'then'
+    else if (isFromDecision && e.kind === 'else')
+      sourceHandle = 'else'
+    else
+      sourceHandle = undefined
     return {
       id: `e-${e.source}-${e.target}-${i}`,
       source: e.source,

@@ -72,11 +72,6 @@ export function findConfigFile(cwd: string): string | null {
   return null
 }
 
-/**
- * Resolve flowId to either a file path or an OpenAPI (prefix-operation) flow.
- * - If config.openapi has a prefix such that flowId === `${prefix}-${operation}`, resolve as openapi.
- * - Otherwise resolve as file path (relative to config.flowsDir or cwd). Paths resolved relative to config file directory.
- */
 export function resolveFlowId(
   flowId: string,
   config: RunflowConfig | null,
@@ -85,25 +80,30 @@ export function resolveFlowId(
 ): ResolvedFlow {
   const openapi = config?.openapi && typeof config.openapi === 'object' ? config.openapi : null
   if (openapi) {
+    let best: { prefix: string, entry: OpenApiEntry } | null = null
     for (const [prefix, entry] of Object.entries(openapi)) {
       if (!entry || typeof entry.specPath !== 'string')
         continue
       if (flowId.startsWith(`${prefix}-`)) {
         const operation = flowId.slice(prefix.length + 1)
-        if (operation) {
-          const specPath = path.isAbsolute(entry.specPath)
-            ? entry.specPath
-            : path.resolve(configDir, entry.specPath)
-          const options: Partial<OpenApiToFlowsOptions> = {}
-          if (entry.baseUrl !== undefined)
-            options.baseUrl = entry.baseUrl
-          if (entry.operationFilter !== undefined)
-            options.operationFilter = entry.operationFilter
-          if (entry.hooks !== undefined)
-            options.hooks = entry.hooks
-          return { type: 'openapi', specPath, operation, options }
-        }
+        if (operation && (!best || prefix.length > best.prefix.length))
+          best = { prefix, entry }
       }
+    }
+    if (best) {
+      const { prefix, entry } = best
+      const operation = flowId.slice(prefix.length + 1)
+      const specPath = path.isAbsolute(entry.specPath)
+        ? entry.specPath
+        : path.resolve(configDir, entry.specPath)
+      const options: Partial<OpenApiToFlowsOptions> = {}
+      if (entry.baseUrl !== undefined)
+        options.baseUrl = entry.baseUrl
+      if (entry.operationFilter !== undefined)
+        options.operationFilter = entry.operationFilter
+      if (entry.hooks !== undefined)
+        options.hooks = entry.hooks
+      return { type: 'openapi', specPath, operation, options }
     }
   }
   const baseDir = config?.flowsDir
