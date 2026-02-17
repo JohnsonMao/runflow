@@ -15,7 +15,6 @@ export class SetHandler implements IStepHandler {
     const set = step.set
     if (!isPlainObject(set))
       return context.stepResult(step.id, false, { error: 'set step requires set (object)' })
-    const keys = Object.keys(set).join(', ')
-    return context.stepResult(step.id, true, { outputs: { ...set }, log: keys ? `set keys: ${keys}` : 'set (empty)' })
+    return context.stepResult(step.id, true, { outputs: { ...set } })
   }
 }

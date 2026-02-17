@@ -27,6 +27,7 @@ A flow step MUST be allowed to have `type: 'set'` and a required `set` field (ob
 - **WHEN** a set step has no `set` field or set is not an object
 - **THEN** the handler SHALL return StepResult with success: false and an error message, or outputs SHALL be empty (implementation may define)
 
+---
 ### Requirement: Set step output SHALL be merged like other steps
 
 The outputs returned by the set handler SHALL be merged into context with the same later-overwrites semantics as other step types (step-context). Downstream steps SHALL see the set keys in their params.
@@ -36,3 +37,27 @@ The outputs returned by the set handler SHALL be merged into context with the sa
 - **WHEN** a set step returns outputs: { x: 10 } and a subsequent step has dependsOn including that set step
 - **THEN** the subsequent step's context (params) SHALL include x: 10
 - **AND** template substitution in that step can use `{{ x }}`
+
+---
+### Requirement: Set step handler SHALL NOT set log on StepResult
+
+The set handler SHALL return StepResult without setting the `log` field. Set steps are for assigning variables into context; display lines SHALL be emitted explicitly via the `message` step type.
+
+#### Scenario: Set step result has no log
+
+- **WHEN** a set step runs and the handler returns stepResult(step.id, true, { outputs: { ... } })
+- **THEN** the returned StepResult SHALL NOT include a `log` property (or log SHALL be undefined)
+- **AND** CLI --verbose and MCP display SHALL show only the step id and success badge for that step, with no log line
+
+<!-- @trace
+source: add-log-message-handler
+updated: 2026-02-17
+code:
+  - packages/handlers/src/index.ts
+  - packages/handlers/src/set.ts
+  - docs/flow-migration-old-to-new.md
+  - packages/core/scripts/convert-old-flow-to-new.ts
+  - packages/handlers/src/message.ts
+tests:
+  - packages/handlers/src/message.test.ts
+-->

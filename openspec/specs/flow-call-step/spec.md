@@ -123,9 +123,9 @@ When a flow step runs a callee flow and obtains a RunResult, the executor SHALL 
 
 #### Scenario: Flattened step preserves log and success
 
-- **WHEN** the callee step `sub-set` returns StepResult with `log: 'set keys: fromSub, receivedFrom'` and `success: true`
-- **THEN** the main RunResult.steps SHALL include an entry with stepId `sub.sub-set`, `log: 'set keys: fromSub, receivedFrom'`, and `success: true`
-- **AND** the formatter (e.g. MCP execute) SHALL display that line like any other step (e.g. `- ✓ sub.sub-set` and `log: set keys: ...`)
+- **WHEN** a callee step (e.g. a message step) returns StepResult with `log: 'Processing batch'` and `success: true`
+- **THEN** the main RunResult.steps SHALL include an entry with that stepId (e.g. `sub.msg`), `log: 'Processing batch'`, and `success: true`
+- **AND** the formatter (e.g. MCP execute) SHALL display that line like any other step (e.g. `- ✓ sub.msg` and `log: Processing batch`). Set steps do not set log; use message steps when a display line is needed.
 
 #### Scenario: Order is flow step then callee steps
 
