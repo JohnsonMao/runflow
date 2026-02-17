@@ -26,14 +26,16 @@ Build the CLI, then run a flow file:
 
 ```bash
 pnpm run build
-node apps/cli/dist/cli.js run examples/hello-flow.yaml
+node apps/cli/dist/cli.js run <path-to-your-flow.yaml>
 ```
+
+Example flows and directory layout: [examples/](examples/README.md) (aligned with workspace config / flows / openapi).
 
 Or from the CLI package:
 
 ```bash
 pnpm --filter @runflow/cli build
-pnpm --filter @runflow/cli exec node dist/cli.js run ../../examples/hello-flow.yaml
+pnpm --filter @runflow/cli exec node dist/cli.js run <path-to-your-flow.yaml>
 ```
 
 Options:
@@ -85,9 +87,9 @@ steps:
 - `params` (optional) – Top-level parameter declaration: array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. When present, run-time params are validated (e.g. with Zod) before execution.
 - Supported step types: `set` (writes key-value object to context), `http` (sends an HTTP request), `condition` (evaluates `when`; use `then`/`else` step ids to run only one branch; result is not written to context).
 - **Set steps** use `type: set` with `set: { key: value, ... }`. Values support template substitution `{{ key }}`, `{{ obj.nested }}`. Object/array values are JSON-stringified; undefined/null → empty string.
-- **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `outputKey` (context key for the response). All string fields support `{{ key }}` substitution. On 2xx the response is written to context as `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Non-2xx responses set the step as failed with no outputs. Example: `examples/http-flow.yaml`.
+- **HTTP steps** use `type: http` with required `url`; optional `method`, `headers`, `body`, `outputKey` (context key for the response). All string fields support `{{ key }}` substitution. On 2xx the response is written to context as `{ statusCode, headers, body }`; body is parsed as JSON when Content-Type is application/json. Non-2xx responses set the step as failed with no outputs.
 - **Condition steps** use `type: condition` with required `when` (JS expression evaluated with `params` in scope, e.g. `params.env === 'prod'`). Optional `then` / `else` are step id(s); only the matching branch runs. The condition result is **not** merged into context. Only steps listed in `then` or `else` may have `dependsOn: [conditionStepId]`; the engine validates before run and fails with a clear error if any other step depends on the condition. The same rule applies to **loop** steps: only steps in `entry` or `done` may have `dependsOn: [loopStepId]`.
-- **Migration**: Existing flows must add `dependsOn` to every step that should run. Use `dependsOn: []` for the first step and `dependsOn: [previousStepId]` for the rest in a linear flow. See `examples/hello-flow.yaml` or `examples/dag-linear-flow.yaml`.
+- **Migration**: Existing flows must add `dependsOn` to every step that should run. Use `dependsOn: []` for the first step and `dependsOn: [previousStepId]` for the rest in a linear flow.
 
 ## Scripts
 
@@ -118,7 +120,7 @@ After upgrading, run `pnpm run check` to ensure build, typecheck, lint, and test
 
 1. **Start working**: `pnpm install` (after pull), then edit code in `packages/core` or `apps/cli`.
 2. **Build while editing**: From root, `pnpm run dev` runs `tsup --watch` in both packages; or run `pnpm --filter @runflow/core dev` / `pnpm --filter @runflow/cli dev` for a single package.
-3. **Run the CLI**: After build, `node apps/cli/dist/cli.js run examples/hello-flow.yaml` (or use the path to your flow YAML).
+3. **Run the CLI**: After build, `node apps/cli/dist/cli.js run <path-to-your-flow.yaml>`.
 4. **Test**: `pnpm run test` (all packages) or `pnpm --filter @runflow/core test` / `pnpm --filter @runflow/cli test`.
 5. **Before commit**: `pnpm run check` (typecheck + lint + test), then `pnpm run lint:fix` if needed.
 
@@ -151,7 +153,6 @@ To add custom step types, assign your handler to the registry: `registry.myType 
 
 - **Flow engine (parse YAML, run steps)**: `packages/core/src/` — add types in `types.ts`, constants in `constants.ts`. Step execution is dispatched via the registry; built-in handlers live in `packages/handlers`.
 - **CLI (commands, flags, output)**: `apps/cli/src/cli.ts`.
-- **Example flows**: `examples/*.yaml`.
 
 ### Next steps (from the original plan)
 

@@ -1,19 +1,19 @@
-/**
- * Example: custom step handler implementing IStepHandler.
- * Step type "echo" echoes the given "message" (or step id) to stdout.
- */
-export default {
-  validate(step) {
+// Custom step handler example: type "echo"; writes step.message into outputs.
+// Run CLI from repo root so @runflow/core (context.stepResult) resolves.
+function validate(step) {
+  if (step.message !== undefined)
     return true
-  },
-  kill() {},
-  async run(step, _context) {
-    const message = step.message != null ? String(step.message) : step.id
-    return {
-      stepId: step.id,
-      success: true,
-      stdout: `${message}\n`,
-      stderr: '',
-    }
-  },
+  return 'echo step requires message (string)'
 }
+
+function kill() {}
+
+async function run(step, context) {
+  const message = step.message != null ? String(step.message) : ''
+  return context.stepResult(step.id, true, {
+    outputs: { message, echoed: true },
+    log: `echo: ${message}`,
+  })
+}
+
+export default { validate, kill, run }

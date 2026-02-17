@@ -1,0 +1,27 @@
+# Parameter declaration and template substitution
+# Run: node apps/cli/dist/cli.js run basic/params-flow.yaml --config examples/config/runflow.config.json --param name=World
+# Or with JSON: node apps/cli/dist/cli.js run basic/params-flow.yaml --config examples/config/runflow.config.json -f examples/params.json
+name: params-flow
+description: Flow params and template substitution
+params:
+  - name: name
+    type: string
+    default: Guest
+    description: Display name
+  - name: count
+    type: number
+    default: 1
+    description: Repeat count
+steps:
+  - id: init
+    type: set
+    set:
+      greeting: "Hello, {{ name }}!"
+      count: "{{ count }}"
+    dependsOn: []
+  - id: done
+    type: set
+    set:
+      message: "{{ init.greeting }}"
+      repeated: "{{ init.count }}"
+    dependsOn: [init]

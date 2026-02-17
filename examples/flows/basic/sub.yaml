@@ -1,0 +1,14 @@
+# Subflow: called by parent via type: flow
+name: basic/sub
+description: Subflow example; returns simple output
+params:
+  - name: from
+    type: string
+    description: Caller identifier
+steps:
+  - id: sub-set
+    type: set
+    set:
+      fromSub: true
+      receivedFrom: "{{ from }}"
+    dependsOn: []

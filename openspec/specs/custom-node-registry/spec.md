@@ -127,8 +127,8 @@ The CLI SHALL build its registry by using the built-in handlers from `@runflow/h
 - **THEN** the CLI builds a registry from built-ins + loaded echo handler
 - **AND** the step is executed by the echo handler and produces a StepResult like any built-in step
 
-#### Scenario: Example custom-handler is provided
+#### Scenario: Custom handler usage is documented
 
 - **WHEN** the user consults the repository
-- **THEN** an example under `examples/custom-handler` SHALL exist with a custom handler module (e.g. echo), a runflow config that registers it, and a flow YAML that uses the custom type
-- **AND** the example README SHALL describe how to run the flow and the handler contract (IStepHandler: run, optional validate)
+- **THEN** documentation SHALL describe how to implement and register a custom handler (e.g. via `handlers: { type: path }` in runflow config or `--registry`) and how to run a flow that uses the custom step type
+- **AND** the handler contract (IStepHandler: run, optional validate) SHALL be documented

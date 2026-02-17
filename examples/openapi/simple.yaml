@@ -1,0 +1,160 @@
+openapi: 3.0.0
+info:
+  title: Simple API (for $ref verification)
+  version: 1.0.0
+  description: Minimal spec with $ref for testing resolution.
+
+servers:
+  - url: https://api.example.com
+    description: Example API server
+
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/UserListResponse'
+    post:
+      operationId: createUser
+      summary: Create user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/UserResponse'
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      summary: Get user by id
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/UserResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        $ref: '#/components/schemas/Limit'
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        $ref: '#/components/schemas/Offset'
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/UserId'
+
+  responses:
+    UserListResponse:
+      description: List of users
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserList'
+    UserResponse:
+      description: Single user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/User'
+    NotFoundResponse:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    UserId:
+      type: string
+      format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    Limit:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
+
+    Offset:
+      type: integer
+      minimum: 0
+      default: 0
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        zip:
+          type: string
+
+    User:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: '#/components/schemas/UserId'
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          $ref: '#/components/schemas/Address'
+
+    UserInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          $ref: '#/components/schemas/Address'
+
+    UserList:
+      type: object
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
