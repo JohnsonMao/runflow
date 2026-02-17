@@ -508,6 +508,33 @@ describe('flow run', () => {
     expect(result.stdout).toContain('hello-from-custom')
   })
 
+  it('config params (ParamDeclaration array) are merged with flow params and applied as effective declaration', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = join(dir, 'flow.yaml')
+    const configPath = join(dir, 'runflow.config.json')
+    const yaml = [
+      'name: use-env',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { env: "{{ env }}" }',
+      '    dependsOn: []',
+    ].join('\n')
+    const config = JSON.stringify({
+      flowsDir: '.',
+      params: [
+        { name: 'env', type: 'string', default: 'from-config' },
+      ],
+    })
+    writeFileSync(flowPath, yaml)
+    writeFileSync(configPath, config)
+    const result = await runWithParse(['run', 'flow.yaml', '--config', configPath, '--verbose'], dir)
+    unlinkSync(flowPath)
+    unlinkSync(configPath)
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain('"env":"from-config"')
+  })
+
   it('config openapi baseUrl is used for the actual HTTP request (CLI + mock fetch)', async () => {
     const baseUrl = 'https://api.example.com'
     const mockFetch = vi.fn().mockResolvedValue({

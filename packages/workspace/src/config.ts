@@ -1,4 +1,5 @@
 import type { OpenApiToFlowsOptions } from '@runflow/convention-openapi'
+import type { ParamDeclaration } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -21,10 +22,10 @@ export interface RunflowConfig {
   /** OpenAPI specs by prefix. flowId = prefix-operation (e.g. my-api-get-users). */
   openapi?: Record<string, OpenApiEntry>
   /**
-   * Global default params merged into every flow run. Runner (CLI/MCP) merges as { ...params, ...callerParams }
-   * so caller can override. Flow's declared params are still validated; extra keys from config are passed through to context.
+   * Global param declarations (same shape as flow params). Defaults live in each item's default.
+   * Runners merge with flow.params (flow overrides same name) for effective declaration.
    */
-  params?: Record<string, unknown>
+  params?: ParamDeclaration[]
 }
 
 export interface ResolvedFileFlow {
@@ -41,26 +42,73 @@ export interface ResolvedOpenApiFlow {
 
 export type ResolvedFlow = ResolvedFileFlow | ResolvedOpenApiFlow
 
+/**
+ * Normalize config params: if raw is a plain object (legacy), convert to ParamDeclaration[].
+ * If already an array, return as-is. Otherwise return undefined.
+ */
+export function normalizeConfigParams(raw: unknown): ParamDeclaration[] | undefined {
+  if (raw === undefined || raw === null)
+    return undefined
+  if (Array.isArray(raw))
+    return raw as ParamDeclaration[]
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    const obj = raw as Record<string, unknown>
+    return Object.keys(obj).map(name => ({
+      name,
+      type: 'string' as const,
+      default: obj[name],
+    }))
+  }
+  return undefined
+}
+
+/**
+ * Merge config global params with flow params. Flow params override config for the same name; flow-only params are appended.
+ */
+export function mergeParamDeclarations(
+  configParams: ParamDeclaration[] | undefined,
+  flowParams: ParamDeclaration[] | undefined,
+): ParamDeclaration[] {
+  const config = configParams ?? []
+  const flow = flowParams ?? []
+  const byName = new Map<string, ParamDeclaration>()
+  for (const p of config)
+    byName.set(p.name, p)
+  for (const p of flow)
+    byName.set(p.name, p)
+  return [...byName.values()]
+}
+
 export async function loadConfig(configPath: string): Promise<RunflowConfig | null> {
   if (!existsSync(configPath) || !statSync(configPath).isFile())
     return null
+  let data: RunflowConfig | null = null
   if (configPath.endsWith('.json')) {
     try {
       const raw = readFileSync(configPath, 'utf-8')
-      const data = JSON.parse(raw) as RunflowConfig
-      return data && typeof data === 'object' ? data : null
+      data = JSON.parse(raw) as RunflowConfig
+      if (!data || typeof data !== 'object')
+        return null
     }
     catch {
       return null
     }
   }
-  try {
-    const mod = await import(pathToFileURL(configPath).href) as { default?: RunflowConfig }
-    return mod.default ?? null
+  else {
+    try {
+      const mod = await import(pathToFileURL(configPath).href) as { default?: RunflowConfig }
+      data = mod.default ?? null
+    }
+    catch {
+      return null
+    }
   }
-  catch {
-    return null
+  if (data && 'params' in data && data.params !== undefined) {
+    const normalized = normalizeConfigParams(data.params)
+    if (normalized !== undefined)
+      data = { ...data, params: normalized }
   }
+  return data
 }
 
 export function findConfigFile(cwd: string): string | null {

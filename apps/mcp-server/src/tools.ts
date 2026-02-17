@@ -10,6 +10,7 @@ import {
   formatListAsMarkdown,
   getDiscoverEntry,
   MAX_DISCOVER_LIMIT,
+  mergeParamDeclarations,
   resolveAndLoadFlow,
 } from '@runflow/workspace'
 import { z } from 'zod'
@@ -111,11 +112,13 @@ export async function executeTool(
     return { content: [{ type: 'text' as const, text: message }], isError: true }
   }
   const resolveFlow = createResolveFlow(config, configDir, cwd)
-  const effectiveParams = { ...(config?.params ?? {}), ...(params ?? {}) }
+  const effectiveParamsDeclaration = mergeParamDeclarations(config?.params, loaded.flow.params)
+  const toolParams = params ?? {}
   try {
     const result = await run(loaded.flow, {
       registry,
-      params: Object.keys(effectiveParams).length ? effectiveParams : undefined,
+      params: Object.keys(toolParams).length ? toolParams : undefined,
+      effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
       flowFilePath: loaded.flowFilePath,
       resolveFlow,
     })

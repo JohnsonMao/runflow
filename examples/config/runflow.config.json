@@ -3,11 +3,11 @@
     "echo": "../custom-handler/echo-handler.mjs"
   },
   "flowsDir": "../flows",
-  "params": {
-    "env": "example",
-    "name": "Guest",
-    "count": 1
-  },
+  "params": [
+    { "name": "env", "type": "string", "default": "example" },
+    { "name": "name", "type": "string", "default": "Guest" },
+    { "name": "count", "type": "number", "default": 1 }
+  ],
   "openapi": {
     "simple": {
       "specPath": "../openapi/simple.yaml",

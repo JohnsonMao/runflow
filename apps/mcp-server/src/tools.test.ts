@@ -172,6 +172,31 @@ describe('executeTool', () => {
     expect(text).toMatch(/\*\*Success\*\*|\*\*Failed\*\*|step\(s\)|Run error|Unknown error|Step.*error/)
   })
 
+  it('executes flow with config params (ParamDeclaration array) as effective declaration', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-config-params-'))
+    const configPath = join(dir, 'runflow.config.json')
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(configPath, JSON.stringify({
+      flowsDir: '.',
+      params: [{ name: 'env', type: 'string', default: 'from-config' }],
+    }))
+    writeFileSync(flowPath, [
+      'name: use-env',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { env: "{{ env }}" }',
+      '    dependsOn: []',
+    ].join('\n'))
+    process.chdir(dir)
+    const result = await executeTool({ flowId: 'flow.yaml' }, getConfig)
+    unlinkSync(configPath)
+    unlinkSync(flowPath)
+    expect(result.isError).toBe(false)
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(text).toMatch(/\*\*Success\*\*/)
+  })
+
   it('returns run error when flow execution throws', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcp-run-err-'))
     const flowPath = join(dir, 'flow.yaml')

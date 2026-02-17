@@ -2,6 +2,8 @@ export {
   CONFIG_NAMES,
   findConfigFile,
   loadConfig,
+  mergeParamDeclarations,
+  normalizeConfigParams,
   resolveFlowId,
 } from './config'
 export type {

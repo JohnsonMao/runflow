@@ -171,6 +171,11 @@ export interface RunOptions {
   params?: Record<string, unknown>
   flowFilePath?: string
   registry?: StepRegistry
+  /**
+   * When set, used for params validation and default application instead of flow.params.
+   * Caller (e.g. CLI/MCP) merges config global params with flow.params (flow overrides same name) and passes here.
+   */
+  effectiveParamsDeclaration?: ParamDeclaration[]
   /** Max nesting depth for flow steps (default from DEFAULT_MAX_FLOW_CALL_DEPTH). When a flow step would run at this depth, it fails. */
   maxFlowCallDepth?: number
   /** Current flow-call depth (internal). 0 at top-level; incremented when run is invoked from runFlow. */

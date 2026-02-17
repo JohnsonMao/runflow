@@ -8,7 +8,7 @@
 
 ### Requirement: Workspace SHALL provide config discovery and loading
 
-The workspace package SHALL export **findConfigFile(cwd)** and **loadConfig(path)**. findConfigFile SHALL return the first existing path among runflow.config.mjs, runflow.config.js, runflow.config.json under the given cwd, or null. loadConfig SHALL load and return the config object (RunflowConfig). Config path resolution (e.g. from `--config` or cwd) is the responsibility of the caller (CLI or MCP); workspace does not read environment variables for config path.
+The workspace package SHALL export **findConfigFile(cwd)** and **loadConfig(path)**. findConfigFile SHALL return the first existing path among runflow.config.mjs, runflow.config.js, runflow.config.json under the given cwd, or null. loadConfig SHALL load and return the config object (RunflowConfig). RunflowConfig SHALL include an optional **params** property of type **ParamDeclaration[]** (array of param declarations), not Record<string, unknown>. When the config file contains `params` as a plain object (legacy), loadConfig MAY normalize it to ParamDeclaration[] for backward compatibility (see config-params-declaration spec). Config path resolution (e.g. from `--config` or cwd) is the responsibility of the caller (CLI or MCP); workspace does not read environment variables for config path.
 
 #### Scenario: findConfigFile returns first existing config file in cwd
 
@@ -19,7 +19,7 @@ The workspace package SHALL export **findConfigFile(cwd)** and **loadConfig(path
 #### Scenario: loadConfig loads and returns RunflowConfig
 
 - **WHEN** the caller invokes loadConfig(absolutePath) with a valid config file path
-- **THEN** the return value SHALL be the config object (RunflowConfig) with optional flowsDir, openapi, handlers, params
+- **THEN** the return value SHALL be the config object (RunflowConfig) with optional flowsDir, openapi, handlers, params (params when present SHALL be ParamDeclaration[])
 - **AND** paths inside the config are not resolved by workspace; the caller uses configDir (dirname of config path) for resolution
 
 ### Requirement: Workspace SHALL provide flowId resolution (resolveFlowId)

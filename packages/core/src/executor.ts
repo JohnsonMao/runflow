@@ -293,11 +293,12 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const steps: StepResult[] = []
   let initialParams: Record<string, unknown> = { ...(options.params ?? {}) }
 
-  if (flow.params && flow.params.length > 0) {
-    const schema = paramsDeclarationToZodSchema(flow.params)
+  const declaration = options.effectiveParamsDeclaration ?? flow.params
+  if (declaration && declaration.length > 0) {
+    const schema = paramsDeclarationToZodSchema(declaration)
     const parsed = schema.safeParse(options.params ?? {})
     if (!parsed.success) {
-      const msg = formatParamsValidationError(flow.params, parsed.error.errors)
+      const msg = formatParamsValidationError(declaration, parsed.error.errors)
       return {
         flowName: flow.name,
         success: false,

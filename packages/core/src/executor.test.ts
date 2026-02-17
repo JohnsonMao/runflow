@@ -471,6 +471,35 @@ describe('run', () => {
     expect(result.error).toMatch(/number/)
   })
 
+  it('effectiveParamsDeclaration: when provided, validates and applies defaults instead of flow.params', async () => {
+    const flow: FlowDefinition = {
+      name: 'no-params',
+      steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+    }
+    const effective = [
+      { name: 'env', type: 'string' as const, default: 'development' },
+      { name: 'count', type: 'number' as const, default: 1 },
+    ]
+    const result = await run(flow, {
+      registry: createStubRegistry(),
+      effectiveParamsDeclaration: effective,
+      params: { count: 2 },
+    })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ s1: { env: 'development', count: 2 } })
+  })
+
+  it('effectiveParamsDeclaration: when absent, flow.params is used (unchanged behavior)', async () => {
+    const flow: FlowDefinition = {
+      name: 'with-params',
+      params: [{ name: 'a', type: 'string', default: 'from-flow' }],
+      steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+    }
+    const result = await run(flow, { registry: createStubRegistry() })
+    expect(result.success).toBe(true)
+    expect(result.steps[0].outputs).toEqual({ s1: { a: 'from-flow' } })
+  })
+
   it('dag linear chain executes in dependency order', async () => {
     const flow: FlowDefinition = {
       name: 'linear',

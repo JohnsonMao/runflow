@@ -16,6 +16,7 @@ import {
   getDiscoverEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
+  mergeParamDeclarations,
   resolveAndLoadFlow,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
@@ -114,8 +115,9 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
     process.exit(1)
   }
 
+  const effectiveParamsDeclaration = mergeParamDeclarations(config?.params, flow.flow.params)
   const paramsPath = options.paramsFile ?? options.f
-  let params: Record<string, unknown> = { ...(config?.params ?? {}) }
+  let params: Record<string, unknown> = {}
   if (paramsPath)
     params = { ...params, ...loadParamsFile(paramsPath) }
   if (options.param?.length) {
@@ -128,6 +130,7 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
   const result = await run(flow.flow, {
     dryRun: options.dryRun,
     params: Object.keys(params).length ? params : undefined,
+    effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
     flowFilePath: flow.flowFilePath,
     registry,
     resolveFlow,

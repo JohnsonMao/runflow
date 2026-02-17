@@ -1,0 +1,156 @@
+# 複雜流程範例：set / condition / loop / sleep / http / flow，每個 step 皆有 name
+# 執行（CLI，需先 build：pnpm run build --filter @runflow/cli）：
+#   node apps/cli/dist/cli.js run complex/demo.yaml --config examples/config/runflow.config.json --param branch=then --verbose
+#   node apps/cli/dist/cli.js run complex/demo.yaml --config examples/config/runflow.config.json --param branch=else --verbose
+# 嵌套 params 可用 JSON：flow run complex/demo.yaml -f examples/params.json --config examples/config/runflow.config.json
+name: complex/demo
+description: 示範 set、condition、loop、sleep、http、flow 六種步驟，且每個 step 使用 name
+params:
+  - name: title
+    type: string
+    default: Hello
+    description: 顯示用標題
+  - name: options
+    type: object
+    description: 嵌套設定物件
+    schema:
+      level:
+        type: string
+        default: info
+        description: 等級 (info / warn / error)
+      enabled:
+        type: boolean
+        default: true
+        description: 是否啟用
+      count:
+        type: number
+        default: 2
+        description: 迴圈次數
+  - name: branch
+    type: string
+    default: else
+    description: 條件分支 (then / else)
+steps:
+  # --- set ---
+  - id: init
+    name: 初始化
+    type: set
+    set:
+      phase: init-done
+      level: "{{ options.level }}"
+      enabled: "{{ options.enabled }}"
+      count: "{{ options.count }}"
+    dependsOn: []
+  # --- condition ---
+  - id: cond
+    name: 分支條件
+    type: condition
+    when: params.branch === "then"
+    then: [thenStep]
+    else: [elseStep]
+    dependsOn: [init]
+  - id: thenStep
+    name: Then 分支
+    type: set
+    set:
+      branchResult: then
+    dependsOn: [cond]
+  - id: elseStep
+    name: Else 分支
+    type: set
+    set:
+      branchResult: else
+    dependsOn: [cond]
+  # --- loop：entry -> loopBody，connect 從 noop 兩條分支匯回，done -> nap ---
+  - id: loop
+    name: 迴圈
+    type: loop
+    when: "params.loopBody.iterIndex >= params.init.count - 1"
+    entry: [loopBody]
+    connect: [A3, nodeB]
+    done: [nap]
+    maxIterations: 100
+    dependsOn: [thenStep]
+  - id: loopBody
+    name: 迴圈本體
+    type: set
+    set:
+      iterIndex: "{{ index }}"
+      iterCount: "{{ count }}"
+    dependsOn: [loop]
+  - id: earlyExitCond
+    name: 迴圈內條件
+    type: condition
+    when: "params.loopBody.iterIndex >= 1"
+    then: [nap2]
+    else: [noop]
+    dependsOn: [loopBody]
+  - id: noop
+    name: 無操作
+    type: set
+    set: {}
+    dependsOn: [earlyExitCond]
+  - id: nap2
+    name: 迴圈內等待
+    type: sleep
+    ms: 0
+    dependsOn: [earlyExitCond]
+  - id: nodeA
+    name: 分支 A 起點
+    type: set
+    set: { from: noop }
+    dependsOn: [noop]
+  - id: nodeB
+    name: 分支 B 起點
+    type: set
+    set: { from: noop }
+    dependsOn: [noop]
+  - id: A1
+    name: 分支 A 步驟 1
+    type: set
+    set: { step: 1 }
+    dependsOn: [nodeA]
+  - id: A2
+    name: 分支 A 步驟 2
+    type: set
+    set: { step: 2 }
+    dependsOn: [A1]
+  - id: A3
+    name: 分支 A 步驟 3
+    type: set
+    set: { step: 3 }
+    dependsOn: [A2]
+  # --- sleep ---
+  - id: nap
+    name: 迴圈後等待
+    type: sleep
+    ms: 0
+    dependsOn: [loop]
+  # --- http ---
+  - id: req
+    name: HTTP 請求
+    type: http
+    url: https://httpbin.org/get
+    method: GET
+    dependsOn: [nap]
+  # --- flow：呼叫 examples 內子流程 ---
+  - id: sub
+    name: 呼叫子流程
+    type: flow
+    flow: basic/sub.yaml
+    params:
+      from: "{{ title }}"
+    dependsOn: [req]
+  # --- set 彙總 ---
+  - id: summary
+    name: 彙總結果
+    type: set
+    set:
+      done: true
+      level: "{{ init.level }}"
+      enabled: "{{ init.enabled }}"
+      branchResult: "{{ params.branch }}"
+      fromSub: "{{ sub.fromSub }}"
+      receivedFrom: "{{ sub.receivedFrom }}"
+      httpUrl: "{{ req.body.url }}"
+    dependsOn: [sub]

@@ -7,6 +7,8 @@ import {
   CONFIG_NAMES,
   findConfigFile,
   loadConfig,
+  mergeParamDeclarations,
+  normalizeConfigParams,
   resolveFlowId,
 } from './config'
 
@@ -68,6 +70,95 @@ describe('loadConfig', () => {
     const configPath = path.join(dir, 'runflow.config.json')
     writeFileSync(configPath, 'not json', 'utf-8')
     expect(await loadConfig(configPath)).toBeNull()
+  })
+
+  it('returns config with params as ParamDeclaration[] when config has params array', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'runflow-load-params-array-'))
+    const configPath = path.join(dir, 'runflow.config.json')
+    writeFileSync(
+      configPath,
+      '{"flowsDir":"flows","params":[{"name":"env","type":"string","default":"development"},{"name":"count","type":"number","default":1}]}',
+      'utf-8',
+    )
+    const loaded = await loadConfig(configPath)
+    expect(loaded).not.toBeNull()
+    expect(loaded?.params).toHaveLength(2)
+    expect(loaded?.params?.[0]).toEqual({ name: 'env', type: 'string', default: 'development' })
+    expect(loaded?.params?.[1]).toEqual({ name: 'count', type: 'number', default: 1 })
+  })
+
+  it('normalizes legacy params object to ParamDeclaration[] when config has params as object', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'runflow-load-params-legacy-'))
+    const configPath = path.join(dir, 'runflow.config.json')
+    writeFileSync(
+      configPath,
+      '{"flowsDir":"flows","params":{"env":"example","name":"Guest"}}',
+      'utf-8',
+    )
+    const loaded = await loadConfig(configPath)
+    expect(loaded).not.toBeNull()
+    expect(loaded?.params).toHaveLength(2)
+    const names = (loaded?.params ?? []).map(p => p.name).sort()
+    expect(names).toEqual(['env', 'name'])
+    const envParam = loaded?.params?.find(p => p.name === 'env')
+    expect(envParam).toEqual({ name: 'env', type: 'string', default: 'example' })
+    const nameParam = loaded?.params?.find(p => p.name === 'name')
+    expect(nameParam).toEqual({ name: 'name', type: 'string', default: 'Guest' })
+  })
+})
+
+describe('normalizeConfigParams', () => {
+  it('returns undefined for undefined or null', () => {
+    expect(normalizeConfigParams(undefined)).toBeUndefined()
+    expect(normalizeConfigParams(null)).toBeUndefined()
+  })
+
+  it('returns array as-is when raw is already an array', () => {
+    const arr = [{ name: 'x', type: 'string' as const, default: 'v' }]
+    expect(normalizeConfigParams(arr)).toBe(arr)
+  })
+
+  it('converts plain object to ParamDeclaration[] (legacy)', () => {
+    const out = normalizeConfigParams({ a: 1, b: 'two' })
+    expect(out).toHaveLength(2)
+    expect(out?.find(p => p.name === 'a')).toEqual({ name: 'a', type: 'string', default: 1 })
+    expect(out?.find(p => p.name === 'b')).toEqual({ name: 'b', type: 'string', default: 'two' })
+  })
+})
+
+describe('mergeParamDeclarations', () => {
+  it('flow overrides config for same param name', () => {
+    const config = [
+      { name: 'env', type: 'string' as const, default: 'development' },
+    ]
+    const flow = [
+      { name: 'env', type: 'string' as const, default: 'production' },
+    ]
+    const merged = mergeParamDeclarations(config, flow)
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toEqual({ name: 'env', type: 'string', default: 'production' })
+  })
+
+  it('flow adds new param not in config', () => {
+    const config = [
+      { name: 'env', type: 'string' as const, default: 'development' },
+    ]
+    const flow = [
+      { name: 'limit', type: 'number' as const, required: true },
+    ]
+    const merged = mergeParamDeclarations(config, flow)
+    expect(merged).toHaveLength(2)
+    expect(merged.find(p => p.name === 'env')).toEqual({ name: 'env', type: 'string', default: 'development' })
+    expect(merged.find(p => p.name === 'limit')).toEqual({ name: 'limit', type: 'number', required: true })
+  })
+
+  it('returns empty array when both undefined', () => {
+    expect(mergeParamDeclarations(undefined, undefined)).toEqual([])
+  })
+
+  it('returns config when flow is empty', () => {
+    const config = [{ name: 'a', type: 'string' as const }]
+    expect(mergeParamDeclarations(config, [])).toEqual(config)
   })
 })
 

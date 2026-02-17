@@ -13,14 +13,16 @@ examples/
 ├── openapi/
 │   └── simple.yaml     # Minimal OpenAPI spec (e.g. simple-listUsers flows)
 ├── flows/
-│   └── basic/          # Basic example flows
-│       ├── http.yaml
-│       ├── params-flow.yaml
-│       ├── dag-linear.yaml
-│       ├── condition-flow.yaml
-│       ├── sub.yaml
-│       ├── flow-call.yaml
-│       └── echo-demo.yaml    # Uses custom echo handler
+│   ├── basic/          # Basic example flows
+│   │   ├── http.yaml
+│   │   ├── params-flow.yaml
+│   │   ├── dag-linear.yaml
+│   │   ├── condition-flow.yaml
+│   │   ├── sub.yaml
+│   │   ├── flow-call.yaml
+│   │   └── echo-demo.yaml    # Uses custom echo handler
+│   └── complex/        # Complex flow (set/condition/loop/sleep/http/flow, every step has name)
+│       └── demo.yaml
 └── custom-handler/     # Custom step handler source only
     ├── README.md
     └── echo-handler.mjs
@@ -48,6 +50,13 @@ node apps/cli/dist/cli.js run basic/flow-call.yaml --config examples/config/runf
 node apps/cli/dist/cli.js run basic/echo-demo.yaml --config examples/config/runflow.config.json --verbose
 ```
 
+Complex flow (all built-in step types, each step has `name`):
+
+```bash
+node apps/cli/dist/cli.js run complex/demo.yaml --config examples/config/runflow.config.json --param branch=then --verbose
+node apps/cli/dist/cli.js run complex/demo.yaml --config examples/config/runflow.config.json --param branch=else --verbose
+```
+
 OpenAPI-derived flows (with `baseUrl`, `operationFilter`, and `hooks` applied from config):
 
 ```bash
@@ -71,7 +80,7 @@ The single config demonstrates all supported top-level and OpenAPI options.
 |--------|-------------|
 | **handlers** | Custom step types: `{ "typeName": "path/to/handler.mjs" }`. Paths relative to config file directory. |
 | **flowsDir** | Directory for file flowIds (relative to config dir). When set, flowId is resolved under this dir. |
-| **params** | **Shared default values** for params used across flows. Same idea as a flow’s `params` (names + defaults), but at config level so every flow run gets these defaults. Use the **same param names** as in your flows’ `params` declaration; values here override per-flow defaults. Shape: `{ "paramName": value, ... }` (JSON-serializable). Merge order: config → `-f` / `--params-file` → `--param`. Run-time values are validated against each flow’s own `params` declaration when present. |
+| **params** | Global param **declarations** (same shape as a flow’s `params`): array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. Defaults live in each item’s `default`. For each run, the effective declaration is config params merged with flow params, with **flow overriding** config for the same param name. Runners pass this effective declaration to the engine; run-time overrides come from `-f` / `--param`. |
 | **openapi** | Map of prefix → OpenAPI entry. flowId for OpenAPI flows = `prefix-operationKey` (e.g. `simple-get-users`). |
 
 ### OpenAPI entry (per prefix)
@@ -85,16 +94,16 @@ The single config demonstrates all supported top-level and OpenAPI options.
 
 Other runner options (e.g. `allowedHttpHosts`, `maxFlowCallDepth`) are passed at run time via the runner (CLI/MCP), not via the config file.
 
-### Params: shared defaults (config) vs declaration (flow)
+### Params: config (global declaration) vs flow (override and extend)
 
-Config `params` are **shared default values** for all flows: use the same param names that your flows declare, so every run gets the same defaults unless overridden by `-f` or `--param`.
+Config `params` is a **ParamDeclaration[]** (same shape as a flow’s `params`). It defines global param names, types, and defaults. For each run, the **effective declaration** is config params merged with flow params; **flow overrides** config for the same param name and can add more params.
 
 | Where | Shape | Purpose |
 |-------|--------|---------|
-| **Config** `params` | `{ "paramName": value, ... }` — same keys as the params your flows use | Shared default values for every flow run. Align keys with flow param names (e.g. `env`, `name`, `count`) so types and validation in each flow still apply. |
-| **Flow** `params` | Array of `{ name, type, required?, default?, enum?, description?, schema?, items? }` | Declaration (name, type, validation) for that flow’s parameters. Run-time values (config + file + CLI) are validated against this. |
+| **Config** `params` | Array of `{ name, type, required?, default?, enum?, description?, schema?, items? }` | Global param declarations. Every flow run uses these merged with the flow’s own params (flow wins on same name). |
+| **Flow** `params` | Same array shape | Declaration for that flow; overrides or extends config params for the same name. Run-time values (`-f`, `--param`) are validated against the effective declaration. |
 
-Example: if several flows declare `params: [{ name: "env", type: "string", default: "development" }]`, set `"params": { "env": "example" }` in config so they all default to `env: "example"` unless overridden.
+Example: config has `params: [{ name: "env", type: "string", default: "example" }]` and a flow has `params: [{ name: "env", type: "string", default: "production" }]` — the effective declaration for that flow uses `env` default `"production"` (flow overrides).
 
 ## Custom handler
 

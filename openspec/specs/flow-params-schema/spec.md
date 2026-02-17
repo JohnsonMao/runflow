@@ -44,7 +44,7 @@ When a param has `type: array`, it MAY include an `items` field describing eleme
 
 ### Requirement: run() SHALL validate params against flow params declaration when present
 
-When the flow has a `params` declaration, `run(flow, options)` SHALL validate `options.params` against that declaration before executing steps. Validation MUST check: required params present, types match, values in enum when enum is declared, object/array shape when schema/items are declared. On failure, run SHALL fail with an error that identifies missing required, type mismatch, or enum violation.
+When the caller provides **effectiveParamsDeclaration** in RunOptions, run(flow, options) SHALL validate options.params against that effective declaration instead of flow.params. The effective declaration is the merge of config global params and flow params with flow overriding config for the same param name (see config-params-declaration spec). When effectiveParamsDeclaration is absent, run() SHALL validate against flow.params only (unchanged behavior). Validation MUST check: required params present, types match, values in enum when enum is declared, object/array shape when schema/items are declared. Default application SHALL use the effective declaration (or flow.params when effectiveParamsDeclaration is absent). On failure, run SHALL fail with an error that identifies missing required, type mismatch, or enum violation.
 
 #### Scenario: Validation passes
 
@@ -68,6 +68,19 @@ When the flow has a `params` declaration, `run(flow, options)` SHALL validate `o
 - **WHEN** the flow declares `enum: [dev, prod]` and the provided value is not in that list
 - **THEN** validation fails
 - **AND** the error message indicates the value is not in the allowed set
+
+#### Scenario: Validation uses effective declaration when provided
+
+- **WHEN** the caller invokes run(flow, { params: { env: "production" }, effectiveParamsDeclaration: [{ name: "env", type: "string", default: "development" }] }) and the flow has no params or different params
+- **THEN** run() SHALL validate options.params against effectiveParamsDeclaration
+- **AND** default application SHALL use effectiveParamsDeclaration (e.g. missing keys get default from declaration)
+- **AND** execution SHALL proceed with initial context built from validated params and declaration defaults
+
+#### Scenario: Effective declaration absent preserves current behavior
+
+- **WHEN** the caller invokes run(flow, { params: { a: "x" } }) without effectiveParamsDeclaration
+- **THEN** run() SHALL validate options.params against flow.params only
+- **AND** behavior SHALL be unchanged from before this change
 
 ### Requirement: RunOptions.params SHALL accept nested values
 
