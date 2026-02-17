@@ -5,6 +5,8 @@ packages:
 catalogs:
   dev:
     "@antfu/eslint-config": "^7.4.3"
+    "@testing-library/react": "^16.0.0"
+    "happy-dom": "^15.11.0"
     "@vitejs/plugin-react": "^4.3.3"
     "@vitest/coverage-v8": "^2.1.6"
     "@types/dagre": "^0.7.53"

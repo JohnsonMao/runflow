@@ -25,13 +25,13 @@ export interface TreeNode {
   children?: TreeNode[]
 }
 
-interface DiscoverEntryLike {
+export interface DiscoverEntryLike {
   flowId: string
   name: string
   openapiPrefix?: string
 }
 
-function matchOpenApiPrefixFallback(flowId: string, prefixes: string[]): string | null {
+export function matchOpenApiPrefixFallback(flowId: string, prefixes: string[]): string | null {
   let matched: string | null = null
   for (const p of prefixes) {
     if (flowId.startsWith(`${p}-`))
@@ -40,7 +40,7 @@ function matchOpenApiPrefixFallback(flowId: string, prefixes: string[]): string 
   return matched
 }
 
-function buildTreeFromCatalog(
+export function buildTreeFromCatalog(
   catalog: DiscoverEntryLike[],
   openapiPrefixes: string[] = [],
 ): TreeNode[] {

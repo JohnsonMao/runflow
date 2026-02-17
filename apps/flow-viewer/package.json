@@ -8,7 +8,8 @@
     "dev": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "class-variance-authority": "catalog:frontend",
@@ -27,12 +28,16 @@
     "@antfu/eslint-config": "catalog:dev",
     "@runflow/workspace": "workspace:^",
     "@tailwindcss/vite": "catalog:frontend",
+    "@testing-library/react": "catalog:dev",
     "@types/dagre": "catalog:dev",
     "@types/react": "catalog:frontend",
     "@types/react-dom": "catalog:frontend",
     "@vitejs/plugin-react": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:dev",
+    "happy-dom": "catalog:dev",
     "tailwindcss": "catalog:frontend",
     "typescript": "catalog:dev",
-    "vite": "catalog:dev"
+    "vite": "catalog:dev",
+    "vitest": "catalog:dev"
   }
 }
