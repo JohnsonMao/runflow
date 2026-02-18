@@ -109,6 +109,3 @@ export interface RequestBodyObject {
   description?: string
   content?: Record<string, { schema?: OpenApiSchema }>
 }
-
-/** Re-export for adapter output (flow params match core). */
-export type { FlowDefinition, FlowStep, ParamDeclaration }
