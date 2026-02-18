@@ -1,4 +1,4 @@
-import type { FlowGraphEdgeKind, FlowGraphInput, FlowGraphInputEdge, FlowGraphInputNode, FlowGraphNodeShape } from './types'
+import type { FlowGraph, FlowGraphEdge, FlowGraphEdgeKind, FlowGraphNode, FlowGraphNodeShape } from './types'
 
 function normalizeStepIds(v: unknown): string[] {
   if (typeof v === 'string')
@@ -14,6 +14,8 @@ export interface FlowDefinitionInput {
   description?: string
   steps: Array<{
     id: string
+    name?: string
+    description?: string
     type?: string
     dependsOn?: string[]
     connect?: string | string[]
@@ -30,7 +32,7 @@ export interface FlowDefinitionInput {
  */
 export function getNodeShape(
   node: { id: string, type?: string, label?: string },
-  dagEdges: FlowGraphInputEdge[],
+  dagEdges: FlowGraphEdge[],
   connectSourceIds?: Set<string>,
 ): FlowGraphNodeShape {
   const isCondition = node.type === 'condition'
@@ -55,9 +57,9 @@ export function getNodeShape(
  * Derive flow graph from FlowDefinition (same semantics as flow-graph-format).
  * Only steps with dependsOn are included. Node shape: condition → decision, no incoming → start, no outgoing → end, else process.
  */
-export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraphInput {
-  const nodes: FlowGraphInputNode[] = []
-  const edges: FlowGraphInputEdge[] = []
+export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraph {
+  const nodes: FlowGraphNode[] = []
+  const edges: FlowGraphEdge[] = []
   const idToDeps = new Map<string, string[]>()
   for (const step of flow.steps) {
     if (step.dependsOn == null || !Array.isArray(step.dependsOn))
@@ -69,8 +71,10 @@ export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraphInput
   for (const [stepId, deps] of idToDeps) {
     const step = stepById.get(stepId)
     const type = step && typeof step.type === 'string' ? step.type : undefined
-    const label = type ? `${stepId} (${type})` : stepId
-    nodes.push({ id: stepId, type, label })
+    const labelFallback = type ? `${stepId} (${type})` : stepId
+    const label = (step && typeof step.name === 'string' && step.name !== '') ? step.name : labelFallback
+    const description = step && typeof step.description === 'string' ? step.description : undefined
+    nodes.push({ id: stepId, type, label, ...(description ? { description } : {}) })
     for (const dep of deps) {
       if (!dagIds.has(dep))
         continue

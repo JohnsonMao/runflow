@@ -41,6 +41,29 @@ describe('parse', () => {
     expect(flow?.steps[0]).toMatchObject({ id: 's1', type: 'unknown', run: 'echo hi' })
   })
 
+  it('preserves step name and description for flow-viewer labels', () => {
+    const yaml = [
+      'name: demo',
+      'steps:',
+      '  - id: init',
+      '    name: 初始化',
+      '    type: set',
+      '    set: {}',
+      '    dependsOn: []',
+      '  - id: cond',
+      '    name: 分支條件',
+      '    type: condition',
+      '    when: "true"',
+      '    then: [a]',
+      '    else: [b]',
+      '    dependsOn: [init]',
+    ].join('\n')
+    const flow = parse(yaml)
+    expect(flow).not.toBeNull()
+    expect(flow?.steps[0].name).toBe('初始化')
+    expect(flow?.steps[1].name).toBe('分支條件')
+  })
+
   it('parses minimal valid flow', () => {
     const yaml = [
       'name: my-flow',

@@ -1,5 +1,5 @@
 import type { NodeProps } from 'reactflow'
-import type { FlowGraphInput, FlowGraphInputNode } from './types'
+import type { FlowGraph, FlowGraphNode } from './types'
 import {
   Background,
   Controls,
@@ -14,10 +14,10 @@ import { graphToReactFlow } from './flowGraphToReactFlow'
 import { cn } from './lib/utils'
 
 interface FlowCanvasProps {
-  graph: FlowGraphInput
+  graph: FlowGraph
 }
 
-function ProcessNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
+function ProcessNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   return (
     <div
       className="flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm"
@@ -32,7 +32,7 @@ function ProcessNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElemen
   )
 }
 
-function DecisionNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
+function DecisionNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   return (
     <div
       className="relative flex min-w-20 items-center justify-center rounded border-2 border-violet-600 bg-violet-100 px-3.5 py-2"
@@ -51,7 +51,7 @@ function DecisionNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactEleme
 }
 
 /** Loop：上進入（含 loopBack）、下 loop 出去、右 done；版型與 process 一致 */
-function LoopNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
+function LoopNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   return (
     <div
       className="relative flex min-w-20 items-center justify-center rounded border-2 border-amber-600 bg-amber-50 px-3.5 py-2 shadow-sm"
@@ -69,7 +69,7 @@ function LoopNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
   )
 }
 
-function StartEndNode({ data }: NodeProps<FlowGraphInputNode>): React.ReactElement {
+function StartEndNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   const { shape, description, label } = data
   const isStart = shape === 'start'
   const isEnd = shape === 'end'

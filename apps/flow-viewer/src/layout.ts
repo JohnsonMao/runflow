@@ -1,4 +1,4 @@
-import type { FlowGraphInput, FlowGraphInputEdge } from './types'
+import type { FlowGraph, FlowGraphEdge } from './types'
 import dagre from 'dagre'
 
 const RANK_SEP = 72
@@ -27,14 +27,14 @@ function nodeDimensions(label: string | undefined): { width: number, height: num
 }
 
 /** DAG edges only (exclude loopBack) so dagre gets acyclic graph. */
-function dagEdges(edges: FlowGraphInputEdge[]): FlowGraphInputEdge[] {
+function dagEdges(edges: FlowGraphEdge[]): FlowGraphEdge[] {
   return edges.filter(e => e.kind !== 'loopBack')
 }
 
 /** Order DAG edges so else-branch is added before then-branch; dagre often orders same-rank nodes by edge order. */
-function orderedDagEdges(edges: FlowGraphInputEdge[]): FlowGraphInputEdge[] {
+function orderedDagEdges(edges: FlowGraphEdge[]): FlowGraphEdge[] {
   const dag = dagEdges(edges)
-  const elseFirst = (a: FlowGraphInputEdge, b: FlowGraphInputEdge) => {
+  const elseFirst = (a: FlowGraphEdge, b: FlowGraphEdge) => {
     if (a.kind === 'else' && b.kind === 'then')
       return -1
     if (a.kind === 'then' && b.kind === 'else')
@@ -54,7 +54,7 @@ function orderedDagEdges(edges: FlowGraphInputEdge[]): FlowGraphInputEdge[] {
  *
  * @param graph - Flow graph (nodes may have optional label for width calculation)
  */
-export function layoutGraph(graph: FlowGraphInput): Map<string, { x: number, y: number }> {
+export function layoutGraph(graph: FlowGraph): Map<string, { x: number, y: number }> {
   const { nodes, edges } = graph
   const dag = orderedDagEdges(edges)
   const g = new dagre.graphlib.Graph({ compound: true })
@@ -97,7 +97,7 @@ export function layoutGraph(graph: FlowGraphInput): Map<string, { x: number, y: 
 /** Swap x of else/then targets when they are in the same rank and else is to the right of then. */
 function applyElseLeftThenRight(
   positions: Map<string, { x: number, y: number }>,
-  edges: FlowGraphInputEdge[],
+  edges: FlowGraphEdge[],
 ): void {
   const sameRankTolerance = 2
   const bySource = new Map<string, { elseTarget?: string, thenTarget?: string }>()

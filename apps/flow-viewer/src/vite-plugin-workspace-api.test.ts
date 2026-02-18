@@ -1,6 +1,6 @@
-import type { DiscoverEntryLike } from '../vite-plugin-workspace-api'
+import type { DiscoverEntryLike } from './vite-plugin-workspace-api'
 import { describe, expect, it } from 'vitest'
-import { buildTreeFromCatalog, matchOpenApiPrefixFallback } from '../vite-plugin-workspace-api'
+import { buildTreeFromCatalog, matchOpenApiPrefixFallback } from './vite-plugin-workspace-api'
 
 describe('matchOpenApiPrefixFallback', () => {
   it('returns longest matching prefix when flowId starts with prefix-', () => {

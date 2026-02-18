@@ -1,29 +1,32 @@
-/** Edge kind for visualization (loop back, done, then, else). */
-export type FlowGraphEdgeKind = 'dependsOn' | 'loopBack' | 'done' | 'then' | 'else'
+/**
+ * Flow-viewer 型別：flow graph 從 @runflow/core re-export；
+ * workspace API 回應型別與 vite-plugin-workspace-api 一致，前端與 plugin 共用。
+ */
+export type {
+  FlowGraph,
+  FlowGraphEdge,
+  FlowGraphEdgeKind,
+  FlowGraphNode,
+  FlowGraphNodeShape,
+} from '@runflow/core'
 
-/** Node shape for visualization: process (rect), decision (diamond), start/end (stadium), loop. */
-export type FlowGraphNodeShape = 'process' | 'decision' | 'start' | 'end' | 'loop'
+export interface WorkspaceStatus {
+  workspaceRoot: string
+  configPath: string | null
+  configured: boolean
+}
 
-/** Single node in flow graph input (from flow view --output json). */
-export interface FlowGraphInputNode {
+export interface TreeNode {
   id: string
-  type?: string
-  label?: string
-  description?: string
-  shape?: FlowGraphNodeShape
+  label: string
+  type: 'folder' | 'file'
+  flowId?: string
+  name?: string
+  children?: TreeNode[]
 }
 
-/** Single edge in flow graph input. */
-export interface FlowGraphInputEdge {
-  source: string
-  target: string
-  kind?: FlowGraphEdgeKind
-}
-
-/** Flow graph format (from flow view --output json). */
-export interface FlowGraphInput {
-  nodes: FlowGraphInputNode[]
-  edges: FlowGraphInputEdge[]
-  flowName?: string
-  flowDescription?: string
+export interface TreeResponse {
+  workspaceRoot: string
+  configPath: string | null
+  tree: TreeNode[]
 }

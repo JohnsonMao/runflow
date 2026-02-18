@@ -1,9 +1,9 @@
 import type { Edge, Node } from 'reactflow'
-import type { FlowGraphInput, FlowGraphInputNode } from './types'
+import type { FlowGraph, FlowGraphNode } from './types'
 import { getNodeShape } from './flowDefinitionToGraph'
 import { layoutGraph } from './layout'
 
-export function nodeType(shape?: FlowGraphInputNode['shape']): string {
+export function nodeType(shape?: FlowGraphNode['shape']): string {
   if (shape === 'decision')
     return 'decision'
   if (shape === 'loop')
@@ -13,12 +13,12 @@ export function nodeType(shape?: FlowGraphInputNode['shape']): string {
   return 'process'
 }
 
-export function graphToReactFlow(graph: FlowGraphInput): { nodes: Node[], edges: Edge[] } {
+export function graphToReactFlow(graph: FlowGraph): { nodes: Node[], edges: Edge[] } {
   const dag = graph.edges.filter(e => e.kind !== 'loopBack')
   const connectSourceIds = new Set(
     graph.edges.filter(e => e.kind === 'loopBack').map(e => e.source),
   )
-  const getShape = (n: FlowGraphInputNode) =>
+  const getShape = (n: FlowGraphNode) =>
     n.shape ?? getNodeShape(n, dag, connectSourceIds)
   const nodeShapes = new Map(graph.nodes.map(n => [n.id, getShape(n)]))
 

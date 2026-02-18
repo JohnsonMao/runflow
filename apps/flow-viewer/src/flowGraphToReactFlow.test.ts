@@ -1,4 +1,4 @@
-import type { FlowGraphInput } from './types'
+import type { FlowGraph } from './types'
 import { describe, expect, it } from 'vitest'
 import { graphToReactFlow, nodeType } from './flowGraphToReactFlow'
 
@@ -21,7 +21,7 @@ describe('nodeType', () => {
 
 describe('graphToReactFlow', () => {
   it('returns nodes and edges for linear graph', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', label: 'a (set)', shape: 'start' },
         { id: 'b', label: 'b (set)', shape: 'process' },
@@ -44,7 +44,7 @@ describe('graphToReactFlow', () => {
   })
 
   it('assigns then/else handles for decision edges', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', shape: 'start' },
         { id: 'cond', shape: 'decision' },
@@ -65,7 +65,7 @@ describe('graphToReactFlow', () => {
   })
 
   it('assigns loop handles and smoothstep for loopBack', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', shape: 'process' },
         { id: 'loop', shape: 'loop' },

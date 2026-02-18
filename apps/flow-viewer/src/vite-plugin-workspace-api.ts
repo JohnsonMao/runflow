@@ -1,4 +1,7 @@
+import type { FlowGraph } from '@runflow/core'
+import type { ServerResponse } from 'node:http'
 import type { PluginOption } from 'vite'
+import type { TreeNode } from './types'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import {
@@ -12,17 +15,15 @@ import {
 
 const WORKSPACE_ROOT_ENV = 'FLOW_VIEWER_WORKSPACE_ROOT'
 
-function isConfigFileName(name: string): boolean {
-  return CONFIG_NAMES.includes(name as typeof CONFIG_NAMES[number])
+export interface WorkspaceContext {
+  cwd: string
+  configPath: string | null
+  configDir: string
+  config: Awaited<ReturnType<typeof loadConfig>>
 }
 
-export interface TreeNode {
-  id: string
-  label: string
-  type: 'folder' | 'file'
-  flowId?: string
-  name?: string
-  children?: TreeNode[]
+function isConfigFileName(name: string): boolean {
+  return CONFIG_NAMES.includes(name as typeof CONFIG_NAMES[number])
 }
 
 export interface DiscoverEntryLike {
@@ -166,96 +167,123 @@ function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, con
   return { cwd: configDir, configPath, configDir }
 }
 
+function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
+  res.statusCode = statusCode
+  res.setHeader('Content-Type', 'application/json')
+  res.end(JSON.stringify(body))
+}
+
+async function handleStatus(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
+  sendJson(res, 200, {
+    workspaceRoot: ctx.cwd,
+    configPath: ctx.configPath ?? null,
+    configured: Boolean(ctx.configPath && ctx.config),
+  })
+}
+
+async function handleList(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
+  try {
+    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+    sendJson(res, 200, { workspaceRoot: ctx.cwd, entries: catalog })
+  }
+  catch (err) {
+    sendJson(res, 500, {
+      error: err instanceof Error ? err.message : 'Failed to build catalog',
+    })
+  }
+}
+
+async function handleTree(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
+  try {
+    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+    const openapiPrefixes = ctx.config?.openapi && typeof ctx.config.openapi === 'object'
+      ? Object.keys(ctx.config.openapi)
+      : []
+    const tree = buildTreeFromCatalog(catalog, openapiPrefixes)
+    sendJson(res, 200, {
+      workspaceRoot: ctx.cwd,
+      configPath: ctx.configPath ?? null,
+      tree,
+    })
+  }
+  catch (err) {
+    sendJson(res, 500, {
+      error: err instanceof Error ? err.message : 'Failed to build tree',
+    })
+  }
+}
+
+async function handleGraph(
+  ctx: WorkspaceContext,
+  requestUrl: URL,
+  res: ServerResponse,
+): Promise<void> {
+  const flowId = requestUrl.searchParams.get('flowId')
+  if (!flowId?.trim()) {
+    sendJson(res, 400, { error: 'Missing flowId' })
+    return
+  }
+  try {
+    const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
+    const graph = flowDefinitionToGraphForVisualization(loaded.flow)
+    const stepById = new Map(loaded.flow.steps.map(s => [s.id, s]))
+    const nodes = graph.nodes.map((n) => {
+      const step = stepById.get(n.id)
+      const name = step && typeof step.name === 'string' && step.name !== '' ? step.name : null
+      return name ? { ...n, label: name } : n
+    })
+    const response: FlowGraph = { ...graph, nodes }
+    sendJson(res, 200, {
+      ...response,
+      flowName: loaded.flow.name,
+      flowDescription: loaded.flow.description,
+    })
+  }
+  catch (err) {
+    sendJson(res, 404, {
+      error: err instanceof Error ? err.message : 'Flow not found or invalid',
+    })
+  }
+}
+
 export function workspaceApiPlugin(): PluginOption {
   return {
     name: 'runflow:workspace-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const url = req.url ?? ''
-        if (url.startsWith('/api/workspace/')) {
-          const { cwd, configPath, configDir } = resolveWorkspaceConfig()
-          const config = configPath ? await loadConfig(configPath) : null
+        const rawUrl = req.url ?? ''
+        let requestUrl: URL
+        try {
+          requestUrl = new URL(rawUrl, 'http://localhost')
+        }
+        catch {
+          next()
+          return
+        }
+        const pathname = requestUrl.pathname
+        if (!pathname.startsWith('/api/workspace/')) {
+          next()
+          return
+        }
+        const { cwd, configPath, configDir } = resolveWorkspaceConfig()
+        const config = configPath ? await loadConfig(configPath) : null
+        const ctx: WorkspaceContext = { cwd, configPath, configDir, config }
 
-          if (url === '/api/workspace/status' || url.startsWith('/api/workspace/status?')) {
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({
-              workspaceRoot: cwd,
-              configPath: configPath ?? null,
-              configured: Boolean(configPath && config),
-            }))
-            return
-          }
-
-          if (url === '/api/workspace/list' || url.startsWith('/api/workspace/list?')) {
-            try {
-              const catalog = await buildDiscoverCatalog(config, configDir, cwd)
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                workspaceRoot: cwd,
-                entries: catalog,
-              }))
-            }
-            catch (err) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                error: err instanceof Error ? err.message : 'Failed to build catalog',
-              }))
-            }
-            return
-          }
-
-          if (url === '/api/workspace/tree' || url.startsWith('/api/workspace/tree?')) {
-            try {
-              const catalog = await buildDiscoverCatalog(config, configDir, cwd)
-              const openapiPrefixes = config?.openapi && typeof config.openapi === 'object'
-                ? Object.keys(config.openapi)
-                : []
-              const tree = buildTreeFromCatalog(catalog, openapiPrefixes)
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                workspaceRoot: cwd,
-                configPath: configPath ?? null,
-                tree,
-              }))
-            }
-            catch (err) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                error: err instanceof Error ? err.message : 'Failed to build tree',
-              }))
-            }
-            return
-          }
-
-          if (url.startsWith('/api/workspace/graph?')) {
-            const flowId = new URL(url, 'http://localhost').searchParams.get('flowId')
-            if (!flowId || !flowId.trim()) {
-              res.statusCode = 400
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ error: 'Missing flowId' }))
-              return
-            }
-            try {
-              const loaded = await resolveAndLoadFlow(flowId, config, configDir, cwd)
-              const graph = flowDefinitionToGraphForVisualization(loaded.flow)
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                ...graph,
-                flowName: loaded.flow.name,
-                flowDescription: loaded.flow.description,
-              }))
-            }
-            catch (err) {
-              res.statusCode = 404
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({
-                error: err instanceof Error ? err.message : 'Flow not found or invalid',
-              }))
-            }
-            return
-          }
+        if (pathname === '/api/workspace/status') {
+          await handleStatus(ctx, res)
+          return
+        }
+        if (pathname === '/api/workspace/list') {
+          await handleList(ctx, res)
+          return
+        }
+        if (pathname === '/api/workspace/tree') {
+          await handleTree(ctx, res)
+          return
+        }
+        if (pathname === '/api/workspace/graph') {
+          await handleGraph(ctx, requestUrl, res)
+          return
         }
         next()
       })

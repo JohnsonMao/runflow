@@ -1,10 +1,10 @@
-import type { FlowGraphInput } from './types'
+import type { FlowGraph } from './types'
 import { describe, expect, it } from 'vitest'
 import { layoutGraph } from './layout'
 
 describe('layoutGraph', () => {
   it('returns one position per node for linear graph', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', label: 'a (set)' },
         { id: 'b', label: 'b (set)' },
@@ -26,7 +26,7 @@ describe('layoutGraph', () => {
   })
 
   it('returns positions for parallel branches', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', label: 'a' },
         { id: 'b', label: 'b' },
@@ -45,7 +45,7 @@ describe('layoutGraph', () => {
   })
 
   it('places else-branch left of then-branch when same rank (condition)', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', label: 'a' },
         { id: 'cond', label: 'cond (condition)' },
@@ -70,7 +70,7 @@ describe('layoutGraph', () => {
   })
 
   it('handles graph with loopBack edge (DAG edges only for layout)', () => {
-    const graph: FlowGraphInput = {
+    const graph: FlowGraph = {
       nodes: [
         { id: 'a', label: 'a' },
         { id: 'loop', label: 'loop (loop)' },

@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
+    "@runflow/core": "workspace:*",
     "@runflow/workspace": "workspace:^",
     "@tailwindcss/vite": "catalog:frontend",
     "@testing-library/react": "catalog:dev",

@@ -91,9 +91,9 @@ steps:
     set: {}
     dependsOn: [earlyExitCond]
   - id: nap2
-    name: 迴圈內等待
-    type: sleep
-    ms: 0
+    name: 提前脫離迴圈
+    type: message
+    message: "提前脫離迴圈"
     dependsOn: [earlyExitCond]
   - id: nodeA
     name: 分支 A 起點

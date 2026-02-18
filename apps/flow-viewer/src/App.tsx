@@ -1,4 +1,4 @@
-import type { FlowGraphInput } from './types'
+import type { FlowGraph, TreeNode, TreeResponse, WorkspaceStatus } from './types'
 import { ChevronRight, FileCode2, Folder, FolderOpen, Moon, Sun } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import { ReactFlowProvider } from 'reactflow'
@@ -25,29 +25,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FlowCanvas } from './FlowCanvas'
 
-interface WorkspaceStatus {
-  workspaceRoot: string
-  configPath: string | null
-  configured: boolean
-}
-
-interface TreeNode {
-  id: string
-  label: string
-  type: 'folder' | 'file'
-  flowId?: string
-  name?: string
-  children?: TreeNode[]
-}
-
-interface TreeResponse {
-  workspaceRoot: string
-  configPath: string | null
-  tree: TreeNode[]
-}
-
 export function App(): React.ReactElement {
-  const [graph, setGraph] = useState<FlowGraphInput | null>(null)
+  const [graph, setGraph] = useState<FlowGraph | null>(null)
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus | null>(null)
   const [treeResponse, setTreeResponse] = useState<TreeResponse | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
@@ -118,19 +97,19 @@ export function App(): React.ReactElement {
         const data = await res.json().catch(() => ({}))
         if (!res.ok)
           throw new Error(data?.error ?? `Graph failed: ${res.status}`)
-        return data as FlowGraphInput & { flowName?: string, flowDescription?: string }
+        return data as FlowGraph
       })
       .then((raw) => {
         if (fetchingFlowIdRef.current !== flowIdForThisFetch)
           return
-        const graphInput: FlowGraphInput = {
+        const graphData: FlowGraph = {
           nodes: raw.nodes ?? [],
           edges: raw.edges ?? [],
           flowName: raw.flowName,
           flowDescription: raw.flowDescription,
         }
-        if (graphInput.nodes.length > 0)
-          setGraph(graphInput)
+        if (graphData.nodes.length > 0)
+          setGraph(graphData)
         else
           setGraph(null)
       })

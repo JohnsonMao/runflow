@@ -3,7 +3,7 @@ import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { workspaceApiPlugin } from './vite-plugin-workspace-api'
+import { workspaceApiPlugin } from './src/vite-plugin-workspace-api'
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), workspaceApiPlugin()] as PluginOption[],
