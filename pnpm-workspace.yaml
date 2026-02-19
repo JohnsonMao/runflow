@@ -12,7 +12,7 @@ catalogs:
     "@types/dagre": "^0.7.53"
     "@types/node": "^25.0.0"
     dagre: "^0.8.5"
-    eslint: "^10.0.0"
+    eslint: "^9.0.0"
     glob: "^11.0.0"
     lint-staged: "^16.2.7"
     simple-git-hooks: "^2.12.1"

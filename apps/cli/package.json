@@ -17,15 +17,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@runflow/convention-openapi": "workspace:^",
-    "@runflow/core": "workspace:*",
-    "@runflow/handlers": "workspace:^",
-    "@runflow/workspace": "workspace:*",
+    "@apidevtools/swagger-parser": "catalog:prod",
     "commander": "catalog:prod",
     "yaml": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
+    "@runflow/convention-openapi": "workspace:^",
+    "@runflow/core": "workspace:*",
+    "@runflow/handlers": "workspace:^",
+    "@runflow/workspace": "workspace:*",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
