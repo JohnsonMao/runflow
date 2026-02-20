@@ -1,6 +1,7 @@
 {
   "handlers": {
-    "echo": "../custom-handler/echo-handler.mjs"
+    "echo": "../custom-handler/echo-handler.mjs",
+    "openapi-override": "../custom-handler/openapi-override.mjs"
   },
   "flowsDir": "../flows",
   "params": [
@@ -12,22 +13,8 @@
     "simple": {
       "specPath": "../openapi/simple.yaml",
       "baseUrl": "https://api.example.com",
-      "operationFilter": {
-        "method": "get"
-      },
-      "hooks": [
-        {
-          "pattern": "^get-",
-          "hooks": {
-            "before": [
-              { "type": "set", "set": { "prepared": true }, "dependsOn": [] }
-            ],
-            "after": [
-              { "type": "set", "set": { "done": true } }
-            ]
-          }
-        }
-      ]
+      "operationFilter": { "method": "get" },
+      "override": "openapi-override"
     }
   }
 }

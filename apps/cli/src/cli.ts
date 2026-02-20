@@ -117,7 +117,7 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
 
   const effectiveParamsDeclaration = mergeParamDeclarations(config?.params, flow.flow.params)
   const paramsPath = options.paramsFile ?? options.f
-  let params: Record<string, unknown> = {}
+  let params: Record<string, unknown> = { ...(flow.openApiContext ?? {}) }
   if (paramsPath)
     params = { ...params, ...loadParamsFile(paramsPath) }
   if (options.param?.length) {

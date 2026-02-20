@@ -1,31 +1,61 @@
-import type { FlowDefinition, FlowStep } from '@runflow/core'
+import type { FlowDefinition, FlowStep, ParamDeclaration } from '@runflow/core'
 import type { CollectedOperation } from './collectOperations.js'
-import type { OpenApiDocument } from './types.js'
+import type { OpenApiDocument, ParamExposeConfig } from './types.js'
 import { mapParamsToDeclarations } from './mapParams.js'
+
+const DEFAULT_PARAM_EXPOSE: ParamExposeConfig = {
+  path: true,
+  query: true,
+  body: true,
+  header: false,
+  cookie: false,
+}
+
+function filterParamsByExpose(params: ParamDeclaration[], paramExpose?: ParamExposeConfig): ParamDeclaration[] {
+  const expose = paramExpose ?? DEFAULT_PARAM_EXPOSE
+  return params.filter((p) => {
+    if (p.in == null)
+      return true
+    return expose[p.in] !== false
+  })
+}
+
+export interface OperationToFlowOptions {
+  paramExpose?: ParamExposeConfig
+  override?: string
+  overrideStepType?: string
+}
 
 export function operationToFlow(
   doc: OpenApiDocument,
   op: CollectedOperation,
   baseUrl: string,
+  options?: OperationToFlowOptions,
 ): FlowDefinition {
-  const params = mapParamsToDeclarations(op, doc)
+  const paramExpose = options?.paramExpose
+  const override = options?.override
+  const overrideStepType = options?.overrideStepType
+
+  const rawParams = mapParamsToDeclarations(op, doc)
+  const params = filterParamsByExpose(rawParams, paramExpose)
   const pathWithTemplates = op.path.replace(/\{(\w+)\}/g, '{{ params.$1 }}')
   const url = baseUrl ? `${baseUrl.replace(/\/$/, '')}${pathWithTemplates}` : pathWithTemplates
   const apiStepId = 'api'
 
-  const httpStep: FlowStep = {
+  const stepType = override ? (overrideStepType ?? override) : 'http'
+  const apiStep: FlowStep = {
     id: apiStepId,
-    type: 'http',
+    type: stepType,
     url,
     method: op.method,
     dependsOn: [],
   }
-  const bodyParam = params.find(p => p.name === 'body')
+  const bodyParam = rawParams.find(p => p.name === 'body')
   if (bodyParam) {
-    (httpStep as Record<string, unknown>).body = '{{ params.body }}'
+    (apiStep as Record<string, unknown>).body = '{{ params.body }}'
   }
 
-  const steps: FlowStep[] = [httpStep]
+  const steps: FlowStep[] = [apiStep]
 
   const operation = op.operation as { summary?: string, description?: string, tags?: string[] }
   const flow: FlowDefinition & { tags?: string[] } = {

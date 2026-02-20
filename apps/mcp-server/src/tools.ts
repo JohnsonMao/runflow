@@ -113,7 +113,7 @@ export async function executeTool(
   }
   const resolveFlow = createResolveFlow(config, configDir, cwd)
   const effectiveParamsDeclaration = mergeParamDeclarations(config?.params, loaded.flow.params)
-  const toolParams = params ?? {}
+  const toolParams: Record<string, unknown> = { ...(loaded.openApiContext ?? {}), ...(params ?? {}) }
   try {
     const result = await run(loaded.flow, {
       registry,

@@ -125,13 +125,8 @@ export async function buildDiscoverCatalog(
       if (!existsSync(specPath) || !statSync(specPath).isFile())
         continue
       try {
-        const opts: Parameters<typeof openApiToFlows>[1] = { output: 'memory' }
-        if (entry.baseUrl !== undefined)
-          opts.baseUrl = entry.baseUrl
-        if (entry.operationFilter !== undefined)
-          opts.operationFilter = entry.operationFilter
-        if (entry.hooks !== undefined)
-          opts.hooks = entry.hooks
+        const { specPath: _drop, ...entryOpts } = entry
+        const opts: Parameters<typeof openApiToFlows>[1] = { output: 'memory', ...entryOpts }
         const flows = await openApiToFlows(specPath, opts)
         for (const [operationKey, flow] of flows) {
           entries.push({

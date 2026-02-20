@@ -1,0 +1,27 @@
+# Call OpenAPI flow (generated from examples/openapi/simple.yaml with override)
+# Run from repo root with config so openapi prefix "simple" is resolved:
+#   pnpm run run basic/openapi-call.yaml --config examples/config/runflow.config.json
+# Or run the OpenAPI flow directly:
+#   pnpm run run simple-get-users --config examples/config/runflow.config.json --param token=xxx --param limit=5
+name: openapi-call
+description: Calls OpenAPI flow simple-get-users (list users) with token and limit
+params:
+  - name: token
+    type: string
+    description: Bearer token for API (injected by openapi-override)
+  - name: limit
+    type: number
+    default: 10
+steps:
+  - id: callApi
+    type: flow
+    flow: simple-get-users
+    params:
+      token: "{{ token }}"
+      limit: "{{ limit }}"
+    dependsOn: []
+  - id: done
+    type: set
+    set:
+      statusCode: "{{ callApi.statusCode }}"
+    dependsOn: [callApi]

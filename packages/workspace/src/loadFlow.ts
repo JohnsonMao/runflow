@@ -8,6 +8,8 @@ import { resolveFlowId } from './config'
 export interface LoadedFlow {
   flow: FlowDefinition
   flowFilePath: string
+  /** When flow was resolved from OpenAPI, runner should merge these into params for override handlers (validateRequest). */
+  openApiContext?: { openApiSpecPath: string, openApiOperationKey: string }
 }
 
 /**
@@ -24,7 +26,11 @@ export async function loadFlowFromResolved(resolved: ResolvedFlow): Promise<Load
       const keys = [...flows.keys()].slice(0, 10).join(', ')
       throw new Error(`Operation "${resolved.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
     }
-    return { flow: selected, flowFilePath: resolved.specPath }
+    return {
+      flow: selected,
+      flowFilePath: resolved.specPath,
+      openApiContext: { openApiSpecPath: resolved.openApiSpecPath, openApiOperationKey: resolved.openApiOperationKey },
+    }
   }
   if (!existsSync(resolved.path) || !statSync(resolved.path).isFile())
     throw new Error(`File not found or not a regular file: ${resolved.path}`)

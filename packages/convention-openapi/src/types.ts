@@ -1,16 +1,7 @@
-import type { FlowDefinition, FlowStep, ParamDeclaration } from '@runflow/core'
+import type { FlowDefinition } from '@runflow/core'
 
 /** Operation key: always "METHOD path" (e.g. "GET /users") for unique, filename-consistent keys. */
 export type OperationKey = string
-
-/** Step definition for hook injection; id optional (adapter will auto-generate if missing). */
-export type StepDef = Omit<FlowStep, 'id'> & { id?: string }
-
-/** Per-operation hook config: steps to insert before and after the API step. */
-export interface OperationHooks {
-  before?: StepDef[]
-  after?: StepDef[]
-}
 
 /** Filter to limit which operations are converted (e.g. single operation or by tag). */
 export interface OperationFilter {
@@ -24,14 +15,13 @@ export interface OperationFilter {
   tags?: string[]
 }
 
-/**
- * Hook entry for batch: pattern = exact operation key (string), regex source (string with ^ $ etc.), or RegExp.
- * When pattern is a string: if it contains regex metacharacters (^ $ [ ] ( ) * + ? . \ etc.), it is used as RegExp source; otherwise exact key match.
- * When using array form, all matching entries are merged (before/after concatenated in order).
- */
-export interface HooksEntry {
-  pattern: OperationKey | RegExp | string
-  hooks: OperationHooks
+/** Which param kinds to expose in flow.params. Omitted or true = exposed; false = hidden. Default: path/query/body exposed, header/cookie hidden. */
+export interface ParamExposeConfig {
+  path?: boolean
+  query?: boolean
+  body?: boolean
+  header?: boolean
+  cookie?: boolean
 }
 
 /** Options for openApiToFlows. */
@@ -45,11 +35,12 @@ export interface OpenApiToFlowsOptions {
   baseUrl?: string
   /** Limit which operations to convert. When omitted, all operations are converted. */
   operationFilter?: OperationFilter
-  /**
-   * Hooks: Record<key, hooks> for exact key, or HooksEntry[] for batch (pattern = string or RegExp).
-   * Array: all matching entries merged (before/after concatenated).
-   */
-  hooks?: Partial<Record<OperationKey, OperationHooks>> | HooksEntry[]
+  /** Which param kinds to include in flow.params. Default: path, query, body exposed; header, cookie hidden. */
+  paramExpose?: ParamExposeConfig
+  /** When set, the API step uses this handler (name or path) instead of type 'http'; step payload is url, method, headers, body. Step type = this string (handler name). When override is a module path, set overrideStepType so the step type is a name, not the path. */
+  override?: string
+  /** Only when override is a module path: use this as the generated step type. When override is a handler name, omit this (step type = override). */
+  overrideStepType?: string
 }
 
 /** Result when output is 'memory': map of operation key to flow. */

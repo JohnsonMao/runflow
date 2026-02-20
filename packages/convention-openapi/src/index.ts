@@ -1,4 +1,6 @@
 export { toOperationKey } from './collectOperations.js'
 export { loadOpenApiDocument } from './loadOpenApi.js'
 export { openApiToFlows } from './openApiToFlows.js'
-export type { HooksEntry, OpenApiToFlowsOptions, OpenApiToFlowsResult, OperationKey } from './types.js'
+export type { OpenApiToFlowsOptions, OpenApiToFlowsResult, OperationKey, ParamExposeConfig } from './types.js'
+export { validateRequest } from './validateRequest.js'
+export type { ValidateRequestContext, ValidateRequestResult } from './validateRequest.js'

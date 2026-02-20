@@ -243,7 +243,7 @@ describe('resolveFlowId', () => {
     expect(spec.specPath).toBe('/project/admin-delivery.yaml')
   })
 
-  it('resolves openapi flowId with baseUrl, operationFilter, hooks in options', () => {
+  it('resolves openapi flowId with baseUrl, operationFilter, paramExpose, override in options', () => {
     const operationFilter = { method: 'post' as const }
     const config: RunflowConfig = {
       openapi: {
@@ -251,7 +251,8 @@ describe('resolveFlowId', () => {
           specPath: '/abs/spec.yaml',
           baseUrl: 'https://api.example.com',
           operationFilter,
-          hooks: {},
+          paramExpose: { path: true, query: true, body: true },
+          override: 'myHandler',
         },
       },
     }
@@ -260,9 +261,12 @@ describe('resolveFlowId', () => {
     expect(spec.type).toBe('openapi')
     expect(spec.specPath).toBe('/abs/spec.yaml')
     expect(spec.operation).toBe('post-item')
+    expect(spec.openApiSpecPath).toBe('/abs/spec.yaml')
+    expect(spec.openApiOperationKey).toBe('post-item')
     expect(spec.options.baseUrl).toBe('https://api.example.com')
     expect(spec.options.operationFilter).toBe(operationFilter)
-    expect(spec.options.hooks).toEqual({})
+    expect(spec.options.paramExpose).toEqual({ path: true, query: true, body: true })
+    expect(spec.options.override).toBe('myHandler')
   })
 
   it('falls back to file when flowId is prefix only (no operation)', () => {

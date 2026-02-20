@@ -1,9 +1,7 @@
 import type { OpenApiDocument, OpenApiToFlowsOptions, OpenApiToFlowsResult, OperationKey } from './types.js'
-import { applyHooks } from './applyHooks.js'
 import { collectOperations } from './collectOperations.js'
 import { loadOpenApiDocument } from './loadOpenApi.js'
 import { operationToFlow } from './operationToFlow.js'
-import { resolveHooksForKey } from './resolveHooks.js'
 import { writeFlowsToDir } from './writeFlows.js'
 
 /**
@@ -20,10 +18,11 @@ export async function openApiToFlows(
   const result: OpenApiToFlowsResult = new Map()
 
   for (const op of operations) {
-    let flow = operationToFlow(doc, op, baseUrl)
-    const resolvedHooks = resolveHooksForKey(op.key, options.hooks)
-    if (resolvedHooks)
-      flow = applyHooks(flow, op.key, resolvedHooks)
+    const flow = operationToFlow(doc, op, baseUrl, {
+      paramExpose: options.paramExpose,
+      override: options.override,
+      overrideStepType: options.overrideStepType,
+    })
     result.set(op.key, flow)
   }
 

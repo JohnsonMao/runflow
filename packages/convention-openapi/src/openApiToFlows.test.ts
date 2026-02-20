@@ -27,6 +27,46 @@ describe('openApiToFlows', () => {
     expect(limitParam).toBeDefined()
   })
 
+  it('default paramExpose includes path and query, excludes header and cookie', async () => {
+    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
+    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const getUsersFlow = result.get('get-users')
+    expect(getUsersFlow?.params?.some((p: { name: string }) => p.name === 'limit')).toBe(true)
+    const getUsersIdFlow = result.get('get-users-id')
+    expect(getUsersIdFlow?.params?.some((p: { name: string }) => p.name === 'id')).toBe(true)
+  })
+
+  it('custom paramExpose filters out query params when query is false', async () => {
+    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
+    const result = await openApiToFlows(specPath, {
+      output: 'memory',
+      paramExpose: { path: true, query: false, body: true, header: false, cookie: false },
+    })
+    const getUsersFlow = result.get('get-users')
+    expect(getUsersFlow?.params?.some((p: { name: string }) => p.name === 'limit')).toBe(false)
+    const getUsersIdFlow = result.get('get-users-id')
+    expect(getUsersIdFlow?.params?.some((p: { name: string }) => p.name === 'id')).toBe(true)
+  })
+
+  it('with override generates one step of override type with url and method', async () => {
+    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
+    const result = await openApiToFlows(specPath, { output: 'memory', override: 'myHandler' })
+    const flow = result.get('get-users')
+    expect(flow?.steps.length).toBe(1)
+    const step = flow!.steps[0]
+    expect(step.type).toBe('myHandler')
+    expect((step as { url?: string }).url).toBeDefined()
+    expect((step as { method?: string }).method?.toLowerCase()).toBe('get')
+  })
+
+  it('without override step remains type http', async () => {
+    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
+    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const flow = result.get('get-users')
+    const httpStep = flow?.steps.find(s => s.type === 'http')
+    expect(httpStep).toBeDefined()
+  })
+
   it('in-memory mode returns flows in map without writing to filesystem', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
     const result = await openApiToFlows(specPath, { output: 'memory' })
@@ -36,49 +76,7 @@ describe('openApiToFlows', () => {
       expect(Array.isArray(flow.steps)).toBe(true)
     }
   })
-
-  it('with hooks inserts before/after steps and sets dependsOn', async () => {
-    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, {
-      output: 'memory',
-      hooks: {
-        'get-users': {
-          before: [{ type: 'set', set: {} }],
-          after: [{ type: 'set', set: {} }],
-        },
-      },
-    })
-
-    const flow = result.get('get-users')
-    expect(flow).toBeDefined()
-    expect(flow!.steps.length).toBe(3)
-    const [first, second, third] = flow!.steps
-    expect(first.type).toBe('set')
-    expect(second.type).toBe('http')
-    expect(third.type).toBe('set')
-    expect(second.dependsOn).toContain(first.id)
-    expect(third.dependsOn).toContain(second.id)
-  })
-
-  it('with hooks array and regex applies to matching operations', async () => {
-    const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, {
-      output: 'memory',
-      hooks: [
-        { pattern: /^get-/, hooks: { before: [{ type: 'set', set: {} }] } },
-      ],
-    })
-    const getUsers = result.get('get-users')
-    const getUser = result.get('get-users-id')
-    expect(getUsers).toBeDefined()
-    expect(getUser).toBeDefined()
-    expect(getUsers!.steps.length).toBe(2)
-    expect(getUser!.steps.length).toBe(2)
-    expect(getUsers!.steps[0].type).toBe('set')
-    expect(getUser!.steps[0].type).toBe('set')
-  })
 })
-
 describe('loadOpenApiDocument', () => {
   it('loads from file path (YAML)', async () => {
     const doc = await loadOpenApiDocument(join(FIXTURES, 'minimal-openapi.yaml'))

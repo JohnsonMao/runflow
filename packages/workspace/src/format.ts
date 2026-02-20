@@ -1,8 +1,6 @@
 import type { ParamDeclaration } from '@runflow/core'
 import type { DiscoverEntry } from './discover'
 
-const API_PARAM_INS = new Set<ParamDeclaration['in']>(['path', 'query', 'body'])
-
 function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
   const lines: string[] = []
   const req = p.required === true ? ', required' : ''
@@ -21,11 +19,7 @@ function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
 function formatParamsSummary(params: ParamDeclaration[] | undefined): string {
   if (!params?.length)
     return ''
-  const hasIn = params.some(p => p.in != null)
-  const filtered = hasIn ? params.filter(p => p.in != null && API_PARAM_INS.has(p.in)) : params
-  if (!filtered.length)
-    return ''
-  return filtered.flatMap(p => formatOneParam(p)).join('\n')
+  return params.flatMap(p => formatOneParam(p)).join('\n')
 }
 
 function escapeTableCell(s: string): string {

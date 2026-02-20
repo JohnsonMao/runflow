@@ -1,4 +1,4 @@
-import type { OpenApiToFlowsOptions } from '@runflow/convention-openapi'
+import type { OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
 import type { ParamDeclaration } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -11,7 +11,9 @@ export interface OpenApiEntry {
   specPath: string
   baseUrl?: string
   operationFilter?: OpenApiToFlowsOptions['operationFilter']
-  hooks?: OpenApiToFlowsOptions['hooks']
+  paramExpose?: ParamExposeConfig
+  override?: string
+  overrideStepType?: string
 }
 
 /** Keyed by prefix; flowId for OpenAPI flows is `${prefix}-${operationKey}` (e.g. my-api-get-users). */
@@ -37,6 +39,10 @@ export interface ResolvedOpenApiFlow {
   type: 'openapi'
   specPath: string
   operation: string
+  /** Resolved spec path for runner to inject into context (openApiSpecPath). */
+  openApiSpecPath: string
+  /** Operation key for runner to inject into context (openApiOperationKey). */
+  openApiOperationKey: string
   options: Partial<OpenApiToFlowsOptions>
 }
 
@@ -144,14 +150,15 @@ export function resolveFlowId(
       const specPath = path.isAbsolute(entry.specPath)
         ? entry.specPath
         : path.resolve(configDir, entry.specPath)
-      const options: Partial<OpenApiToFlowsOptions> = {}
-      if (entry.baseUrl !== undefined)
-        options.baseUrl = entry.baseUrl
-      if (entry.operationFilter !== undefined)
-        options.operationFilter = entry.operationFilter
-      if (entry.hooks !== undefined)
-        options.hooks = entry.hooks
-      return { type: 'openapi', specPath, operation, options }
+      const { specPath: _drop, ...options } = entry
+      return {
+        type: 'openapi',
+        specPath,
+        operation,
+        openApiSpecPath: specPath,
+        openApiOperationKey: operation,
+        options,
+      }
     }
   }
   const baseDir = config?.flowsDir
