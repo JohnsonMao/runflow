@@ -6,5 +6,5 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   sourcemap: true,
-  external: ['@apidevtools/swagger-parser', '@modelcontextprotocol/sdk', 'commander', 'yaml', 'zod'],
+  external: ['@runflow/convention-openapi', '@runflow/core', '@runflow/handlers', '@runflow/workspace'],
 })

@@ -3,9 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -15,18 +13,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@apidevtools/swagger-parser": "catalog:prod",
     "@modelcontextprotocol/sdk": "catalog:prod",
-    "commander": "catalog:prod",
-    "yaml": "catalog:prod",
-    "zod": "catalog:prod"
-  },
-  "devDependencies": {
-    "@antfu/eslint-config": "catalog:dev",
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
     "@runflow/workspace": "workspace:*",
+    "commander": "catalog:prod",
+    "zod": "catalog:prod"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
