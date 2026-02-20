@@ -60,8 +60,8 @@ node apps/cli/dist/cli.js run complex/demo.yaml --config examples/config/runflow
 OpenAPI-derived flows (with `baseUrl`, `operationFilter`, and `hooks` applied from config):
 
 ```bash
-node apps/cli/dist/cli.js run simple-get-users --config examples/config/runflow.config.json --verbose
-node apps/cli/dist/cli.js run simple-get-users-userId --config examples/config/runflow.config.json --param userId=550e8400-e29b-41d4-a716-446655440000 --verbose
+node apps/cli/dist/cli.js run simple:get-users --config examples/config/runflow.config.json --verbose
+node apps/cli/dist/cli.js run simple:get-users-userId --config examples/config/runflow.config.json --param userId=550e8400-e29b-41d4-a716-446655440000 --verbose
 ```
 
 Without config you can pass a flow file path from the repo root:
@@ -81,7 +81,7 @@ The single config demonstrates all supported top-level and OpenAPI options.
 | **handlers** | Custom step types: `{ "typeName": "path/to/handler.mjs" }`. Paths relative to config file directory. |
 | **flowsDir** | Directory for file flowIds (relative to config dir). When set, flowId is resolved under this dir. |
 | **params** | Global param **declarations** (same shape as a flow’s `params`): array of `{ name, type, required?, default?, enum?, description?, schema?, items? }`. Defaults live in each item’s `default`. For each run, the effective declaration is config params merged with flow params, with **flow overriding** config for the same param name. Runners pass this effective declaration to the engine; run-time overrides come from `-f` / `--param`. |
-| **openapi** | Map of prefix → OpenAPI entry. flowId for OpenAPI flows = `prefix-operationKey` (e.g. `simple-get-users`). |
+| **handlers** (OpenAPI entry) | Object with `specPath` (and optional `baseUrl`, `operationFilter`, `paramExpose`, `handler`). flowId for OpenAPI flows = `handlerKey:operationKey` (e.g. `simple:get-users`). |
 
 ### OpenAPI entry (per prefix)
 

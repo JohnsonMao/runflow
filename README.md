@@ -44,10 +44,12 @@ Options:
 - `--verbose` – Print per-step stdout/stderr.
 - `--param <key=value>` – Pass a parameter (repeatable). Merged into initial context.
 - `--params-file <path>` / `-f` – Load params from a JSON file (object). Merged with `--param`; `--param` overrides same keys.
-- `--config <path>` – Path to `runflow.config.mjs` (default: cwd). Used for custom step handlers and OpenAPI options.
+- `--config <path>` – Path to `runflow.config.mjs` (default: cwd). Used for custom step handlers and OpenAPI-derived flows.
 - `--from-openapi <path>` – Load flow from an OpenAPI spec; requires `--operation <key>` (e.g. `get-users`).
 
-**Config and OpenAPI**: In `runflow.config.mjs` you can set `openapi: { specPath, outDir, baseUrl, operationFilter, hooks }`. These options are used when running with `--from-openapi`; CLI flags override config when both are provided. Paths in config are resolved relative to the config file directory.
+**Config**: `runflow.config.mjs` (or `.js` / `.json`) may define `handlers`: each key is a step type; the value is either a **string** (path to a .mjs handler) or an **OpenAPI entry** object with `specPath`, and optional `baseUrl`, `operationFilter`, `paramExpose`, and `handler` (path to .mjs for the API step; if omitted, the built-in http handler is used). OpenAPI-derived flowIds use a single colon: `handlerKey:operationKey` (e.g. `simple:get-users`), so the handler key and operation are unambiguous. Paths are resolved relative to the config file directory.
+
+**BREAKING (config.openapi removed)**: The top-level `openapi` block has been removed. Migrate by moving each `openapi[prefix]` into `handlers[prefix]` with the same `specPath`, `baseUrl`, `operationFilter`, and `paramExpose`; use `handler` instead of `override`, and omit `overrideStepType`.
 
 To list parameters declared by a flow: `flow params <file>` (shows name, type, required, default, enum, description).
 

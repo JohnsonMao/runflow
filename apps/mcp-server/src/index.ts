@@ -11,6 +11,7 @@ import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   findConfigFile,
+  isOpenApiHandlerEntry,
   loadConfig,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
@@ -39,21 +40,42 @@ export async function loadConfigOnce(): Promise<ConfigAndRegistry> {
   const config = configPath ? await loadConfig(configPath) : null
   const configDir = configPath ? path.dirname(configPath) : cwd
   const registry = createBuiltinRegistry()
+  const httpHandler = registry.http
   if (config?.handlers && typeof config.handlers === 'object' && configPath) {
-    for (const [type, modulePath] of Object.entries(config.handlers)) {
-      if (typeof modulePath !== 'string')
+    for (const [type, value] of Object.entries(config.handlers)) {
+      if (typeof value === 'string') {
+        const resolved = path.resolve(configDir, value)
+        if (!existsSync(resolved) || !statSync(resolved).isFile())
+          continue
+        try {
+          const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+          const handler = mod.default
+          if (handler && typeof handler.run === 'function')
+            registry[type] = handler
+        }
+        catch {
+          // skip failed handler
+        }
         continue
-      const resolved = path.resolve(configDir, modulePath)
-      if (!existsSync(resolved) || !statSync(resolved).isFile())
-        continue
-      try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
-        const handler = mod.default
-        if (handler && typeof handler.run === 'function')
-          registry[type] = handler
       }
-      catch {
-        // skip failed handler
+      if (!isOpenApiHandlerEntry(value))
+        continue
+      if (value.handler) {
+        const resolved = path.resolve(configDir, value.handler)
+        if (!existsSync(resolved) || !statSync(resolved).isFile())
+          continue
+        try {
+          const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+          const handler = mod.default
+          if (handler && typeof handler.run === 'function')
+            registry[type] = handler
+        }
+        catch {
+          // skip failed handler
+        }
+      }
+      else {
+        registry[type] = httpHandler
       }
     }
   }

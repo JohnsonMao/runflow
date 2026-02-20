@@ -216,96 +216,94 @@ describe('resolveFlowId', () => {
     expect(file.path).toBe('/abs/path/flow.yaml')
   })
 
-  it('resolves openapi flowId as prefix-operation when config has openapi', () => {
+  it('resolves openapi flowId as handlerKey:operationKey when config has handlers OpenAPI entry', () => {
     const config: RunflowConfig = {
-      openapi: {
+      handlers: {
         myApi: { specPath: './openapi.yaml' },
       },
     }
-    const r = resolveFlowId('myApi-get-users', config, configDir, cwd)
+    const r = resolveFlowId('myApi:get-users', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.operation).toBe('get-users')
     expect(spec.specPath).toBe('/project/openapi.yaml')
+    expect(spec.options.stepType).toBe('myApi')
   })
 
-  it('uses longest matching openapi prefix when multiple prefixes match (e.g. admin and admin-delivery)', () => {
+  it('uses longest matching handler key when multiple keys match (e.g. admin and admin-delivery)', () => {
     const config: RunflowConfig = {
-      openapi: {
+      handlers: {
         'admin': { specPath: './admin.yaml' },
         'admin-delivery': { specPath: './admin-delivery.yaml' },
       },
     }
-    const r = resolveFlowId('admin-delivery-getOrders', config, configDir, cwd)
+    const r = resolveFlowId('admin-delivery:getOrders', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.operation).toBe('getOrders')
     expect(spec.specPath).toBe('/project/admin-delivery.yaml')
   })
 
-  it('resolves openapi flowId with baseUrl, operationFilter, paramExpose, override in options', () => {
+  it('resolves openapi flowId with baseUrl, operationFilter, paramExpose, stepType in options', () => {
     const operationFilter = { method: 'post' as const }
     const config: RunflowConfig = {
-      openapi: {
+      handlers: {
         api: {
           specPath: '/abs/spec.yaml',
           baseUrl: 'https://api.example.com',
           operationFilter,
           paramExpose: { path: true, query: true, body: true },
-          override: 'myHandler',
         },
       },
     }
-    const r = resolveFlowId('api-post-item', config, configDir, cwd)
+    const r = resolveFlowId('api:post-item', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.specPath).toBe('/abs/spec.yaml')
     expect(spec.operation).toBe('post-item')
-    expect(spec.openApiSpecPath).toBe('/abs/spec.yaml')
     expect(spec.openApiOperationKey).toBe('post-item')
+    expect(spec.openApiSpecPath).toBe('/abs/spec.yaml')
+    expect(spec.options.stepType).toBe('api')
     expect(spec.options.baseUrl).toBe('https://api.example.com')
     expect(spec.options.operationFilter).toBe(operationFilter)
     expect(spec.options.paramExpose).toEqual({ path: true, query: true, body: true })
-    expect(spec.options.override).toBe('myHandler')
   })
 
-  it('falls back to file when flowId is prefix only (no operation)', () => {
+  it('falls back to file when flowId has colon but no operation after it', () => {
     const config: RunflowConfig = {
-      openapi: { myApi: { specPath: './openapi.yaml' } },
+      handlers: { myApi: { specPath: './openapi.yaml' } },
     }
-    const r = resolveFlowId('myApi-', config, configDir, cwd)
+    const r = resolveFlowId('myApi:', config, configDir, cwd)
     const file = r as ResolvedFileFlow
     expect(file.type).toBe('file')
-    expect(file.path).toBe('/project/myApi-')
+    expect(file.path).toBe('/project/myApi:')
   })
 
-  it('falls back to file when flowId does not match any openapi prefix', () => {
+  it('falls back to file when flowId handler key is not in config', () => {
     const config: RunflowConfig = {
-      openapi: { myApi: { specPath: './openapi.yaml' } },
+      handlers: { myApi: { specPath: './openapi.yaml' } },
     }
-    const r = resolveFlowId('other-get', config, configDir, cwd)
+    const r = resolveFlowId('other:get', config, configDir, cwd)
     const file = r as ResolvedFileFlow
     expect(file.type).toBe('file')
-    expect(file.path).toBe('/project/other-get')
+    expect(file.path).toBe('/project/other:get')
   })
 
-  it('skips openapi entries with missing or invalid specPath', () => {
+  it('skips handler entries that are not OpenAPI (no specPath or invalid)', () => {
     const config: RunflowConfig = {
-      openapi: {
-        bad: null as unknown as { specPath: string },
-        empty: { specPath: '' },
-        noPath: {} as { specPath: string },
+      handlers: {
         ok: { specPath: './ok.yaml' },
+        skip: './echo.mjs',
       },
     }
-    const r = resolveFlowId('ok-get', config, configDir, cwd)
+    const r = resolveFlowId('ok:get', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.specPath).toBe('/project/ok.yaml')
   })
 
-  it('treats config.openapi as null when not an object', () => {
-    const config = { openapi: 'not-object' } as unknown as RunflowConfig
+  it('treats config.handlers as null when not an object', () => {
+    const config = { handlers: 'not-object' } as unknown as RunflowConfig
     const r = resolveFlowId('any-flow', config, configDir, cwd)
     const file = r as ResolvedFileFlow
     expect(file.type).toBe('file')

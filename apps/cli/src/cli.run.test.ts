@@ -145,8 +145,8 @@ describe('flow run', () => {
   it('exits with error when openapi flowId references missing spec', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const configPath = join(dir, 'runflow.config.mjs')
-    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./nospec.yaml" } } }\n')
-    const result = await runWithParse(['run', 'myApi-get-users', '--config', configPath], dir)
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./nospec.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi:get-users', '--config', configPath], dir)
     unlinkSync(configPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('OpenAPI spec not found')
@@ -157,8 +157,8 @@ describe('flow run', () => {
     const openapiPath = join(dir, 'openapi.yaml')
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(openapiPath, ['openapi: "3.0.0"', 'info: { title: X, version: "1.0" }', 'paths: {}'].join('\n'))
-    writeFileSync(configPath, `export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n`)
-    const result = await runWithParse(['run', 'myApi-nonexistent-op', '--config', configPath], dir)
+    writeFileSync(configPath, `export default { handlers: { myApi: { specPath: "./openapi.yaml" } } }\n`)
+    const result = await runWithParse(['run', 'myApi:nonexistent-op', '--config', configPath], dir)
     unlinkSync(openapiPath)
     unlinkSync(configPath)
     expect(result.code).toBe(1)
@@ -404,8 +404,8 @@ describe('flow run', () => {
       '            type: integer',
     ].join('\n')
     writeFileSync(openapiPath, openapi)
-    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
-    const result = await runWithParse(['run', 'myApi-get-users', '--config', configPath, '--dry-run'], dir)
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi:get-users', '--config', configPath, '--dry-run'], dir)
     unlinkSync(openapiPath)
     unlinkSync(configPath)
     expect(result.code, result.stderr).toBe(0)
@@ -416,15 +416,15 @@ describe('flow run', () => {
     const openapiPath = join(dir, 'openapi.yaml')
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(openapiPath, ['openapi: "3.0.0"', 'info: { title: X, version: "1.0" }', 'paths: {}'].join('\n'))
-    writeFileSync(configPath, 'export default { openapi: { myApi: { specPath: "./openapi.yaml" } } }\n')
-    const result = await runWithParse(['run', 'myApi-nonexistent-op', '--config', configPath], dir)
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    const result = await runWithParse(['run', 'myApi:nonexistent-op', '--config', configPath], dir)
     unlinkSync(openapiPath)
     unlinkSync(configPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('not found')
   })
 
-  it('uses config openapi options when running with flowId prefix-operation and --config', async () => {
+  it('uses config handler options when running with flowId handlerKey:operationKey and --config', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const openapiPath = join(dir, 'openapi.yaml')
     const openapi = [
@@ -441,11 +441,11 @@ describe('flow run', () => {
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(configPath, [
       'export default {',
-      '  openapi: { myApi: { specPath: \'./openapi.yaml\', baseUrl: \'https://api.example.com\' } },',
+      '  handlers: { myApi: { specPath: \'./openapi.yaml\', baseUrl: \'https://api.example.com\' } },',
       '}',
     ].join('\n'))
     const result = await runWithParse(
-      ['run', 'myApi-get-users', '--config', configPath, '--dry-run'],
+      ['run', 'myApi:get-users', '--config', configPath, '--dry-run'],
       dir,
     )
     unlinkSync(openapiPath)
@@ -561,11 +561,11 @@ describe('flow run', () => {
       const configPath = join(dir, 'runflow.config.mjs')
       writeFileSync(configPath, [
         'export default {',
-        `  openapi: { myApi: { specPath: './openapi.yaml', baseUrl: '${baseUrl}' } },`,
+        `  handlers: { myApi: { specPath: './openapi.yaml', baseUrl: '${baseUrl}' } },`,
         '}',
       ].join('\n'))
       const result = await runWithParse(
-        ['run', 'myApi-get-users', '--config', configPath],
+        ['run', 'myApi:get-users', '--config', configPath],
         dir,
       )
       expect(result.code, result.stderr).toBe(0)

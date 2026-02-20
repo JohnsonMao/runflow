@@ -9,7 +9,7 @@ const FIXTURES = join(__dirname, 'fixtures')
 describe('openApiToFlows', () => {
   it('produces one flow per path+method with correct name, params, and http step', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const result = await openApiToFlows(specPath, { output: 'memory', stepType: 'http' })
 
     expect(result.size).toBeGreaterThanOrEqual(2)
 
@@ -29,7 +29,7 @@ describe('openApiToFlows', () => {
 
   it('default paramExpose includes path and query, excludes header and cookie', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const result = await openApiToFlows(specPath, { output: 'memory', stepType: 'http' })
     const getUsersFlow = result.get('get-users')
     expect(getUsersFlow?.params?.some((p: { name: string }) => p.name === 'limit')).toBe(true)
     const getUsersIdFlow = result.get('get-users-id')
@@ -40,6 +40,7 @@ describe('openApiToFlows', () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
     const result = await openApiToFlows(specPath, {
       output: 'memory',
+      stepType: 'http',
       paramExpose: { path: true, query: false, body: true, header: false, cookie: false },
     })
     const getUsersFlow = result.get('get-users')
@@ -48,9 +49,9 @@ describe('openApiToFlows', () => {
     expect(getUsersIdFlow?.params?.some((p: { name: string }) => p.name === 'id')).toBe(true)
   })
 
-  it('with override generates one step of override type with url and method', async () => {
+  it('with stepType generates one step of that type with url and method', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, { output: 'memory', override: 'myHandler' })
+    const result = await openApiToFlows(specPath, { output: 'memory', stepType: 'myHandler' })
     const flow = result.get('get-users')
     expect(flow?.steps.length).toBe(1)
     const step = flow!.steps[0]
@@ -59,9 +60,9 @@ describe('openApiToFlows', () => {
     expect((step as { method?: string }).method?.toLowerCase()).toBe('get')
   })
 
-  it('without override step remains type http', async () => {
+  it('with stepType http step is type http', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const result = await openApiToFlows(specPath, { output: 'memory', stepType: 'http' })
     const flow = result.get('get-users')
     const httpStep = flow?.steps.find(s => s.type === 'http')
     expect(httpStep).toBeDefined()
@@ -69,7 +70,7 @@ describe('openApiToFlows', () => {
 
   it('in-memory mode returns flows in map without writing to filesystem', async () => {
     const specPath = join(FIXTURES, 'minimal-openapi.yaml')
-    const result = await openApiToFlows(specPath, { output: 'memory' })
+    const result = await openApiToFlows(specPath, { output: 'memory', stepType: 'http' })
     expect(result.size).toBeGreaterThanOrEqual(2)
     for (const flow of result.values()) {
       expect(flow.name).toBeDefined()

@@ -2,9 +2,9 @@
 # Run from repo root with config so openapi prefix "simple" is resolved:
 #   pnpm run run basic/openapi-call.yaml --config examples/config/runflow.config.json
 # Or run the OpenAPI flow directly:
-#   pnpm run run simple-get-users --config examples/config/runflow.config.json --param token=xxx --param limit=5
+#   pnpm run run simple:get-users --config examples/config/runflow.config.json --param token=xxx --param limit=5
 name: openapi-call
-description: Calls OpenAPI flow simple-get-users (list users) with token and limit
+description: Calls OpenAPI flow simple:get-users (list users) with token and limit
 params:
   - name: token
     type: string
@@ -15,7 +15,7 @@ params:
 steps:
   - id: callApi
     type: flow
-    flow: simple-get-users
+    flow: simple:get-users
     params:
       token: "{{ token }}"
       limit: "{{ limit }}"

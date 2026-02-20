@@ -15,7 +15,7 @@ export function createResolveFlow(
     if (resolved.type === 'openapi') {
       if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile())
         return null
-      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
+      const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory', stepType: resolved.options.stepType ?? 'http' })
       const selected = flows.get(resolved.operation)
       if (!selected)
         return null

@@ -1,13 +1,14 @@
 export {
   CONFIG_NAMES,
   findConfigFile,
+  isOpenApiHandlerEntry,
   loadConfig,
   mergeParamDeclarations,
   normalizeConfigParams,
   resolveFlowId,
 } from './config'
 export type {
-  OpenApiEntry,
+  OpenApiHandlerEntry,
   ResolvedFileFlow,
   ResolvedFlow,
   ResolvedOpenApiFlow,

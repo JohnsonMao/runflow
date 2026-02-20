@@ -1,10 +1,8 @@
-# workspace Specification
+# workspace Specification (delta)
 
-## Purpose
+本 delta：RunflowConfig 移除 openapi；resolveFlowId 與 buildDiscoverCatalog 僅自 config.handlers 取得 OpenAPI 流程；handlers 值可為 string 或 OpenApiHandlerEntry。
 
-定義 **@runflow/workspace**（packages/workspace）的職責與對外介面：僅提供工作區「資料與解析」及 list/detail 的 Markdown 格式化，不負責誰載入 config、不負責執行 flow。CLI 與 MCP 依賴 workspace 取得 config、catalog、resolveFlow 與 list/detail 的 Markdown 輸出。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Workspace SHALL provide config discovery and loading
 
@@ -33,7 +31,7 @@ The workspace SHALL export **resolveFlowId(flowId, config, configDir, cwd)** ret
 - **THEN** the return value SHALL be ResolvedFlow of type file with resolved path
 - **AND** file-type flowIds SHALL NOT be resolved from config.openapi (no openapi block)
 
-#### Scenario: resolveFlowId returns openapi for handlerKey-operationKey flowId
+#### Scenario: resolveFlowId returns openapi for handlerKey:operationKey flowId
 
 - **WHEN** config has handlers[key] as an OpenAPI entry (object with specPath) and the caller invokes resolveFlowId('key-operation', config, configDir, cwd)
 - **THEN** the return value SHALL be ResolvedFlow of type openapi with specPath (resolved), operation, and options (stepType = key, baseUrl, operationFilter, paramExpose from that entry)
@@ -52,36 +50,6 @@ The workspace SHALL export **findFlowFiles**, **buildDiscoverCatalog(config, con
 #### Scenario: buildDiscoverCatalog returns file and OpenAPI flows from handlers only
 
 - **WHEN** config has flowsDir and at least one handlers entry that is an OpenAPI entry (object with specPath), and the caller invokes buildDiscoverCatalog(config, configDir, cwd)
-- **THEN** the returned array SHALL include entries for file flows (flowId = path relative to flowsDir or cwd) and for OpenAPI flows (flowId = handlerKey-operationKey) derived only from handlers
+- **THEN** the returned array SHALL include entries for file flows (flowId = path relative to flowsDir or cwd) and for OpenAPI flows (flowId = handlerKey:operationKey) derived only from handlers
 - **AND** each entry SHALL have flowId, name, description (optional), params (optional, ParamDeclaration[])
 - **AND** the implementation SHALL NOT include entries from any top-level config.openapi
-
-### Requirement: Workspace SHALL provide list and detail Markdown formatting
-
-The workspace SHALL export **formatListAsMarkdown(entries, limit, offset)** and **formatDetailAsMarkdown(entry)**. These SHALL produce the same Markdown text used by the CLI and MCP for discover_flow_list and discover_flow_detail (table with flowId | name; pagination hint when applicable; detail with flowId, name, description, params). CLI and MCP SHALL use these functions so that list/detail presentation is consistent and maintained in one place.
-
-#### Scenario: formatListAsMarkdown produces table and pagination hint
-
-- **WHEN** the caller invokes formatListAsMarkdown(entries, limit, offset) with non-empty entries and limit/offset
-- **THEN** the return value SHALL be Markdown with a first line for total and range, a table with columns flowId | name, and when offset + limit < total a pagination hint line (e.g. "Next: offset=N")
-
-#### Scenario: formatDetailAsMarkdown produces single-flow detail
-
-- **WHEN** the caller invokes formatDetailAsMarkdown(entry)
-- **THEN** the return value SHALL be Markdown that includes the flow's flowId, name, description, and params (path/query/body; body fields MAY be expanded)
-
-### Requirement: Workspace SHALL provide createResolveFlow for core
-
-The workspace SHALL export **createResolveFlow(config, configDir, cwd)** returning **ResolveFlowFn** (async flowId → flow or null) for @runflow/core run(flow, { resolveFlow }). Package SHALL depend on @runflow/core and @runflow/convention-openapi; SHALL NOT depend on CLI or MCP.
-
-#### Scenario: createResolveFlow returns resolver used by core for flow steps
-
-- **WHEN** the caller invokes createResolveFlow(config, configDir, cwd) and passes the result to run(flow, { resolveFlow })
-- **THEN** when a flow step has type flow and a flowId string, core SHALL call resolveFlow(flowId) to obtain the callee flow
-- **AND** the returned resolver SHALL use resolveFlowId and loadFromFile or openApiToFlows so nested flow steps resolve to workspace files or OpenAPI flows
-
-## Non-requirements (out of scope)
-
-- Workspace does not define how the registry is built (CLI and MCP build it from config.handlers only).
-- Workspace does not define config path source (e.g. no RUNFLOW_CONFIG; caller uses --config or findConfigFile(cwd)).
-- Workspace does not cache config or catalog; caching is the responsibility of the caller (e.g. MCP caches, CLI does not).

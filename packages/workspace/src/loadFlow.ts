@@ -8,7 +8,11 @@ import { resolveFlowId } from './config'
 export interface LoadedFlow {
   flow: FlowDefinition
   flowFilePath: string
-  /** When flow was resolved from OpenAPI, runner should merge these into params for override handlers (validateRequest). */
+  /**
+   * When flow was resolved from OpenAPI, runner injects these into params so custom/override
+   * handlers can call validateRequest(step, context) (convention-openapi) to validate the request
+   * against the operation's schema. Required for override handlers; harmless when not used.
+   */
   openApiContext?: { openApiSpecPath: string, openApiOperationKey: string }
 }
 
@@ -20,7 +24,7 @@ export async function loadFlowFromResolved(resolved: ResolvedFlow): Promise<Load
   if (resolved.type === 'openapi') {
     if (!existsSync(resolved.specPath) || !statSync(resolved.specPath).isFile())
       throw new Error(`OpenAPI spec not found: ${resolved.specPath}`)
-    const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory' })
+    const flows = await openApiToFlows(resolved.specPath, { ...resolved.options, output: 'memory', stepType: resolved.options.stepType ?? 'http' })
     const selected = flows.get(resolved.operation)
     if (!selected) {
       const keys = [...flows.keys()].slice(0, 10).join(', ')

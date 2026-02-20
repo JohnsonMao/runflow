@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定義 runflow 設定檔中 OpenAPI 區塊的格式與行為：config 可選的 `openapi` 物件為 prefix-keyed，提供多組 spec 與 flowId 解析（`prefix-operation`）；另可選 `flowsDir` 供 file-type flowId 解析。CLI 與 MCP 共用同一 config 語意。
+定義 runflow 設定檔與 OpenAPI 流程的關係：config 不支援頂層 `openapi` 區塊；OpenAPI 流程僅由 `config.handlers` 內之 OpenAPI 型別 entry 提供，flowId 為 `key-operationKey`。另可選 `flowsDir` 供 file-type flowId 解析。CLI 與 MCP 共用同一 config 語意。詳見 config-handlers-openapi spec。
 
 ## Requirements
 
@@ -18,44 +18,34 @@ The runflow config SHALL be loaded from a file. The implementation SHALL discove
 
 #### Scenario: Paths in config resolved relative to config directory
 
-- **WHEN** the config file contains relative paths (e.g. in openapi or flowsDir)
+- **WHEN** the config file contains relative paths (e.g. in handlers or flowsDir)
 - **THEN** the implementation SHALL resolve them relative to the directory of the config file
 - **AND** absolute paths SHALL be used as-is
 
-### Requirement: Config MAY define an openapi block (prefix-keyed)
+### Requirement: No top-level openapi block; OpenAPI flows from handlers only
 
-The runflow config (e.g. `runflow.config.mjs`, `runflow.config.js`, or `runflow.config.json`) MAY export (or, for JSON, contain at root) an `openapi` object. When present, it SHALL be a **Record keyed by prefix** (string). Each key is a prefix; each value SHALL be an object with at least `specPath` (string) and MAY include `baseUrl`, `operationFilter`, `paramExpose`, `override`, `overrideStepType` with the same semantics as `OpenApiToFlowsOptions`. Paths (e.g. `specPath`) SHALL be resolved relative to the directory of the config file when not absolute. The flowId for an OpenAPI-derived flow SHALL be **`${prefix}-${operationKey}`** (e.g. `my-api-get-users`). The CLI and MCP SHALL use this structure to resolve flowIds of the form `prefix-operation` to the corresponding spec and operation.
+The runflow config SHALL NOT support a top-level **openapi** object. OpenAPI-derived flow resolution and discover SHALL use only **config.handlers** entries that are objects with **specPath** (see config-handlers-openapi spec). FlowId format for OpenAPI flows SHALL be **`${handlerKey}-${operationKey}`** where handlerKey is the key in handlers whose value is an OpenApiHandlerEntry.
 
-#### Scenario: Config without openapi block
+#### Scenario: Config without openapi block (unchanged behavior)
 
 - **WHEN** config is loaded and has no `openapi` property
-- **THEN** CLI and MCP SHALL resolve only file-type flowIds (no prefix-operation resolution)
+- **THEN** CLI and MCP SHALL resolve only file-type flowIds and OpenAPI flowIds from handlers (prefix-operation from config.handlers OpenAPI entries only)
 
-#### Scenario: Config with openapi block (prefix-keyed)
+#### Scenario: OpenAPI flows only from handlers
 
-- **WHEN** config is loaded and has an `openapi` object with at least one prefix key, each value having `specPath` and optionally `baseUrl`, `operationFilter`, `paramExpose`, `override`
-- **THEN** when the user or client provides a flowId of the form `prefix-operation`, the system SHALL resolve the spec from `openapi[prefix].specPath`, load flows via `openApiToFlows` with the per-prefix options, and select the flow for the given operation key
-- **AND** the same config SHALL be usable by both CLI and MCP for consistent flowId semantics
+- **WHEN** config has no top-level `openapi` and has one or more handlers whose value is an object with `specPath`
+- **THEN** flowIds of the form `handlerKey-operationKey` SHALL be resolved from that handler entry (specPath, options)
+- **AND** the same config SHALL be usable by both CLI and MCP
 
-### Requirement: openapi per-prefix specPath and options
+#### Scenario: specPath and options only in handlers
 
-For each prefix in the `openapi` object, the value SHALL include `specPath` (string), the path to the OpenAPI spec file (relative to config directory or absolute). The value MAY include `baseUrl`, `operationFilter`, `paramExpose`, `override`, and `overrideStepType` with the same semantics as `OpenApiToFlowsOptions`. The value MAY include `outDir` (string) for that prefix when writing generated flows to disk. **paramExpose** controls which param kinds (path, query, body, header, cookie) appear in flow.params; default is path/query/body exposed, header/cookie hidden. **override** (string) denotes a handler name or module path; when set, the API step uses that handler with http-like payload (url, method, headers, body). validateRequest info (openApiSpecPath, openApiOperationKey) SHALL be passed via context at runtime so the override can validate the request against the OpenAPI spec.
-
-#### Scenario: specPath resolved per prefix
-
-- **WHEN** config has `openapi.myApi.specPath` set to a path (relative or absolute)
-- **THEN** flowIds starting with `myApi-` SHALL be resolved using that spec file (resolved from config directory when relative)
-- **AND** the operation key SHALL be the suffix after `myApi-` (e.g. `get-users`)
-
-#### Scenario: baseUrl, paramExpose, override per prefix
-
-- **WHEN** config has `openapi.myApi.baseUrl`, `openapi.myApi.paramExpose`, or `openapi.myApi.override`
-- **THEN** when resolving a flow for flowId `myApi-get-users`, the system SHALL call `openApiToFlows(specPath, { baseUrl, paramExpose, override, ... })` with that prefix's options
-- **AND** the generated flow SHALL reflect those options (e.g. base URL for HTTP steps; params filtered by paramExpose; API step type from override when set)
+- **WHEN** config has `handlers.myApi` as an OpenAPI entry with `specPath` and optional `baseUrl`, `operationFilter`, `paramExpose`, `handler`
+- **THEN** flowIds starting with `myApi-` SHALL be resolved using that entry's specPath and options
+- **AND** the generated flow SHALL use stepType `myApi` and the entry's options when calling openApiToFlows
 
 ### Requirement: Config MAY define flowsDir
 
-The runflow config MAY export a top-level `flowsDir` (string). When present, it SHALL denote the directory used to resolve **file-type flowIds** (relative paths). It SHALL be resolved relative to the config file directory when not absolute. The CLI and MCP SHALL use flowsDir as the base directory when resolving a flowId that is not absolute and does not match any openapi prefix-operation pattern.
+The runflow config MAY export a top-level `flowsDir` (string). When present, it SHALL denote the directory used to resolve **file-type flowIds** (relative paths). It SHALL be resolved relative to the config file directory when not absolute. The CLI and MCP SHALL use flowsDir as the base directory when resolving a flowId that is not absolute and does not match any handlers OpenAPI prefix-operation pattern.
 
 #### Scenario: flowsDir used for file flowId resolution
 

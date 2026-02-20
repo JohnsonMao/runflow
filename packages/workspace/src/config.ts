@@ -6,23 +6,21 @@ import { pathToFileURL } from 'node:url'
 
 export const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js', 'runflow.config.json'] as const
 
-/** Per-prefix OpenAPI entry: specPath and options. Paths resolved relative to config file directory. */
-export interface OpenApiEntry {
+/** OpenAPI entry in handlers: specPath required; paths resolved relative to config file directory. */
+export interface OpenApiHandlerEntry {
   specPath: string
   baseUrl?: string
   operationFilter?: OpenApiToFlowsOptions['operationFilter']
   paramExpose?: ParamExposeConfig
-  override?: string
-  overrideStepType?: string
+  /** Optional path to .mjs that runs the API step; when omitted, built-in http handler is used. */
+  handler?: string
 }
 
-/** Keyed by prefix; flowId for OpenAPI flows is `${prefix}-${operationKey}` (e.g. my-api-get-users). */
+/** Handlers key = step type; value = module path (string) or OpenAPI entry (object with specPath). */
 export interface RunflowConfig {
-  handlers?: Record<string, string>
+  handlers?: Record<string, string | OpenApiHandlerEntry>
   /** Directory to resolve file flowIds (relative to config dir). When set, flowId is relative to this. */
   flowsDir?: string
-  /** OpenAPI specs by prefix. flowId = prefix-operation (e.g. my-api-get-users). */
-  openapi?: Record<string, OpenApiEntry>
   /**
    * Global param declarations (same shape as flow params). Defaults live in each item's default.
    * Runners merge with flow.params (flow overrides same name) for effective declaration.
@@ -39,14 +37,24 @@ export interface ResolvedOpenApiFlow {
   type: 'openapi'
   specPath: string
   operation: string
-  /** Resolved spec path for runner to inject into context (openApiSpecPath). */
+  /** Spec path for runner to inject into params so override handlers can call validateRequest(step, context). */
   openApiSpecPath: string
-  /** Operation key for runner to inject into context (openApiOperationKey). */
+  /** Operation key for runner to inject into params; used with openApiSpecPath by validateRequest. */
   openApiOperationKey: string
   options: Partial<OpenApiToFlowsOptions>
 }
 
 export type ResolvedFlow = ResolvedFileFlow | ResolvedOpenApiFlow
+
+/** True when value is an object with a string specPath (OpenAPI handler entry). */
+export function isOpenApiHandlerEntry(entry: unknown): entry is OpenApiHandlerEntry {
+  return (
+    typeof entry === 'object'
+    && entry !== null
+    && 'specPath' in entry
+    && typeof (entry as OpenApiHandlerEntry).specPath === 'string'
+  )
+}
 
 /**
  * Normalize config params: if raw is a plain object (legacy), convert to ParamDeclaration[].
@@ -132,32 +140,31 @@ export function resolveFlowId(
   configDir: string,
   cwd: string,
 ): ResolvedFlow {
-  const openapi = config?.openapi && typeof config.openapi === 'object' ? config.openapi : null
-  if (openapi) {
-    let best: { prefix: string, entry: OpenApiEntry } | null = null
-    for (const [prefix, entry] of Object.entries(openapi)) {
-      if (!entry || typeof entry.specPath !== 'string')
-        continue
-      if (flowId.startsWith(`${prefix}-`)) {
-        const operation = flowId.slice(prefix.length + 1)
-        if (operation && (!best || prefix.length > best.prefix.length))
-          best = { prefix, entry }
-      }
-    }
-    if (best) {
-      const { prefix, entry } = best
-      const operation = flowId.slice(prefix.length + 1)
-      const specPath = path.isAbsolute(entry.specPath)
-        ? entry.specPath
-        : path.resolve(configDir, entry.specPath)
-      const { specPath: _drop, ...options } = entry
-      return {
-        type: 'openapi',
-        specPath,
-        operation,
-        openApiSpecPath: specPath,
-        openApiOperationKey: operation,
-        options,
+  const handlers = config?.handlers && typeof config.handlers === 'object' ? config.handlers : null
+  if (handlers) {
+    const colonIndex = flowId.indexOf(':')
+    if (colonIndex > 0 && colonIndex < flowId.length - 1) {
+      const key = flowId.slice(0, colonIndex)
+      const operation = flowId.slice(colonIndex + 1)
+      const entry = handlers[key]
+      if (isOpenApiHandlerEntry(entry)) {
+        const specPath = path.isAbsolute(entry.specPath)
+          ? entry.specPath
+          : path.resolve(configDir, entry.specPath)
+        const options = {
+          stepType: key,
+          baseUrl: entry.baseUrl,
+          operationFilter: entry.operationFilter,
+          paramExpose: entry.paramExpose,
+        }
+        return {
+          type: 'openapi',
+          specPath,
+          operation,
+          openApiSpecPath: specPath,
+          openApiOperationKey: operation,
+          options,
+        }
       }
     }
   }

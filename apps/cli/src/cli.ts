@@ -14,6 +14,7 @@ import {
   formatDetailAsMarkdown,
   formatListAsMarkdown,
   getDiscoverEntry,
+  isOpenApiHandlerEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
   mergeParamDeclarations,
@@ -64,27 +65,55 @@ async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry
   if (!config?.handlers || typeof config.handlers !== 'object')
     return registry
   const configDir = path.dirname(configPath)
-  for (const [type, modulePath] of Object.entries(config.handlers)) {
-    if (typeof modulePath !== 'string')
-      continue
-    const resolved = path.resolve(configDir, modulePath)
-    if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-      console.error(`Error: Handler module not found for type "${type}": ${resolved}`)
-      process.exit(1)
-    }
-    try {
-      const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
-      const handler = mod.default
-      if (!handler || typeof handler.run !== 'function') {
-        console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
+  const httpHandler = registry.http
+  for (const [type, value] of Object.entries(config.handlers)) {
+    if (typeof value === 'string') {
+      const resolved = path.resolve(configDir, value)
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        console.error(`Error: Handler module not found for type "${type}": ${resolved}`)
         process.exit(1)
       }
-      registry[type] = handler
+      try {
+        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const handler = mod.default
+        if (!handler || typeof handler.run !== 'function') {
+          console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
+          process.exit(1)
+        }
+        registry[type] = handler
+      }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`Error: Failed to load handler "${type}": ${msg}`)
+        process.exit(1)
+      }
+      continue
     }
-    catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.error(`Error: Failed to load handler "${type}": ${msg}`)
-      process.exit(1)
+    if (!isOpenApiHandlerEntry(value))
+      continue
+    if (value.handler) {
+      const resolved = path.resolve(configDir, value.handler)
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        console.error(`Error: OpenAPI handler module not found for type "${type}": ${resolved}`)
+        process.exit(1)
+      }
+      try {
+        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const handler = mod.default
+        if (!handler || typeof handler.run !== 'function') {
+          console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
+          process.exit(1)
+        }
+        registry[type] = handler
+      }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`Error: Failed to load handler "${type}": ${msg}`)
+        process.exit(1)
+      }
+    }
+    else {
+      registry[type] = httpHandler
     }
   }
   return registry
@@ -157,7 +186,7 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
 
 program
   .command('run [flowId]')
-  .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or prefix-operation (e.g. my-api-get-users) from config openapi')
+  .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or handlerKey:operationKey (e.g. simple:get-users) from config handlers')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
   .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
@@ -166,7 +195,7 @@ program
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
   .action(async (flowId: string | undefined, options: RunCommandOptions) => {
     if (!flowId) {
-      console.error('Error: flowId is required (file path or prefix-operation e.g. my-api-get-users).')
+      console.error('Error: flowId is required (file path or handlerKey:operationKey e.g. simple:get-users).')
       process.exit(1)
     }
     await handleRunCommand(flowId, options)

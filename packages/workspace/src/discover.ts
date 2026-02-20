@@ -4,6 +4,7 @@ import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile } from '@runflow/core'
+import { isOpenApiHandlerEntry } from './config'
 
 export const DEFAULT_MAX_DEPTH = 32
 export const DEFAULT_MAX_FILES = 1000
@@ -20,12 +21,12 @@ export interface DiscoverStepSummary {
 
 export interface DiscoverEntry {
   flowId: string
+  /** Flow display name (from flow.name); used by UI as label. */
   name: string
   description?: string
   params?: ParamDeclaration[]
   /** Step summaries for detail view; when present, may include name/description. */
   steps?: DiscoverStepSummary[]
-  openapiPrefix?: string
 }
 
 export interface FindFlowFilesOptions {
@@ -116,21 +117,26 @@ export async function buildDiscoverCatalog(
       })),
     })
   }
-  const openapi = config?.openapi && typeof config.openapi === 'object' ? config.openapi : null
-  if (openapi) {
-    for (const [prefix, entry] of Object.entries(openapi)) {
-      if (!entry || typeof entry.specPath !== 'string')
+  const handlers = config?.handlers && typeof config.handlers === 'object' ? config.handlers : null
+  if (handlers) {
+    for (const [key, entry] of Object.entries(handlers)) {
+      if (!isOpenApiHandlerEntry(entry))
         continue
       const specPath = path.isAbsolute(entry.specPath) ? entry.specPath : path.resolve(configDir, entry.specPath)
       if (!existsSync(specPath) || !statSync(specPath).isFile())
         continue
       try {
-        const { specPath: _drop, ...entryOpts } = entry
-        const opts: Parameters<typeof openApiToFlows>[1] = { output: 'memory', ...entryOpts }
+        const opts: Parameters<typeof openApiToFlows>[1] = {
+          output: 'memory',
+          stepType: key,
+          baseUrl: entry.baseUrl,
+          operationFilter: entry.operationFilter,
+          paramExpose: entry.paramExpose,
+        }
         const flows = await openApiToFlows(specPath, opts)
         for (const [operationKey, flow] of flows) {
           entries.push({
-            flowId: `${prefix}-${operationKey}`,
+            flowId: `${key}:${operationKey}`,
             name: flow.name,
             description: flow.description,
             params: flow.params,
@@ -140,12 +146,11 @@ export async function buildDiscoverCatalog(
               ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
               ...(s.description != null ? { description: s.description } : {}),
             })),
-            openapiPrefix: prefix,
           })
         }
       }
       catch {
-        // skip failed prefix
+        // skip failed handler key
       }
     }
   }

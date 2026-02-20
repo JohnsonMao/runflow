@@ -22,8 +22,7 @@ function filterParamsByExpose(params: ParamDeclaration[], paramExpose?: ParamExp
 
 export interface OperationToFlowOptions {
   paramExpose?: ParamExposeConfig
-  override?: string
-  overrideStepType?: string
+  stepType?: string
 }
 
 export function operationToFlow(
@@ -33,16 +32,13 @@ export function operationToFlow(
   options?: OperationToFlowOptions,
 ): FlowDefinition {
   const paramExpose = options?.paramExpose
-  const override = options?.override
-  const overrideStepType = options?.overrideStepType
+  const stepType = options?.stepType ?? 'http' // fallback for direct callers; workspace always passes stepType
 
   const rawParams = mapParamsToDeclarations(op, doc)
   const params = filterParamsByExpose(rawParams, paramExpose)
   const pathWithTemplates = op.path.replace(/\{(\w+)\}/g, '{{ params.$1 }}')
   const url = baseUrl ? `${baseUrl.replace(/\/$/, '')}${pathWithTemplates}` : pathWithTemplates
   const apiStepId = 'api'
-
-  const stepType = override ? (overrideStepType ?? override) : 'http'
   const apiStep: FlowStep = {
     id: apiStepId,
     type: stepType,

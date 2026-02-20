@@ -26,25 +26,14 @@ function isConfigFileName(name: string): boolean {
   return CONFIG_NAMES.includes(name as typeof CONFIG_NAMES[number])
 }
 
+/** Entry from discover catalog; compatible with workspace DiscoverEntry. */
 export interface DiscoverEntryLike {
   flowId: string
+  /** Flow display name (e.g. flow.name); used as tree node label when present. */
   name: string
-  openapiPrefix?: string
 }
 
-export function matchOpenApiPrefixFallback(flowId: string, prefixes: string[]): string | null {
-  let matched: string | null = null
-  for (const p of prefixes) {
-    if (flowId.startsWith(`${p}-`))
-      matched = !matched || p.length > matched.length ? p : matched
-  }
-  return matched
-}
-
-export function buildTreeFromCatalog(
-  catalog: DiscoverEntryLike[],
-  openapiPrefixes: string[] = [],
-): TreeNode[] {
+export function buildTreeFromCatalog(catalog: DiscoverEntryLike[]): TreeNode[] {
   const hasSlash = (s: string) => s.includes('/')
   const isFileFlowId = (s: string) => s.endsWith('.yaml') || s.endsWith('.yml') || hasSlash(s)
   const fileEntries = catalog.filter(e => isFileFlowId(e.flowId))
@@ -109,7 +98,8 @@ export function buildTreeFromCatalog(
   if (openApiLike.length > 0) {
     const byPrefix = new Map<string, DiscoverEntryLike[]>()
     for (const e of openApiLike) {
-      const prefix = e.openapiPrefix ?? (openapiPrefixes.length > 0 ? matchOpenApiPrefixFallback(e.flowId, openapiPrefixes) : null)
+      const colonIdx = e.flowId.indexOf(':')
+      const prefix = colonIdx > 0 ? e.flowId.slice(0, colonIdx) : null
       const key = prefix ?? e.flowId
       const list = byPrefix.get(key) ?? []
       list.push(e)
@@ -196,10 +186,7 @@ async function handleList(ctx: WorkspaceContext, res: ServerResponse): Promise<v
 async function handleTree(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
   try {
     const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
-    const openapiPrefixes = ctx.config?.openapi && typeof ctx.config.openapi === 'object'
-      ? Object.keys(ctx.config.openapi)
-      : []
-    const tree = buildTreeFromCatalog(catalog, openapiPrefixes)
+    const tree = buildTreeFromCatalog(catalog)
     sendJson(res, 200, {
       workspaceRoot: ctx.cwd,
       configPath: ctx.configPath ?? null,

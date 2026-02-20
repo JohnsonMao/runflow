@@ -1,20 +1,17 @@
 {
   "handlers": {
     "echo": "../custom-handler/echo-handler.mjs",
-    "openapi-override": "../custom-handler/openapi-override.mjs"
+    "simple": {
+      "specPath": "../openapi/simple.yaml",
+      "baseUrl": "https://api.example.com",
+      "operationFilter": { "method": "get" },
+      "handler": "../custom-handler/openapi-override.mjs"
+    }
   },
   "flowsDir": "../flows",
   "params": [
     { "name": "env", "type": "string", "default": "example" },
     { "name": "name", "type": "string", "default": "Guest" },
     { "name": "count", "type": "number", "default": 1 }
-  ],
-  "openapi": {
-    "simple": {
-      "specPath": "../openapi/simple.yaml",
-      "baseUrl": "https://api.example.com",
-      "operationFilter": { "method": "get" },
-      "override": "openapi-override"
-    }
-  }
+  ]
 }

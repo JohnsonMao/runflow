@@ -21,7 +21,7 @@ const mockHttpHandler: IStepHandler = {
 
 describe('integration: openApiToFlows + run', () => {
   it('load OpenAPI file, get flow, run with run(flow, { params })', async () => {
-    const result = await openApiToFlows(join(FIXTURES, 'minimal-openapi.yaml'), { output: 'memory' })
+    const result = await openApiToFlows(join(FIXTURES, 'minimal-openapi.yaml'), { output: 'memory', stepType: 'http' })
     const flow = result.get('get-users-id')
     expect(flow).toBeDefined()
     expect(flow!.steps.some(s => s.type === 'http')).toBe(true)

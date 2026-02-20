@@ -10,7 +10,7 @@ import { writeFlowsToDir } from './writeFlows.js'
  */
 export async function openApiToFlows(
   specPathOrObject: string | OpenApiDocument,
-  options: OpenApiToFlowsOptions = {},
+  options: OpenApiToFlowsOptions = { stepType: 'http' },
 ): Promise<OpenApiToFlowsResult> {
   const doc = await loadOpenApiDocument(specPathOrObject)
   const operations = collectOperations(doc, options.operationFilter)
@@ -20,8 +20,7 @@ export async function openApiToFlows(
   for (const op of operations) {
     const flow = operationToFlow(doc, op, baseUrl, {
       paramExpose: options.paramExpose,
-      override: options.override,
-      overrideStepType: options.overrideStepType,
+      stepType: options.stepType,
     })
     result.set(op.key, flow)
   }

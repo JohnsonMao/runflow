@@ -31,12 +31,12 @@ const listFlowsInputSchema = {
 }
 
 const runFlowInputSchema = {
-  flowId: z.string().describe('Flow identifier: path to flow YAML (absolute or relative to flowsDir/cwd), or prefix-operation (e.g. my-api-get-users) when config openapi is used'),
+  flowId: z.string().describe('Flow identifier: path to flow YAML (absolute or relative to flowsDir/cwd), or handlerKey:operationKey (e.g. simple:get-users) when config handlers has OpenAPI entries'),
   params: z.record(z.unknown()).optional().describe('Optional initial parameters for the flow'),
 }
 
 const discoverFlowDetailInputSchema = {
-  flowId: z.string().describe('Flow identifier to look up in the catalog (file path or prefix-operation).'),
+  flowId: z.string().describe('Flow identifier to look up in the catalog (file path or handlerKey:operationKey).'),
 }
 
 const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
@@ -157,7 +157,7 @@ export function registerTools(
   server.registerTool(
     'executor_flow',
     {
-      description: 'Run a flow by flowId (file path or prefix-operation from config openapi). Returns success summary or error message.',
+      description: 'Run a flow by flowId (file path or handlerKey:operationKey from config handlers). Returns success summary or error message.',
       inputSchema: runFlowInputSchema,
     },
     args => executeTool(args, getConfig),

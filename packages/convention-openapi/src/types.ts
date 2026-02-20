@@ -37,10 +37,8 @@ export interface OpenApiToFlowsOptions {
   operationFilter?: OperationFilter
   /** Which param kinds to include in flow.params. Default: path, query, body exposed; header, cookie hidden. */
   paramExpose?: ParamExposeConfig
-  /** When set, the API step uses this handler (name or path) instead of type 'http'; step payload is url, method, headers, body. Step type = this string (handler name). When override is a module path, set overrideStepType so the step type is a name, not the path. */
-  override?: string
-  /** Only when override is a module path: use this as the generated step type. When override is a handler name, omit this (step type = override). */
-  overrideStepType?: string
+  /** Step type for the generated API step (handler key). Required when generating for a handler; pass 'http' for default HTTP step. */
+  stepType: string
 }
 
 /** Result when output is 'memory': map of operation key to flow. */
