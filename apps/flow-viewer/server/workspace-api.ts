@@ -1,7 +1,6 @@
 import type { FlowGraph } from '@runflow/core'
 import type { ServerResponse } from 'node:http'
-import type { PluginOption } from 'vite'
-import type { TreeNode } from './types'
+import type { TreeNode } from '../src/types'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import {
@@ -23,7 +22,7 @@ export interface WorkspaceContext {
 }
 
 function isConfigFileName(name: string): boolean {
-  return CONFIG_NAMES.includes(name as typeof CONFIG_NAMES[number])
+  return CONFIG_NAMES.includes(name as (typeof CONFIG_NAMES)[number])
 }
 
 /** Entry from discover catalog; compatible with workspace DiscoverEntry. */
@@ -233,47 +232,47 @@ async function handleGraph(
   }
 }
 
-export function workspaceApiPlugin(): PluginOption {
-  return {
-    name: 'runflow:workspace-api',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const rawUrl = req.url ?? ''
-        let requestUrl: URL
-        try {
-          requestUrl = new URL(rawUrl, 'http://localhost')
-        }
-        catch {
-          next()
-          return
-        }
-        const pathname = requestUrl.pathname
-        if (!pathname.startsWith('/api/workspace/')) {
-          next()
-          return
-        }
-        const { cwd, configPath, configDir } = resolveWorkspaceConfig()
-        const config = configPath ? await loadConfig(configPath) : null
-        const ctx: WorkspaceContext = { cwd, configPath, configDir, config }
+/** Connect-style middleware for /api/workspace/*. Export for use by custom server (e.g. Express SSR). */
+export function createWorkspaceApiMiddleware(): (
+  req: import('node:http').IncomingMessage,
+  res: ServerResponse,
+  next: () => void,
+) => void {
+  return async (req, res, next) => {
+    const rawUrl = req.url ?? ''
+    let requestUrl: URL
+    try {
+      requestUrl = new URL(rawUrl, 'http://localhost')
+    }
+    catch {
+      next()
+      return
+    }
+    const pathname = requestUrl.pathname
+    if (!pathname.startsWith('/api/workspace/')) {
+      next()
+      return
+    }
+    const { cwd, configPath, configDir } = resolveWorkspaceConfig()
+    const config = configPath ? await loadConfig(configPath) : null
+    const ctx: WorkspaceContext = { cwd, configPath, configDir, config }
 
-        if (pathname === '/api/workspace/status') {
-          await handleStatus(ctx, res)
-          return
-        }
-        if (pathname === '/api/workspace/list') {
-          await handleList(ctx, res)
-          return
-        }
-        if (pathname === '/api/workspace/tree') {
-          await handleTree(ctx, res)
-          return
-        }
-        if (pathname === '/api/workspace/graph') {
-          await handleGraph(ctx, requestUrl, res)
-          return
-        }
-        next()
-      })
-    },
+    if (pathname === '/api/workspace/status') {
+      await handleStatus(ctx, res)
+      return
+    }
+    if (pathname === '/api/workspace/list') {
+      await handleList(ctx, res)
+      return
+    }
+    if (pathname === '/api/workspace/tree') {
+      await handleTree(ctx, res)
+      return
+    }
+    if (pathname === '/api/workspace/graph') {
+      await handleGraph(ctx, requestUrl, res)
+      return
+    }
+    next()
   }
 }

@@ -1,6 +1,6 @@
-import type { DiscoverEntryLike } from './vite-plugin-workspace-api'
+import type { DiscoverEntryLike } from './workspace-api'
 import { describe, expect, it } from 'vitest'
-import { buildTreeFromCatalog } from './vite-plugin-workspace-api'
+import { buildTreeFromCatalog } from './workspace-api'
 
 describe('buildTreeFromCatalog', () => {
   it('builds file nodes for path-like flowIds', () => {
