@@ -3,9 +3,7 @@
 ## Purpose
 
 Define how runflow config **handlers** can be either a module path (string) or an OpenAPI entry object. OpenAPI-derived flows use the handler key as the flowId prefix and as the step type; optional `handler` (path to .mjs) runs the API step, otherwise the built-in http handler is used.
-
 ## Requirements
-
 ### Requirement: Handlers MAY be a string or an OpenAPI entry object
 
 The runflow config SHALL allow **handlers** to be a **Record<string, string | OpenApiHandlerEntry>**. A value that is a **string** SHALL denote a path to a step-handler module (.mjs), resolved relative to the config file directory. A value that is an **object** with a **specPaths** property (array of strings) SHALL be treated as an **OpenAPI entry**. Any other value type SHALL be ignored by the implementation when building the registry or resolving OpenAPI flowIds.
@@ -44,7 +42,7 @@ An **OpenApiHandlerEntry** SHALL have **specPaths** (array of strings, required)
 
 - **WHEN** config has `handlers.simple` with `specPaths` and `"handler": "../custom-api.mjs"`
 - **THEN** the implementation SHALL load that module and SHALL register it under the key `simple`
-- **AND** the API step in generated flows SHALL have `type: "simple"` and SHALL be executed by that loaded handler (payload: url, method, headers, body)
+- **AND** the API step in generated flows SHALL have `type: "simple"` and SHALL be executed by that loaded handler (payload: url, method, headers, body, and optionally path, query, cookie)
 
 ### Requirement: FlowId for OpenAPI flows from handlers
 
@@ -64,10 +62,30 @@ When building the step registry from config.handlers, the implementation SHALL i
 
 - **WHEN** config has an OpenAPI entry (with specPaths) with no `handler` property
 - **THEN** the registry SHALL have the built-in http handler registered under that handler key
-- **AND** steps with that type SHALL execute with the same semantics as type `http` (url, method, headers, body)
+- **AND** steps with that type SHALL execute with the same semantics as type `http` (url, method, headers, body, and optionally path, query, cookie)
 
 #### Scenario: OpenAPI entry with handler loads custom module
 
 - **WHEN** config has an OpenAPI entry with `specPaths` and `handler` set to a valid .mjs path
 - **THEN** the implementation SHALL load that module and SHALL register its default export under the handler key
-- **AND** the module SHALL receive the same step shape (url, method, headers, body) and context as an override handler today
+- **AND** the module SHALL receive the same step shape (url, method, headers, body, and optionally path, query, cookie) and context as an override handler today
+
+### Requirement: Built-in http step shape MAY include path, query, and cookie
+
+The step shape for the built-in http handler and for handlers registered for OpenAPI entries SHALL support optional **path**, **query**, and **cookie** in addition to url, method, headers, and body. When present, the built-in http handler SHALL use them as follows. **path** (string): SHALL replace the pathname of the request URL; the final URL SHALL be built from step.url's origin (protocol, host, port) plus this path. **query** (string or Record<string, string>): when a string, SHALL be used as the URL search part (without leading `?`); when an object, SHALL be serialized to application/x-www-form-urlencoded and used as the search part. **cookie** (string or Record<string, string>): SHALL set or override the Cookie request header; when an object, SHALL be serialized as key=value pairs separated by `; `. When both step.headers['Cookie'] and step.cookie are present, step.cookie SHALL take precedence for the Cookie header.
+
+#### Scenario: Request URL pathname uses path when provided
+
+- **WHEN** a step has url `https://api.example.com` and path `/users/123`
+- **THEN** the built-in http handler SHALL request `https://api.example.com/users/123`
+
+#### Scenario: Request URL search uses query when provided
+
+- **WHEN** a step has url `https://api.example.com/search` and query `{ "q": "x", "limit": "10" }`
+- **THEN** the built-in http handler SHALL request a URL whose search part encodes q=x and limit=10 (application/x-www-form-urlencoded or equivalent)
+
+#### Scenario: Cookie header is set from cookie field
+
+- **WHEN** a step has cookie as string `session=abc` or as object `{ "session": "abc" }`
+- **THEN** the request SHALL include a Cookie header with that value; if step.headers also sets Cookie, step.cookie SHALL take precedence
+

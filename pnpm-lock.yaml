@@ -194,6 +194,12 @@ importers:
 
   apps/flow-viewer:
     dependencies:
+      '@runflow/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@runflow/handlers':
+        specifier: workspace:*
+        version: link:../../packages/handlers
       class-variance-authority:
         specifier: catalog:frontend
         version: 0.7.1
@@ -231,9 +237,6 @@ importers:
       '@antfu/eslint-config':
         specifier: catalog:dev
         version: 7.4.3(@vue/compiler-sfc@3.5.27)(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@25.2.3)(happy-dom@15.11.7)(lightningcss@1.30.2))
-      '@runflow/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@runflow/workspace':
         specifier: workspace:^
         version: link:../../packages/workspace

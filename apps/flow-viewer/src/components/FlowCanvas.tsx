@@ -1,5 +1,5 @@
 import type { NodeProps } from 'reactflow'
-import type { FlowGraph, FlowGraphNode } from './types'
+import type { FlowGraph, FlowGraphNode } from '../types'
 import {
   Background,
   Controls,
@@ -10,8 +10,8 @@ import {
   useEdgesState,
   useNodesState,
 } from 'reactflow'
-import { graphToReactFlow } from './flowGraphToReactFlow'
-import { cn } from './lib/utils'
+import { graphToReactFlow } from '../flowGraphToReactFlow'
+import { cn } from '../lib/utils'
 
 interface FlowCanvasProps {
   graph: FlowGraph

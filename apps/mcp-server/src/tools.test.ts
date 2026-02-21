@@ -197,6 +197,28 @@ describe('executeTool', () => {
     expect(text).toMatch(/\*\*Success\*\*/)
   })
 
+  it('executes flow with tool params passed to run()', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-tool-params-'))
+    const flowPath = join(dir, 'flow.yaml')
+    writeFileSync(flowPath, [
+      'name: echo-who',
+      'params:',
+      '  - name: who',
+      '    type: string',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { who: "{{ who }}" }',
+      '    dependsOn: []',
+    ].join('\n'))
+    process.chdir(dir)
+    const result = await executeTool({ flowId: 'flow.yaml', params: { who: 'world' } }, getConfig)
+    unlinkSync(flowPath)
+    expect(result.isError).toBe(false)
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(text).toMatch(/\*\*Success\*\*/)
+  })
+
   it('returns run error when flow execution throws', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcp-run-err-'))
     const flowPath = join(dir, 'flow.yaml')
@@ -417,6 +439,29 @@ describe('discoverFlowDetailTool', () => {
     expect(text).toContain('- **flowId**:')
     expect(text).toContain('flow-with-params')
     expect(text).toMatch(/\*\*id\*\* \(string.*required\)|\*\*count\*\* \(number\)/)
+    expect(result.isError).not.toBe(true)
+  })
+
+  it('returns flow detail including steps when flow has steps', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-disc-detail-steps-'))
+    writeFileSync(join(dir, 'with-steps.yaml'), [
+      'name: flow-with-steps',
+      'steps:',
+      '  - id: a',
+      '    type: set',
+      '    dependsOn: []',
+      '  - id: b',
+      '    type: set',
+      '    dependsOn: [a]',
+    ].join('\n'))
+    process.chdir(dir)
+    const result = await discoverFlowDetailTool({ flowId: 'with-steps.yaml' }, getDiscoverCatalog)
+    unlinkSync(join(dir, 'with-steps.yaml'))
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+    expect(text).toContain('flow-with-steps')
+    expect(text).toContain('**steps**')
+    expect(text).toContain('**a**')
+    expect(text).toContain('**b**')
     expect(result.isError).not.toBe(true)
   })
 

@@ -191,5 +191,131 @@ describe('http handler', () => {
       const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(true)
     })
+
+    it('path replaces pathname of url (url + path → final URL)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com',
+        path: '/users/123',
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users/123', expect.any(Object))
+    })
+
+    it('query as object produces application/x-www-form-urlencoded search', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com/search',
+        query: { q: 'x', limit: '10' },
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('q=x'),
+        expect.any(Object),
+      )
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('limit=10'),
+        expect.any(Object),
+      )
+    })
+
+    it('query as string is used as search part', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com/search',
+        query: 'q=hello&page=1',
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      const url = (fetchMock.mock.calls[0] as [string])[0]
+      expect(url).toContain('q=hello')
+      expect(url).toContain('page=1')
+    })
+
+    it('cookie sets Cookie header', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com/',
+        cookie: 'session=abc',
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1]
+      expect(init?.headers).toBeDefined()
+      const headers = init?.headers as Record<string, string>
+      expect(headers.Cookie).toBe('session=abc')
+    })
+
+    it('cookie as object serializes to key=value; key2=value2', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com/',
+        cookie: { session: 'abc', token: 'xyz' },
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1]
+      const headers = init?.headers as Record<string, string>
+      expect(headers.Cookie).toContain('session=abc')
+      expect(headers.Cookie).toContain('token=xyz')
+    })
+
+    it('cookie overrides headers.Cookie when both set', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        text: () => Promise.resolve('{}'),
+      } as Response)
+      globalThis.fetch = fetchMock
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'https://api.example.com/',
+        headers: { Cookie: 'old=value' },
+        cookie: 'session=new',
+        dependsOn: [],
+      }
+      await handler.run(step, emptyContext)
+      const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1]
+      const headers = init?.headers as Record<string, string>
+      expect(headers.Cookie).toBe('session=new')
+    })
   })
 })

@@ -1,14 +1,19 @@
-import type { FlowGraph } from '@runflow/core'
-import type { ServerResponse } from 'node:http'
-import type { TreeNode } from '../src/types'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { TreeNode } from '../src/types.js'
+import { Buffer } from 'node:buffer'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
+import { run } from '@runflow/core'
+import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   CONFIG_NAMES,
+  createResolveFlow,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
+  getDiscoverEntry,
   loadConfig,
+  mergeParamDeclarations,
   resolveAndLoadFlow,
 } from '@runflow/workspace'
 
@@ -218,11 +223,20 @@ async function handleGraph(
       const name = step && typeof step.name === 'string' && step.name !== '' ? step.name : null
       return name ? { ...n, label: name } : n
     })
-    const response: FlowGraph = { ...graph, nodes }
+    const stepsSummary = loaded.flow.steps.map(s => ({
+      id: s.id,
+      type: s.type,
+      ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
+      ...(s.description != null ? { description: s.description } : {}),
+    }))
     sendJson(res, 200, {
-      ...response,
+      ...graph,
+      nodes,
       flowName: loaded.flow.name,
       flowDescription: loaded.flow.description,
+      flowId,
+      params: loaded.flow.params,
+      steps: stepsSummary,
     })
   }
   catch (err) {
@@ -230,6 +244,97 @@ async function handleGraph(
       error: err instanceof Error ? err.message : 'Flow not found or invalid',
     })
   }
+}
+
+async function handleDetail(
+  ctx: WorkspaceContext,
+  requestUrl: URL,
+  res: ServerResponse,
+): Promise<void> {
+  const flowId = requestUrl.searchParams.get('flowId')
+  if (!flowId?.trim()) {
+    sendJson(res, 400, { error: 'Missing flowId' })
+    return
+  }
+  try {
+    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+    const entry = getDiscoverEntry(catalog, flowId)
+    if (!entry) {
+      sendJson(res, 404, { error: `Flow not found: ${flowId}` })
+      return
+    }
+    sendJson(res, 200, entry)
+  }
+  catch (err) {
+    sendJson(res, 500, {
+      error: err instanceof Error ? err.message : 'Failed to get flow detail',
+    })
+  }
+}
+
+function formatRunResult(result: Awaited<ReturnType<typeof run>>): string {
+  const status = result.success ? '**Success**' : '**Failed**'
+  const headline = `${status} — Flow "${result.flowName}" (${result.steps.length} step(s)).`
+  const stepLines = result.steps.map((s) => {
+    const badge = s.success ? '✓' : '✗'
+    const extra: string[] = []
+    if (!s.success && s.error)
+      extra.push(`error: ${s.error}`)
+    if (s.log?.trim())
+      extra.push(`log: ${s.log.trim()}`)
+    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
+    return `- ${badge} ${s.stepId}${suffix}`
+  })
+  const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
+  if (!result.success) {
+    const msg = result.error ?? 'Unknown error'
+    const stepErrors = result.steps
+      .filter(s => !s.success && s.error)
+      .map(s => `- Step "${s.stepId}": ${s.error}`)
+      .join('\n')
+    return `${headline}\n\n${msg}${stepErrors ? `\n\n${stepErrors}` : ''}${stepsBlock}`
+  }
+  return `${headline}${stepsBlock}`
+}
+
+async function handleRun(
+  ctx: WorkspaceContext,
+  body: { flowId: string, params?: Record<string, unknown> },
+  res: ServerResponse,
+): Promise<void> {
+  const { flowId, params } = body
+  if (!flowId?.trim()) {
+    sendJson(res, 400, { error: 'Missing flowId' })
+    return
+  }
+  try {
+    const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
+    const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
+    const effectiveParamsDeclaration = mergeParamDeclarations(ctx.config?.params, loaded.flow.params)
+    const registry = createBuiltinRegistry()
+    const result = await run(loaded.flow, {
+      registry,
+      params: params && Object.keys(params).length > 0 ? params : undefined,
+      effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
+      resolveFlow,
+    })
+    const text = formatRunResult(result)
+    sendJson(res, 200, { success: result.success, text })
+  }
+  catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    sendJson(res, 500, { success: false, text: `Run error: ${message}` })
+  }
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req)
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  const raw = Buffer.concat(chunks).toString('utf8')
+  if (!raw.trim())
+    return {}
+  return JSON.parse(raw) as unknown
 }
 
 /** Connect-style middleware for /api/workspace/*. Export for use by custom server (e.g. Express SSR). */
@@ -271,6 +376,20 @@ export function createWorkspaceApiMiddleware(): (
     }
     if (pathname === '/api/workspace/graph') {
       await handleGraph(ctx, requestUrl, res)
+      return
+    }
+    if (pathname === '/api/workspace/detail') {
+      await handleDetail(ctx, requestUrl, res)
+      return
+    }
+    if (pathname === '/api/workspace/run' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req) as { flowId?: string, params?: Record<string, unknown> }
+        await handleRun(ctx, { flowId: body?.flowId ?? '', params: body?.params }, res)
+      }
+      catch {
+        sendJson(res, 400, { success: false, text: 'Invalid JSON body' })
+      }
       return
     }
     next()

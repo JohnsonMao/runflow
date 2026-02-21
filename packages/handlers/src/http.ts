@@ -3,6 +3,28 @@ import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/c
 import { Buffer } from 'node:buffer'
 import { isPlainObject } from '@runflow/core'
 
+function buildRequestUrl(baseUrlStr: string, path?: string, query?: Record<string, string> | string): string {
+  const url = new URL(baseUrlStr)
+  if (path !== undefined && path !== '') {
+    url.pathname = path.startsWith('/') ? path : `/${path}`
+  }
+  if (query !== undefined) {
+    if (typeof query === 'string')
+      url.search = query.startsWith('?') ? query.slice(1) : query
+    else
+      url.search = new URLSearchParams(query).toString()
+  }
+  return url.toString()
+}
+
+function serializeCookie(cookie: Record<string, string> | string): string {
+  if (typeof cookie === 'string')
+    return cookie
+  return Object.entries(cookie)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('; ')
+}
+
 export class HttpHandler implements IStepHandler {
   private abortController: AbortController | null = null
 
@@ -38,7 +60,10 @@ export class HttpHandler implements IStepHandler {
       if (!allowed)
         return context.stepResult(step.id, false, { error: `http step host not allowed: ${url.hostname}. Allowed: ${allowedHosts.join(', ')}` })
     }
-    return this.doRequest(step, context, urlRaw)
+    const pathOpt = typeof step.path === 'string' ? step.path : undefined
+    const queryOpt = step.query !== undefined && (typeof step.query === 'string' || isPlainObject(step.query)) ? step.query as Record<string, string> | string : undefined
+    const finalUrl = buildRequestUrl(urlRaw, pathOpt, queryOpt)
+    return this.doRequest(step, context, finalUrl)
   }
 
   private async doRequest(step: FlowStep, context: StepContext, url: string): Promise<StepResult> {
@@ -48,6 +73,20 @@ export class HttpHandler implements IStepHandler {
       for (const [k, v] of Object.entries(step.headers)) {
         if (typeof v === 'string')
           headers[k] = v
+      }
+    }
+    if (step.cookie !== undefined) {
+      let cookieVal = ''
+      if (typeof step.cookie === 'string') {
+        cookieVal = step.cookie
+      }
+      else if (isPlainObject(step.cookie)) {
+        cookieVal = serializeCookie(Object.fromEntries(
+          Object.entries(step.cookie).map(([k, v]) => [k, String(v)]),
+        ))
+      }
+      if (cookieVal) {
+        headers.Cookie = cookieVal
       }
     }
     const body = typeof step.body === 'string' ? step.body : undefined
