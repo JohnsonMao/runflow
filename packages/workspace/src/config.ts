@@ -1,14 +1,16 @@
-import type { OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
-import type { ParamDeclaration } from '@runflow/core'
+import type { OpenApiDocument, OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
+import type { FlowDefinition, ParamDeclaration, ResolveFlowFn } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadOpenApiDocument, openApiToFlows } from '@runflow/convention-openapi'
+import { loadFromFile } from '@runflow/core'
 
 export const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js', 'runflow.config.json'] as const
 
-/** OpenAPI entry in handlers: specPath required; paths resolved relative to config file directory. */
+/** OpenAPI entry in handlers: specPaths required; paths resolved relative to config file directory. */
 export interface OpenApiHandlerEntry {
-  specPath: string
+  specPaths: string[]
   baseUrl?: string
   operationFilter?: OpenApiToFlowsOptions['operationFilter']
   paramExpose?: ParamExposeConfig
@@ -16,7 +18,7 @@ export interface OpenApiHandlerEntry {
   handler?: string
 }
 
-/** Handlers key = step type; value = module path (string) or OpenAPI entry (object with specPath). */
+/** Handlers key = step type; value = module path (string) or OpenAPI entry (object with specPaths). */
 export interface RunflowConfig {
   handlers?: Record<string, string | OpenApiHandlerEntry>
   /** Directory to resolve file flowIds (relative to config dir). When set, flowId is relative to this. */
@@ -35,24 +37,44 @@ export interface ResolvedFileFlow {
 
 export interface ResolvedOpenApiFlow {
   type: 'openapi'
-  specPath: string
+  specPaths: string[]
   operation: string
-  /** Spec path for runner to inject into params so override handlers can call validateRequest(step, context). */
-  openApiSpecPath: string
-  /** Operation key for runner to inject into params; used with openApiSpecPath by validateRequest. */
-  openApiOperationKey: string
   options: Partial<OpenApiToFlowsOptions>
 }
 
 export type ResolvedFlow = ResolvedFileFlow | ResolvedOpenApiFlow
 
-/** True when value is an object with a string specPath (OpenAPI handler entry). */
+/**
+ * Load multiple OpenAPI spec files, merge into one document (paths and components: later overwrites).
+ * Paths in specPaths are resolved relative to configDir when not absolute.
+ */
+export async function mergeOpenApiSpecs(specPaths: string[], configDir: string): Promise<OpenApiDocument> {
+  if (specPaths.length === 0)
+    return { openapi: '3.0.0', paths: {} }
+  const docs = await Promise.all(specPaths.map((p) => {
+    const abs = path.isAbsolute(p) ? p : path.resolve(configDir, p)
+    return loadOpenApiDocument(abs)
+  }))
+  const merged: OpenApiDocument = { openapi: docs[0]?.openapi ?? '3.0.0', paths: {}, components: { schemas: {} } }
+  for (const doc of docs) {
+    if (doc.paths)
+      Object.assign(merged.paths!, doc.paths)
+    if (doc.components?.schemas)
+      Object.assign(merged.components!.schemas!, doc.components.schemas)
+    if (doc.servers?.length && !merged.servers?.length)
+      merged.servers = doc.servers
+  }
+  return merged
+}
+
+/** True when value is an object with specPaths (array of strings) (OpenAPI handler entry). */
 export function isOpenApiHandlerEntry(entry: unknown): entry is OpenApiHandlerEntry {
   return (
     typeof entry === 'object'
     && entry !== null
-    && 'specPath' in entry
-    && typeof (entry as OpenApiHandlerEntry).specPath === 'string'
+    && 'specPaths' in entry
+    && Array.isArray((entry as OpenApiHandlerEntry).specPaths)
+    && (entry as OpenApiHandlerEntry).specPaths.every((p): p is string => typeof p === 'string')
   )
 }
 
@@ -148,9 +170,9 @@ export function resolveFlowId(
       const operation = flowId.slice(colonIndex + 1)
       const entry = handlers[key]
       if (isOpenApiHandlerEntry(entry)) {
-        const specPath = path.isAbsolute(entry.specPath)
-          ? entry.specPath
-          : path.resolve(configDir, entry.specPath)
+        const specPaths = entry.specPaths.map(p =>
+          path.isAbsolute(p) ? p : path.resolve(configDir, p),
+        )
         const options = {
           stepType: key,
           baseUrl: entry.baseUrl,
@@ -159,10 +181,8 @@ export function resolveFlowId(
         }
         return {
           type: 'openapi',
-          specPath,
+          specPaths,
           operation,
-          openApiSpecPath: specPath,
-          openApiOperationKey: operation,
           options,
         }
       }
@@ -173,4 +193,72 @@ export function resolveFlowId(
     : cwd
   const filePath = path.isAbsolute(flowId) ? flowId : path.resolve(baseDir, flowId)
   return { type: 'file', path: filePath }
+}
+
+// --- Load flow (resolve + load) ---
+
+export interface LoadedFlow {
+  flow: FlowDefinition
+}
+
+async function loadFlowFromResolved(resolved: ResolvedFlow, configDir: string): Promise<LoadedFlow> {
+  if (resolved.type === 'openapi') {
+    const merged = await mergeOpenApiSpecs(resolved.specPaths, configDir)
+    const flows = await openApiToFlows(merged, { ...resolved.options, output: 'memory', stepType: resolved.options.stepType ?? 'http' })
+    const selected = flows.get(resolved.operation)
+    if (!selected) {
+      const keys = [...flows.keys()].slice(0, 10).join(', ')
+      throw new Error(`Operation "${resolved.operation}" not found. Available (sample): ${keys}${flows.size > 10 ? '...' : ''}`)
+    }
+    return { flow: selected }
+  }
+  if (!existsSync(resolved.path) || !statSync(resolved.path).isFile())
+    throw new Error(`File not found or not a regular file: ${resolved.path}`)
+  const flow = loadFromFile(resolved.path)
+  if (!flow)
+    throw new Error('Invalid or unreadable flow file.')
+  return { flow }
+}
+
+/**
+ * Resolve flowId and load the flow. Convenience for callers that have config/configDir/cwd.
+ * @throws Error with user-facing message when file/spec not found, operation not found, or flow invalid.
+ */
+export async function resolveAndLoadFlow(
+  flowId: string,
+  config: RunflowConfig | null,
+  configDir: string,
+  cwd: string,
+): Promise<LoadedFlow> {
+  const resolved = resolveFlowId(flowId, config, configDir, cwd)
+  return loadFlowFromResolved(resolved, configDir)
+}
+
+export function createResolveFlow(
+  config: RunflowConfig | null,
+  configDir: string,
+  cwd: string,
+): ResolveFlowFn {
+  return async (flowId: string) => {
+    const resolved = resolveFlowId(flowId, config, configDir, cwd)
+    if (resolved.type === 'openapi') {
+      try {
+        const merged = await mergeOpenApiSpecs(resolved.specPaths, configDir)
+        const flows = await openApiToFlows(merged, { ...resolved.options, output: 'memory', stepType: resolved.options.stepType ?? 'http' })
+        const selected = flows.get(resolved.operation)
+        if (!selected)
+          return null
+        return { flow: selected }
+      }
+      catch {
+        return null
+      }
+    }
+    if (!existsSync(resolved.path) || !statSync(resolved.path).isFile())
+      return null
+    const loaded = loadFromFile(resolved.path)
+    if (!loaded)
+      return null
+    return { flow: loaded }
+  }
 }

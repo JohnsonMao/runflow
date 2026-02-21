@@ -1,27 +1,6 @@
-# workspace Specification
+# Delta: workspace
 
-## Purpose
-
-定義 **@runflow/workspace**（packages/workspace）的職責與對外介面：僅提供工作區「資料與解析」及 list/detail 的 Markdown 格式化，不負責誰載入 config、不負責執行 flow。CLI 與 MCP 依賴 workspace 取得 config、catalog、resolveFlow 與 list/detail 的 Markdown 輸出。
-
-## Requirements
-
-### Requirement: Workspace SHALL provide config discovery and loading
-
-The workspace package SHALL export **findConfigFile(cwd)** and **loadConfig(path)**. findConfigFile SHALL return the first existing path among runflow.config.mjs, runflow.config.js, runflow.config.json under the given cwd, or null. loadConfig SHALL load and return the config object (RunflowConfig). RunflowConfig SHALL include an optional **params** property of type **ParamDeclaration[]** (array of param declarations), not Record<string, unknown>. RunflowConfig SHALL include an optional **handlers** property of type **Record<string, string | OpenApiHandlerEntry>** (see config-handlers-openapi). RunflowConfig SHALL NOT include a top-level **openapi** property. When the config file contains `params` as a plain object (legacy), loadConfig MAY normalize it to ParamDeclaration[] for backward compatibility (see config-params-declaration spec). Config path resolution (e.g. from `--config` or cwd) is the responsibility of the caller (CLI or MCP); workspace does not read environment variables for config path.
-
-#### Scenario: findConfigFile returns first existing config file in cwd
-
-- **WHEN** the caller invokes findConfigFile(cwd) and runflow.config.mjs exists in cwd
-- **THEN** the return value SHALL be the path to that file
-- **AND** when only runflow.config.js or runflow.config.json exists, that path SHALL be returned instead (order: .mjs, .js, .json)
-
-#### Scenario: loadConfig loads and returns RunflowConfig
-
-- **WHEN** the caller invokes loadConfig(absolutePath) with a valid config file path
-- **THEN** the return value SHALL be the config object (RunflowConfig) with optional flowsDir, handlers (string or OpenApiHandlerEntry per key), params (params when present SHALL be ParamDeclaration[])
-- **AND** RunflowConfig SHALL NOT have an openapi property
-- **AND** paths inside the config are not resolved by workspace; the caller uses configDir (dirname of config path) for resolution
+## MODIFIED Requirements
 
 ### Requirement: Workspace SHALL provide flowId resolution (resolveFlowId)
 
@@ -58,20 +37,6 @@ The workspace SHALL export **findFlowFiles**, **buildDiscoverCatalog(config, con
 - **AND** each entry SHALL have flowId, name, description (optional), params (optional, ParamDeclaration[])
 - **AND** the implementation SHALL NOT include entries from any top-level config.openapi
 
-### Requirement: Workspace SHALL provide list and detail Markdown formatting
-
-The workspace SHALL export **formatListAsMarkdown(entries, limit, offset)** and **formatDetailAsMarkdown(entry)**. These SHALL produce the same Markdown text used by the CLI and MCP for discover_flow_list and discover_flow_detail (table with flowId | name; pagination hint when applicable; detail with flowId, name, description, params). CLI and MCP SHALL use these functions so that list/detail presentation is consistent and maintained in one place.
-
-#### Scenario: formatListAsMarkdown produces table and pagination hint
-
-- **WHEN** the caller invokes formatListAsMarkdown(entries, limit, offset) with non-empty entries and limit/offset
-- **THEN** the return value SHALL be Markdown with a first line for total and range, a table with columns flowId | name, and when offset + limit < total a pagination hint line (e.g. "Next: offset=N")
-
-#### Scenario: formatDetailAsMarkdown produces single-flow detail
-
-- **WHEN** the caller invokes formatDetailAsMarkdown(entry)
-- **THEN** the return value SHALL be Markdown that includes the flow's flowId, name, description, and params (path/query/body; body fields MAY be expanded)
-
 ### Requirement: Workspace SHALL provide createResolveFlow for core
 
 The workspace SHALL export **createResolveFlow(config, configDir, cwd)** returning **ResolveFlowFn** (async flowId → **{ flow }** or null) for @runflow/core run(flow, { resolveFlow }). The resolver SHALL return an object with only **flow** (FlowDefinition); it SHALL NOT return flowFilePath, openApiContext, specPath, path, or openApiSpecPath/openApiOperationKey. Package SHALL depend on @runflow/core and @runflow/convention-openapi; SHALL NOT depend on CLI or MCP.
@@ -82,6 +47,8 @@ The workspace SHALL export **createResolveFlow(config, configDir, cwd)** returni
 - **THEN** when a flow step has type flow and a flowId string, core SHALL call resolveFlow(flowId) to obtain the callee flow
 - **AND** the returned resolver SHALL return only **{ flow: FlowDefinition }** or null; SHALL NOT attach flowFilePath or openApiContext to the result
 - **AND** the resolver SHALL use resolveFlowId and, for openapi, merge specs from specPaths then openApiToFlows; for file, loadFromFile from the resolved path
+
+## ADDED Requirements
 
 ### Requirement: LoadedFlow and resolveAndLoadFlow return only flow
 
@@ -98,9 +65,3 @@ When the workspace exports **resolveAndLoadFlow** or when load is used after res
 - **WHEN** the resolver returned by createResolveFlow is invoked with a valid flowId
 - **THEN** the resolved result SHALL be **{ flow }** or null
 - **AND** the result SHALL NOT contain flowFilePath, openApiContext, specPath, or path
-
-## Non-requirements (out of scope)
-
-- Workspace does not define how the registry is built (CLI and MCP build it from config.handlers only).
-- Workspace does not define config path source (e.g. no RUNFLOW_CONFIG; caller uses --config or findConfigFile(cwd)).
-- Workspace does not cache config or catalog; caching is the responsibility of the caller (e.g. MCP caches, CLI does not).

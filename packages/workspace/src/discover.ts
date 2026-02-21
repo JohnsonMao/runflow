@@ -4,7 +4,7 @@ import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile } from '@runflow/core'
-import { isOpenApiHandlerEntry } from './config'
+import { isOpenApiHandlerEntry, mergeOpenApiSpecs } from './config'
 
 export const DEFAULT_MAX_DEPTH = 32
 export const DEFAULT_MAX_FILES = 1000
@@ -122,10 +122,12 @@ export async function buildDiscoverCatalog(
     for (const [key, entry] of Object.entries(handlers)) {
       if (!isOpenApiHandlerEntry(entry))
         continue
-      const specPath = path.isAbsolute(entry.specPath) ? entry.specPath : path.resolve(configDir, entry.specPath)
-      if (!existsSync(specPath) || !statSync(specPath).isFile())
+      const resolvedPaths = entry.specPaths.map(p => path.isAbsolute(p) ? p : path.resolve(configDir, p))
+      const allExist = resolvedPaths.length > 0 && resolvedPaths.every(p => existsSync(p) && statSync(p).isFile())
+      if (!allExist)
         continue
       try {
+        const merged = await mergeOpenApiSpecs(resolvedPaths, configDir)
         const opts: Parameters<typeof openApiToFlows>[1] = {
           output: 'memory',
           stepType: key,
@@ -133,7 +135,7 @@ export async function buildDiscoverCatalog(
           operationFilter: entry.operationFilter,
           paramExpose: entry.paramExpose,
         }
-        const flows = await openApiToFlows(specPath, opts)
+        const flows = await openApiToFlows(merged, opts)
         for (const [operationKey, flow] of flows) {
           entries.push({
             flowId: `${key}:${operationKey}`,

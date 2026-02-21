@@ -2,7 +2,7 @@
   "handlers": {
     "echo": "../custom-handler/echo-handler.mjs",
     "simple": {
-      "specPath": "../openapi/simple.yaml",
+      "specPaths": ["../openapi/simple.yaml"],
       "baseUrl": "https://api.example.com",
       "operationFilter": { "method": "get" },
       "handler": "../custom-handler/openapi-override.mjs"

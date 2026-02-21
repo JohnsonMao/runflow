@@ -219,29 +219,29 @@ describe('resolveFlowId', () => {
   it('resolves openapi flowId as handlerKey:operationKey when config has handlers OpenAPI entry', () => {
     const config: RunflowConfig = {
       handlers: {
-        myApi: { specPath: './openapi.yaml' },
+        myApi: { specPaths: ['./openapi.yaml'] },
       },
     }
     const r = resolveFlowId('myApi:get-users', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.operation).toBe('get-users')
-    expect(spec.specPath).toBe('/project/openapi.yaml')
+    expect(spec.specPaths).toEqual(['/project/openapi.yaml'])
     expect(spec.options.stepType).toBe('myApi')
   })
 
   it('uses longest matching handler key when multiple keys match (e.g. admin and admin-delivery)', () => {
     const config: RunflowConfig = {
       handlers: {
-        'admin': { specPath: './admin.yaml' },
-        'admin-delivery': { specPath: './admin-delivery.yaml' },
+        'admin': { specPaths: ['./admin.yaml'] },
+        'admin-delivery': { specPaths: ['./admin-delivery.yaml'] },
       },
     }
     const r = resolveFlowId('admin-delivery:getOrders', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
     expect(spec.operation).toBe('getOrders')
-    expect(spec.specPath).toBe('/project/admin-delivery.yaml')
+    expect(spec.specPaths).toEqual(['/project/admin-delivery.yaml'])
   })
 
   it('resolves openapi flowId with baseUrl, operationFilter, paramExpose, stepType in options', () => {
@@ -249,7 +249,7 @@ describe('resolveFlowId', () => {
     const config: RunflowConfig = {
       handlers: {
         api: {
-          specPath: '/abs/spec.yaml',
+          specPaths: ['/abs/spec.yaml'],
           baseUrl: 'https://api.example.com',
           operationFilter,
           paramExpose: { path: true, query: true, body: true },
@@ -259,10 +259,8 @@ describe('resolveFlowId', () => {
     const r = resolveFlowId('api:post-item', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
-    expect(spec.specPath).toBe('/abs/spec.yaml')
+    expect(spec.specPaths).toEqual(['/abs/spec.yaml'])
     expect(spec.operation).toBe('post-item')
-    expect(spec.openApiOperationKey).toBe('post-item')
-    expect(spec.openApiSpecPath).toBe('/abs/spec.yaml')
     expect(spec.options.stepType).toBe('api')
     expect(spec.options.baseUrl).toBe('https://api.example.com')
     expect(spec.options.operationFilter).toBe(operationFilter)
@@ -271,7 +269,7 @@ describe('resolveFlowId', () => {
 
   it('falls back to file when flowId has colon but no operation after it', () => {
     const config: RunflowConfig = {
-      handlers: { myApi: { specPath: './openapi.yaml' } },
+      handlers: { myApi: { specPaths: ['./openapi.yaml'] } },
     }
     const r = resolveFlowId('myApi:', config, configDir, cwd)
     const file = r as ResolvedFileFlow
@@ -281,7 +279,7 @@ describe('resolveFlowId', () => {
 
   it('falls back to file when flowId handler key is not in config', () => {
     const config: RunflowConfig = {
-      handlers: { myApi: { specPath: './openapi.yaml' } },
+      handlers: { myApi: { specPaths: ['./openapi.yaml'] } },
     }
     const r = resolveFlowId('other:get', config, configDir, cwd)
     const file = r as ResolvedFileFlow
@@ -289,17 +287,17 @@ describe('resolveFlowId', () => {
     expect(file.path).toBe('/project/other:get')
   })
 
-  it('skips handler entries that are not OpenAPI (no specPath or invalid)', () => {
+  it('skips handler entries that are not OpenAPI (no specPaths or invalid)', () => {
     const config: RunflowConfig = {
       handlers: {
-        ok: { specPath: './ok.yaml' },
+        ok: { specPaths: ['./ok.yaml'] },
         skip: './echo.mjs',
       },
     }
     const r = resolveFlowId('ok:get', config, configDir, cwd)
     const spec = r as ResolvedOpenApiFlow
     expect(spec.type).toBe('openapi')
-    expect(spec.specPath).toBe('/project/ok.yaml')
+    expect(spec.specPaths).toEqual(['/project/ok.yaml'])
   })
 
   it('treats config.handlers as null when not an object', () => {

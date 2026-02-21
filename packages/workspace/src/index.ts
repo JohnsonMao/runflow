@@ -1,13 +1,17 @@
 export {
   CONFIG_NAMES,
+  createResolveFlow,
   findConfigFile,
   isOpenApiHandlerEntry,
   loadConfig,
+  mergeOpenApiSpecs,
   mergeParamDeclarations,
   normalizeConfigParams,
+  resolveAndLoadFlow,
   resolveFlowId,
 } from './config'
 export type {
+  LoadedFlow,
   OpenApiHandlerEntry,
   ResolvedFileFlow,
   ResolvedFlow,
@@ -26,6 +30,3 @@ export type { DiscoverEntry, DiscoverStepSummary, FindFlowFilesOptions } from '.
 export { findFlowFiles } from './discover'
 export { flowDefinitionToGraphForVisualization } from './flowGraph'
 export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'
-export { loadFlowFromResolved, resolveAndLoadFlow } from './loadFlow'
-export type { LoadedFlow } from './loadFlow'
-export { createResolveFlow } from './resolveFlow'

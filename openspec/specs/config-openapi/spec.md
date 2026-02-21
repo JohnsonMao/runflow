@@ -24,7 +24,7 @@ The runflow config SHALL be loaded from a file. The implementation SHALL discove
 
 ### Requirement: No top-level openapi block; OpenAPI flows from handlers only
 
-The runflow config SHALL NOT support a top-level **openapi** object. OpenAPI-derived flow resolution and discover SHALL use only **config.handlers** entries that are objects with **specPath** (see config-handlers-openapi spec). FlowId format for OpenAPI flows SHALL be **`${handlerKey}-${operationKey}`** where handlerKey is the key in handlers whose value is an OpenApiHandlerEntry.
+The runflow config SHALL NOT support a top-level **openapi** object. OpenAPI-derived flow resolution and discover SHALL use only **config.handlers** entries that are objects with **specPaths** (see config-handlers-openapi spec). FlowId format for OpenAPI flows SHALL be **`${handlerKey}-${operationKey}`** where handlerKey is the key in handlers whose value is an OpenApiHandlerEntry.
 
 #### Scenario: Config without openapi block (unchanged behavior)
 
@@ -33,15 +33,15 @@ The runflow config SHALL NOT support a top-level **openapi** object. OpenAPI-der
 
 #### Scenario: OpenAPI flows only from handlers
 
-- **WHEN** config has no top-level `openapi` and has one or more handlers whose value is an object with `specPath`
-- **THEN** flowIds of the form `handlerKey-operationKey` SHALL be resolved from that handler entry (specPath, options)
+- **WHEN** config has no top-level `openapi` and has one or more handlers whose value is an object with `specPaths`
+- **THEN** flowIds of the form `handlerKey-operationKey` SHALL be resolved from that handler entry (specPaths merged, then options)
 - **AND** the same config SHALL be usable by both CLI and MCP
 
-#### Scenario: specPath and options only in handlers
+#### Scenario: specPaths and options only in handlers
 
-- **WHEN** config has `handlers.myApi` as an OpenAPI entry with `specPath` and optional `baseUrl`, `operationFilter`, `paramExpose`, `handler`
-- **THEN** flowIds starting with `myApi-` SHALL be resolved using that entry's specPath and options
-- **AND** the generated flow SHALL use stepType `myApi` and the entry's options when calling openApiToFlows
+- **WHEN** config has `handlers.myApi` as an OpenAPI entry with `specPaths` (array of strings) and optional `baseUrl`, `operationFilter`, `paramExpose`, `handler`
+- **THEN** flowIds starting with `myApi-` SHALL be resolved using that entry's specPaths (loaded, merged into one OpenAPI document) and options
+- **AND** the generated flow SHALL use stepType `myApi` and the entry's options when calling openApiToFlows on the merged spec
 
 ### Requirement: Config MAY define flowsDir
 

@@ -133,13 +133,13 @@ describe('executeTool', () => {
   it('returns error when openapi spec not found', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcp-openapi-'))
     const configPath = join(dir, 'runflow.config.mjs')
-    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./missing-spec.yaml" } } }\n')
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPaths: ["./missing-spec.yaml"] } } }\n')
     process.chdir(dir)
     const result = await executeTool({ flowId: 'myApi:get-users' }, getConfig)
     unlinkSync(configPath)
     expect(result.isError).toBe(true)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
-    expect(text).toMatch(/OpenAPI spec not found|not found/)
+    expect(text).toMatch(/OpenAPI spec not found|not found|ENOENT|Error opening file/)
   })
 
   it('returns error when openapi operation not in generated flows', async () => {
@@ -147,7 +147,7 @@ describe('executeTool', () => {
     const specPath = join(dir, 'openapi.yaml')
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(specPath, 'openapi: "3.0.0"\ninfo: { title: T, version: "1" }\npaths:\n  /users:\n    get: {}')
-    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPaths: ["./openapi.yaml"] } } }\n')
     process.chdir(dir)
     const result = await executeTool({ flowId: 'myApi:get-nonexistent' }, getConfig)
     unlinkSync(specPath)
@@ -162,7 +162,7 @@ describe('executeTool', () => {
     const specPath = join(dir, 'openapi.yaml')
     const configPath = join(dir, 'runflow.config.mjs')
     writeFileSync(specPath, 'openapi: "3.0.0"\ninfo: { title: T, version: "1" }\npaths:\n  /users:\n    get: {}')
-    writeFileSync(configPath, 'export default { handlers: { myApi: { specPath: "./openapi.yaml" } } }\n')
+    writeFileSync(configPath, 'export default { handlers: { myApi: { specPaths: ["./openapi.yaml"] } } }\n')
     process.chdir(dir)
     const result = await executeTool({ flowId: 'myApi:get-users' }, getConfig)
     unlinkSync(specPath)

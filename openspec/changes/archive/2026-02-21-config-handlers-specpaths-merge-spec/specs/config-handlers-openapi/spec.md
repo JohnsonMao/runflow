@@ -1,10 +1,6 @@
-# Spec: config-handlers-openapi
+# Delta: config-handlers-openapi
 
-## Purpose
-
-Define how runflow config **handlers** can be either a module path (string) or an OpenAPI entry object. OpenAPI-derived flows use the handler key as the flowId prefix and as the step type; optional `handler` (path to .mjs) runs the API step, otherwise the built-in http handler is used.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Handlers MAY be a string or an OpenAPI entry object
 
@@ -71,3 +67,11 @@ When building the step registry from config.handlers, the implementation SHALL i
 - **WHEN** config has an OpenAPI entry with `specPaths` and `handler` set to a valid .mjs path
 - **THEN** the implementation SHALL load that module and SHALL register its default export under the handler key
 - **AND** the module SHALL receive the same step shape (url, method, headers, body) and context as an override handler today
+
+## REMOVED Requirements
+
+### Requirement: OpenAPI entry with single specPath
+
+**Reason**: Replaced by specPaths (array); one entry can now reference multiple specs merged into one.
+
+**Migration**: Change config from `specPath: "../openapi/spec.yaml"` to `specPaths: ["../openapi/spec.yaml"]`.
