@@ -1,10 +1,11 @@
 import type { OpenApiDocument, OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
-import type { FlowDefinition, ParamDeclaration, ResolveFlowFn } from '@runflow/core'
+import type { FlowDefinition, IStepHandler, ParamDeclaration, ResolveFlowFn, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadOpenApiDocument, openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile } from '@runflow/core'
+import { createBuiltinRegistry } from '@runflow/handlers'
 
 export const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js', 'runflow.config.json'] as const
 
@@ -261,4 +262,63 @@ export function createResolveFlow(
       return null
     return { flow: loaded }
   }
+}
+
+/**
+ * Build a StepRegistry by merging built-in handlers with custom handlers from config.
+ * Handles both module-based handlers and OpenAPI-based (default http) handlers.
+ */
+export async function buildRegistryFromConfig(config: RunflowConfig | null, configDir: string): Promise<StepRegistry> {
+  const registry = createBuiltinRegistry()
+  if (!config?.handlers || typeof config.handlers !== 'object')
+    return registry
+
+  const httpHandler = registry.http
+  for (const [type, value] of Object.entries(config.handlers)) {
+    if (typeof value === 'string') {
+      const resolved = path.resolve(configDir, value)
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        throw new Error(`Handler module not found for type "${type}": ${resolved}`)
+      }
+      try {
+        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const handler = mod.default
+        if (!handler || typeof handler.run !== 'function') {
+          throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
+        }
+        registry[type] = handler
+      }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        throw new Error(`Failed to load handler "${type}": ${msg}`)
+      }
+      continue
+    }
+
+    if (!isOpenApiHandlerEntry(value))
+      continue
+
+    if (value.handler) {
+      const resolved = path.resolve(configDir, value.handler)
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        throw new Error(`OpenAPI handler module not found for type "${type}": ${resolved}`)
+      }
+      try {
+        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const handler = mod.default
+        if (!handler || typeof handler.run !== 'function') {
+          throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
+        }
+        registry[type] = handler
+      }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        throw new Error(`Failed to load handler "${type}": ${msg}`)
+      }
+    }
+    else {
+      registry[type] = httpHandler
+    }
+  }
+  return registry
 }

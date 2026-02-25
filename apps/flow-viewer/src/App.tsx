@@ -27,8 +27,28 @@ function workspaceHint(workspaceStatus: WorkspaceStatus | null): string {
 export function App(): React.ReactElement {
   const [dark, setDark] = useTheme()
   const { workspaceStatus, treeResponse, treeError } = useWorkspace()
-  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null)
-  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set())
+
+  // Initialize selectedFlowId from URL
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('flowId')
+  })
+
+  // Initialize openFolderIds from URL (auto-expand to show selected flow)
+  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const flowId = params.get('flowId')
+    const folders = new Set<string>()
+    if (flowId) {
+      const parts = flowId.split('/')
+      if (parts.length > 1) {
+        for (let i = 1; i < parts.length; i++)
+          folders.add(`folder:${parts.slice(0, i).join('/')}`)
+      }
+    }
+    return folders
+  })
+
   const [runResult, setRunResult] = useState<string | null>(null)
   const [runLoading, setRunLoading] = useState(false)
   const [paramsSheetOpen, setParamsSheetOpen] = useState(false)
@@ -43,9 +63,42 @@ export function App(): React.ReactElement {
     setParamValues,
   } = useFlowGraph(selectedFlowId)
 
+  // Clear run result when flow changes
   useEffect(() => {
     if (!selectedFlowId)
       setRunResult(null)
+  }, [selectedFlowId])
+
+  // Sync state to URL
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (selectedFlowId) {
+      url.searchParams.set('flowId', selectedFlowId)
+      if (paramValues && Object.keys(paramValues).length > 0) {
+        url.searchParams.set('params', JSON.stringify(paramValues))
+      }
+      else {
+        url.searchParams.delete('params')
+      }
+    }
+    else {
+      url.searchParams.delete('flowId')
+      url.searchParams.delete('params')
+    }
+    window.history.replaceState({}, '', url.toString())
+  }, [selectedFlowId, paramValues])
+
+  // Sync URL changes back to state (e.g. browser back button)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const flowId = params.get('flowId')
+      if (flowId !== selectedFlowId) {
+        setSelectedFlowId(flowId)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
   }, [selectedFlowId])
 
   const handleParamChange = (path: string, value: unknown): void => {

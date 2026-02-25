@@ -1,4 +1,5 @@
 export {
+  buildRegistryFromConfig,
   CONFIG_NAMES,
   createResolveFlow,
   findConfigFile,

@@ -7,6 +7,7 @@ import { flowGraphToJson, flowGraphToMermaid, run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
+  buildRegistryFromConfig,
   createResolveFlow,
   DEFAULT_DISCOVER_LIMIT,
   findConfigFile,
@@ -14,7 +15,6 @@ import {
   formatDetailAsMarkdown,
   formatListAsMarkdown,
   getDiscoverEntry,
-  isOpenApiHandlerEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
   mergeParamDeclarations,
@@ -59,65 +59,6 @@ function loadParamsFile(filePath: string): Record<string, unknown> {
   }
 }
 
-async function buildRegistryFromConfig(configPath: string): Promise<StepRegistry> {
-  const config = await loadConfig(configPath)
-  const registry = createBuiltinRegistry()
-  if (!config?.handlers || typeof config.handlers !== 'object')
-    return registry
-  const configDir = path.dirname(configPath)
-  const httpHandler = registry.http
-  for (const [type, value] of Object.entries(config.handlers)) {
-    if (typeof value === 'string') {
-      const resolved = path.resolve(configDir, value)
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-        console.error(`Error: Handler module not found for type "${type}": ${resolved}`)
-        process.exit(1)
-      }
-      try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
-        const handler = mod.default
-        if (!handler || typeof handler.run !== 'function') {
-          console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
-          process.exit(1)
-        }
-        registry[type] = handler
-      }
-      catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        console.error(`Error: Failed to load handler "${type}": ${msg}`)
-        process.exit(1)
-      }
-      continue
-    }
-    if (!isOpenApiHandlerEntry(value))
-      continue
-    if (value.handler) {
-      const resolved = path.resolve(configDir, value.handler)
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-        console.error(`Error: OpenAPI handler module not found for type "${type}": ${resolved}`)
-        process.exit(1)
-      }
-      try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
-        const handler = mod.default
-        if (!handler || typeof handler.run !== 'function') {
-          console.error(`Error: Handler module for "${type}" must export default (IStepHandler).`)
-          process.exit(1)
-        }
-        registry[type] = handler
-      }
-      catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        console.error(`Error: Failed to load handler "${type}": ${msg}`)
-        process.exit(1)
-      }
-    }
-    else {
-      registry[type] = httpHandler
-    }
-  }
-  return registry
-}
 
 interface RunCommandOptions {
   dryRun?: boolean
@@ -154,7 +95,7 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
     params = { ...params, ...cliParams }
   }
 
-  const registry = configPath ? await buildRegistryFromConfig(configPath) : createBuiltinRegistry()
+  const registry = config && configPath ? await buildRegistryFromConfig(config, configDir) : createBuiltinRegistry()
   const resolveFlow = createResolveFlow(config, configDir, cwd)
   const result = await run(flow.flow, {
     dryRun: options.dryRun,

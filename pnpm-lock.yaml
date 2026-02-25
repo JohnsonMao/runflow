@@ -445,6 +445,9 @@ importers:
       '@runflow/core':
         specifier: workspace:*
         version: link:../core
+      '@runflow/handlers':
+        specifier: workspace:*
+        version: link:../handlers
     devDependencies:
       '@antfu/eslint-config':
         specifier: catalog:dev

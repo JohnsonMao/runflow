@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "@runflow/convention-openapi": "workspace:^",
-    "@runflow/core": "workspace:*"
+    "@runflow/core": "workspace:*",
+    "@runflow/handlers": "workspace:*"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",

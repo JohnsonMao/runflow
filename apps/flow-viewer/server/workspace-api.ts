@@ -7,6 +7,7 @@ import { run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
+  buildRegistryFromConfig,
   CONFIG_NAMES,
   createResolveFlow,
   findConfigFile,
@@ -311,7 +312,7 @@ async function handleRun(
     const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
     const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
     const effectiveParamsDeclaration = mergeParamDeclarations(ctx.config?.params, loaded.flow.params)
-    const registry = createBuiltinRegistry()
+    const registry = ctx.config ? await buildRegistryFromConfig(ctx.config, ctx.configDir) : createBuiltinRegistry()
     const result = await run(loaded.flow, {
       registry,
       params: params && Object.keys(params).length > 0 ? params : undefined,

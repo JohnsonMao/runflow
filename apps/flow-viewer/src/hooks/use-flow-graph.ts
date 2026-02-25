@@ -59,7 +59,22 @@ export function useFlowGraph(selectedFlowId: string | null): {
           steps: withDetail.steps,
         }
         setFlowDetail(detail)
-        setParamValues(initialParamValuesFromDetail(detail))
+
+        // Initialize param values: merge defaults with URL params if available (only on first load of this flow)
+        const defaults = initialParamValuesFromDetail(detail)
+        const urlParamsStr = new URLSearchParams(window.location.search).get('params')
+        if (urlParamsStr) {
+          try {
+            const parsed = JSON.parse(urlParamsStr)
+            setParamValues({ ...defaults, ...parsed })
+          }
+          catch {
+            setParamValues(defaults)
+          }
+        }
+        else {
+          setParamValues(defaults)
+        }
       })
       .catch((err: unknown) => {
         if (fetchingFlowIdRef.current !== flowIdForThisFetch)
@@ -76,7 +91,21 @@ export function useFlowGraph(selectedFlowId: string | null): {
               return
             const detail = data as FlowDetail
             setFlowDetail(detail)
-            setParamValues(initialParamValuesFromDetail(detail))
+
+            const defaults = initialParamValuesFromDetail(detail)
+            const urlParamsStr = new URLSearchParams(window.location.search).get('params')
+            if (urlParamsStr) {
+              try {
+                const parsed = JSON.parse(urlParamsStr)
+                setParamValues({ ...defaults, ...parsed })
+              }
+              catch {
+                setParamValues(defaults)
+              }
+            }
+            else {
+              setParamValues(defaults)
+            }
           })
           .catch(() => {})
       })
