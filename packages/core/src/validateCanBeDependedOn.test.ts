@@ -4,13 +4,6 @@ import { getDAGStepIds } from './dag'
 import { normalizeStepIds } from './utils'
 import { validateCanBeDependedOn } from './validateCanBeDependedOn'
 
-function stepById(flow: FlowDefinition): Map<string, FlowStep> {
-  const m = new Map<string, FlowStep>()
-  for (const s of flow.steps)
-    m.set(s.id, s)
-  return m
-}
-
 describe('validateCanBeDependedOn', () => {
   const noRestrictRegistry: Record<string, IStepHandler> = {
     step: {
@@ -29,8 +22,7 @@ describe('validateCanBeDependedOn', () => {
         { id: 'b', type: 'step', dependsOn: ['a'] },
       ],
     }
-    const stepByIdMap = stepById(flow)
-    expect(validateCanBeDependedOn(flow, stepByIdMap, noRestrictRegistry)).toBe(null)
+    expect(validateCanBeDependedOn(flow, noRestrictRegistry)).toBe(null)
   })
 
   it('returns null when condition then/else steps depend on condition', () => {
@@ -49,9 +41,8 @@ describe('validateCanBeDependedOn', () => {
         { id: 'elseStep', type: 'step', dependsOn: ['cond'] },
       ],
     }
-    const stepByIdMap = stepById(flow)
     const registry = { ...noRestrictRegistry, condition: conditionHandler }
-    expect(validateCanBeDependedOn(flow, stepByIdMap, registry)).toBe(null)
+    expect(validateCanBeDependedOn(flow, registry)).toBe(null)
   })
 
   it('returns error when a step not in then/else depends on condition', () => {
@@ -71,9 +62,8 @@ describe('validateCanBeDependedOn', () => {
         { id: 'other', type: 'step', dependsOn: ['cond'] },
       ],
     }
-    const stepByIdMap = stepById(flow)
     const registry = { ...noRestrictRegistry, condition: conditionHandler }
-    const err = validateCanBeDependedOn(flow, stepByIdMap, registry)
+    const err = validateCanBeDependedOn(flow, registry)
     expect(err).not.toBe(null)
     expect(err).toContain('cond')
     expect(err).toContain('other')
@@ -99,9 +89,8 @@ describe('validateCanBeDependedOn', () => {
         { id: 'nap', type: 'step', dependsOn: ['loop'] },
       ],
     }
-    const stepByIdMap = stepById(flow)
     const registry = { ...noRestrictRegistry, loop: loopHandler }
-    expect(validateCanBeDependedOn(flow, stepByIdMap, registry)).toBe(null)
+    expect(validateCanBeDependedOn(flow, registry)).toBe(null)
   })
 
   it('returns error when a step not in entry/done depends on loop', () => {
@@ -125,9 +114,8 @@ describe('validateCanBeDependedOn', () => {
         { id: 'other', type: 'step', dependsOn: ['loop'] },
       ],
     }
-    const stepByIdMap = stepById(flow)
     const registry = { ...noRestrictRegistry, loop: loopHandler }
-    const err = validateCanBeDependedOn(flow, stepByIdMap, registry)
+    const err = validateCanBeDependedOn(flow, registry)
     expect(err).not.toBe(null)
     expect(err).toContain('loop')
     expect(err).toContain('other')
@@ -149,8 +137,7 @@ describe('validateCanBeDependedOn', () => {
       ],
     }
     expect(getDAGStepIds(flow.steps).has('cond')).toBe(false)
-    const stepByIdMap = stepById(flow)
     const registry = { ...noRestrictRegistry, condition: conditionHandler }
-    expect(validateCanBeDependedOn(flow, stepByIdMap, registry)).toBe(null)
+    expect(validateCanBeDependedOn(flow, registry)).toBe(null)
   })
 })

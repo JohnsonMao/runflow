@@ -337,7 +337,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
   const flowCallDepth = options.flowCallDepth ?? 0
   const maxFlowCallDepth = options.maxFlowCallDepth ?? DEFAULT_MAX_FLOW_CALL_DEPTH
 
-  const canBeDependedOnError = validateCanBeDependedOn(flow, stepByIdMap, registry)
+  const canBeDependedOnError = validateCanBeDependedOn(flow, registry)
   if (canBeDependedOnError) {
     return {
       flowName: flow.name,

@@ -1,4 +1,4 @@
-import type { FlowDefinition, FlowStep, StepRegistry } from './types'
+import type { FlowDefinition, StepRegistry } from './types'
 import { getDAGStepIds } from './dag'
 
 /**
@@ -9,7 +9,6 @@ import { getDAGStepIds } from './dag'
  */
 export function validateCanBeDependedOn(
   flow: FlowDefinition,
-  stepByIdMap: Map<string, FlowStep>,
   registry: StepRegistry,
 ): string | null {
   const dagIds = getDAGStepIds(flow.steps)
