@@ -1,6 +1,5 @@
 // @env node
-import type { IStepHandler, StepRegistry } from '@runflow/core'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { flowGraphToJson, flowGraphToMermaid, run } from '@runflow/core'
@@ -29,17 +28,31 @@ program
   .description('Run YAML-defined flows')
   .version('0.0.0')
 
-function parseParamPairs(pairs: string[]): Record<string, string> {
-  const params: Record<string, string> = {}
+function parseParamPairs(pairs: string[]): Record<string, unknown> {
+  const params: Record<string, unknown> = {}
   for (const pair of pairs) {
     const eq = pair.indexOf('=')
     if (eq === -1)
       continue
     const key = pair.slice(0, eq)
-    const value = pair.slice(eq + 1)
-    params[key] = value
+    const raw = pair.slice(eq + 1)
+    params[key] = parseParamValue(raw)
   }
   return params
+}
+
+/** Parse a single param value: if it looks like JSON (starts with { or [), parse as JSON; otherwise keep as string. */
+function parseParamValue(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed)
+    }
+    catch {
+      return raw
+    }
+  }
+  return raw
 }
 
 function loadParamsFile(filePath: string): Record<string, unknown> {
@@ -59,11 +72,29 @@ function loadParamsFile(filePath: string): Record<string, unknown> {
   }
 }
 
+function parseParamsJson(jsonStr: string | undefined): Record<string, unknown> {
+  if (jsonStr == null || jsonStr.trim() === '')
+    return {}
+  try {
+    const data = JSON.parse(jsonStr)
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      console.error('Error: --params must be a JSON object.')
+      process.exit(1)
+    }
+    return data
+  }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`Error: Invalid --params JSON: ${msg}`)
+    process.exit(1)
+  }
+}
 
 interface RunCommandOptions {
   dryRun?: boolean
   verbose?: boolean
   param?: string[]
+  params?: string
   paramsFile?: string
   f?: string
   config?: string
@@ -90,12 +121,23 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
   let params: Record<string, unknown> = {}
   if (paramsPath)
     params = { ...params, ...loadParamsFile(paramsPath) }
+  if (options.params != null && options.params.trim() !== '')
+    params = { ...params, ...parseParamsJson(options.params) }
   if (options.param?.length) {
     const cliParams = parseParamPairs(options.param)
     params = { ...params, ...cliParams }
   }
 
-  const registry = config && configPath ? await buildRegistryFromConfig(config, configDir) : createBuiltinRegistry()
+  let registry: ReturnType<typeof createBuiltinRegistry>
+  try {
+    registry = config && configPath ? await buildRegistryFromConfig(config, configDir) : createBuiltinRegistry()
+  }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`Error: ${msg}`)
+    process.exit(1)
+  }
+
   const resolveFlow = createResolveFlow(config, configDir, cwd)
   const result = await run(flow.flow, {
     dryRun: options.dryRun,
@@ -129,7 +171,8 @@ program
   .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or handlerKey:operationKey (e.g. simple:get-users) from config handlers')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
   .option('--verbose', 'Print per-step output')
-  .option('--param <key=value>', 'Pass a parameter (repeatable)', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
+  .option('--param <key=value>', 'Pass a parameter (repeatable); value starting with { or [ is parsed as JSON', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
+  .option('--params <json>', 'Pass all parameters as a single JSON object (e.g. \'{"body":{"Id":123}}\')', undefined)
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)

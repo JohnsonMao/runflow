@@ -36,9 +36,10 @@ Execute a flow by **flowId** (file path or prefix-operation, e.g. `my-api-get-us
 
 - **--dry-run** – Parse and validate only, do not execute steps.
 - **--verbose** – Print per-step log and outputs.
-- **--param &lt;key=value&gt;** – Pass a parameter (repeatable).
-- **--params-file &lt;path&gt;** / **-f &lt;path&gt;** – Load params from a JSON file.
-- **--config &lt;path&gt;** – Path to runflow.config.mjs.
+- **--param <key=value>** – Pass a parameter (repeatable). If the value starts with `{` or `[`, it is parsed as JSON (e.g. `--param body={"id":"1234"}` for nested objects).
+- **--params <json>** – Pass all parameters as a single JSON object (e.g. `--params '{"body":{"Id":123}}'`). Useful for nested payloads without shell escaping each key.
+- **--params-file <path>** / **-f <path>** – Load params from a JSON file.
+- **--config <path>** – Path to runflow.config.mjs.
 
 When a flow contains a **flow step** (type `flow`), the step's `flow` field is resolved as a **flowId** using the same config (workspace path or prefix-operation).
 
@@ -46,17 +47,17 @@ When a flow contains a **flow step** (type `flow`), the step's `flow` field is r
 
 List flows (file flows under flowsDir/cwd + OpenAPI flows from config). Same data as MCP discover_flow_list.
 
-- **--limit &lt;n&gt;** – Max number of flows (default 10, max 10).
-- **--offset &lt;n&gt;** – Skip N flows (pagination).
-- **--keyword &lt;s&gt;** – Filter by flowId, name, or description (case-insensitive).
-- **--config &lt;path&gt;** – Path to runflow.config.mjs.
+- **--limit <n>** – Max number of flows (default 10, max 10).
+- **--offset <n>** – Skip N flows (pagination).
+- **--keyword <s>** – Filter by flowId, name, or description (case-insensitive).
+- **--config <path>** – Path to runflow.config.mjs.
 - **--json** – Output raw JSON `{ total, entries }` for programmatic use.
 
-### `flow detail &lt;flowId&gt;`
+### `flow detail <flowId>`
 
 Show one flow's detail (name, description, params) by flowId. Same as MCP discover_flow_detail.
 
-- **--config &lt;path&gt;** – Path to runflow.config.mjs.
+- **--config <path>** – Path to runflow.config.mjs.
 - **--json** – Output raw JSON (single entry) for programmatic use.
 
 ## Config (runflow.config.mjs)

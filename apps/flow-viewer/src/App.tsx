@@ -20,7 +20,7 @@ import { setNested } from './lib/nested'
 
 function workspaceHint(workspaceStatus: WorkspaceStatus | null): string {
   if (!workspaceStatus?.configured)
-    return 'Not set. Set FLOW_VIEWER_WORKSPACE_ROOT to a dir or config path.'
+    return 'Not set. Set RUNFLOW_CONFIG_PATH to a config path.'
   return workspaceStatus.configPath ?? workspaceStatus.workspaceRoot
 }
 

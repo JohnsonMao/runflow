@@ -7,8 +7,6 @@ import { loadOpenApiDocument, openApiToFlows } from '@runflow/convention-openapi
 import { loadFromFile } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 
-export const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js', 'runflow.config.json'] as const
-
 /** OpenAPI entry in handlers: specPaths required; paths resolved relative to config file directory. */
 export interface OpenApiHandlerEntry {
   specPaths: string[]
@@ -116,6 +114,33 @@ export function mergeParamDeclarations(
   return [...byName.values()]
 }
 
+/** Config file names in resolution order (first existing wins). */
+export const CONFIG_NAMES = ['runflow.config.mjs', 'runflow.config.js', 'runflow.config.json'] as const
+
+/**
+ * True when running in development mode (config/catalog should not be cached).
+ * Uses NODE_ENV !== 'production' (so dev when undefined or 'development') or RUNFLOW_DEV=1.
+ */
+export function isDevelopment(): boolean {
+  return (
+    process.env.NODE_ENV !== 'production'
+    || process.env.RUNFLOW_DEV === '1'
+  )
+}
+
+/**
+ * Return the first existing config file path in the given directory, or null.
+ * Order: runflow.config.mjs, runflow.config.js, runflow.config.json.
+ */
+export function findConfigFile(cwd: string): string | null {
+  for (const name of CONFIG_NAMES) {
+    const p = path.join(cwd, name)
+    if (existsSync(p) && statSync(p).isFile())
+      return p
+  }
+  return null
+}
+
 export async function loadConfig(configPath: string): Promise<RunflowConfig | null> {
   if (!existsSync(configPath) || !statSync(configPath).isFile())
     return null
@@ -133,7 +158,11 @@ export async function loadConfig(configPath: string): Promise<RunflowConfig | nu
   }
   else {
     try {
-      const mod = await import(pathToFileURL(configPath).href) as { default?: RunflowConfig }
+      // In development, bust Node's ESM cache so viewer/consumers always get fresh config
+      const url = isDevelopment()
+        ? `${pathToFileURL(configPath).href}?t=${statSync(configPath).mtimeMs}`
+        : pathToFileURL(configPath).href
+      const mod = await import(url) as { default?: RunflowConfig }
       data = mod.default ?? null
     }
     catch {
@@ -146,15 +175,6 @@ export async function loadConfig(configPath: string): Promise<RunflowConfig | nu
       data = { ...data, params: normalized }
   }
   return data
-}
-
-export function findConfigFile(cwd: string): string | null {
-  for (const name of CONFIG_NAMES) {
-    const p = path.join(cwd, name)
-    if (existsSync(p) && statSync(p).isFile())
-      return p
-  }
-  return null
 }
 
 export function resolveFlowId(
@@ -281,7 +301,8 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         throw new Error(`Handler module not found for type "${type}": ${resolved}`)
       }
       try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
+        const mod = await import(url) as { default?: IStepHandler }
         const handler = mod.default
         if (!handler || typeof handler.run !== 'function') {
           throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
@@ -289,8 +310,10 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         registry[type] = handler
       }
       catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        throw new Error(`Failed to load handler "${type}": ${msg}`)
+        const msg = e instanceof Error ? e.message : ''
+        if (msg.includes('must export default'))
+          throw e
+        continue
       }
       continue
     }
@@ -304,7 +327,8 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         throw new Error(`OpenAPI handler module not found for type "${type}": ${resolved}`)
       }
       try {
-        const mod = await import(pathToFileURL(resolved).href) as { default?: IStepHandler }
+        const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
+        const mod = await import(url) as { default?: IStepHandler }
         const handler = mod.default
         if (!handler || typeof handler.run !== 'function') {
           throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
@@ -312,8 +336,10 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         registry[type] = handler
       }
       catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        throw new Error(`Failed to load handler "${type}": ${msg}`)
+        const msg = e instanceof Error ? e.message : ''
+        if (msg.includes('must export default'))
+          throw e
+        continue
       }
     }
     else {

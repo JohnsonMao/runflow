@@ -21,7 +21,7 @@
     "dev": "tsup --watch",
     "generate:schema": "tsx scripts/generate-flow-schema.ts",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --reporter=dot",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

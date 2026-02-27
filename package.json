@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.20.0",
   "scripts": {
     "build": "turbo run build",
-    "check": "scripts/check-quiet.sh",
+    "check": "turbo run typecheck lint test --output-logs=errors-only",
     "dev": "turbo run dev",
     "generate:schema": "pnpm --filter @runflow/core generate:schema",
     "lint": "turbo run lint",

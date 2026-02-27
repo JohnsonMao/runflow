@@ -474,6 +474,62 @@ describe('flow run', () => {
     expect(result.stdout).toContain('ok')
   })
 
+  it('parses --param value as JSON when value looks like object/array', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = resolve(dir, 'flow.yaml')
+    const yaml = [
+      'name: body-param-flow',
+      'params:',
+      '  - name: body',
+      '    type: object',
+      '    schema:',
+      '      id: { type: string }',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { body: "{{ body }}" }',
+      '    outputKey: out',
+      '    dependsOn: []',
+    ].join('\n')
+    writeFileSync(flowPath, yaml)
+    const result = await runWithParse(
+      ['run', flowPath, '--param', 'body={"id":"1234"}', '--verbose'],
+      dir,
+    )
+    unlinkSync(flowPath)
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stderr).not.toContain('Expected object, received string')
+    expect(result.stdout).toContain('1234')
+  })
+
+  it('accepts --params as single JSON object and merges with --param (param overrides)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
+    const flowPath = resolve(dir, 'flow.yaml')
+    const yaml = [
+      'name: params-json-flow',
+      'params:',
+      '  - name: body',
+      '    type: object',
+      '    schema:',
+      '      Id: { type: number }',
+      'steps:',
+      '  - id: s1',
+      '    type: set',
+      '    set: { body: "{{ body }}" }',
+      '    outputKey: out',
+      '    dependsOn: []',
+    ].join('\n')
+    writeFileSync(flowPath, yaml)
+    const result = await runWithParse(
+      ['run', flowPath, '--params', '{"body":{"Id":123}}', '--verbose'],
+      dir,
+    )
+    unlinkSync(flowPath)
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stderr).not.toContain('Expected object, received string')
+    expect(result.stdout).toContain('123')
+  })
+
   it('custom handler from config runs and produces output', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = join(dir, 'flow.yaml')

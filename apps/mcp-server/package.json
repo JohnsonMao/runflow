@@ -9,7 +9,7 @@
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --reporter=dot",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

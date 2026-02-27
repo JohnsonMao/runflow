@@ -1,8 +1,8 @@
 export {
   buildRegistryFromConfig,
-  CONFIG_NAMES,
   createResolveFlow,
   findConfigFile,
+  isDevelopment,
   isOpenApiHandlerEntry,
   loadConfig,
   mergeOpenApiSpecs,

@@ -4,7 +4,7 @@ import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { openApiToFlows } from '@runflow/convention-openapi'
 import { loadFromFile } from '@runflow/core'
-import { isOpenApiHandlerEntry, mergeOpenApiSpecs } from './config'
+import { isOpenApiHandlerEntry, mergeOpenApiSpecs, mergeParamDeclarations } from './config'
 
 export const DEFAULT_MAX_DEPTH = 32
 export const DEFAULT_MAX_FILES = 1000
@@ -108,7 +108,7 @@ export async function buildDiscoverCatalog(
       flowId: flowId || filePath,
       name: flow.name,
       description: flow.description,
-      params: flow.params,
+      params: mergeParamDeclarations(config?.params, flow.params),
       steps: flow.steps.map(s => ({
         id: s.id,
         type: s.type,
@@ -141,7 +141,7 @@ export async function buildDiscoverCatalog(
             flowId: `${key}:${operationKey}`,
             name: flow.name,
             description: flow.description,
-            params: flow.params,
+            params: mergeParamDeclarations(config?.params, flow.params),
             steps: flow.steps.map(s => ({
               id: s.id,
               type: s.type,

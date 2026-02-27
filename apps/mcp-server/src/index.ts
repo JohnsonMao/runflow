@@ -1,10 +1,7 @@
 // @env node
-import type { IStepHandler } from '@runflow/core'
 import type { DiscoverEntry } from '@runflow/workspace'
 import type { ConfigAndRegistry } from './tools.js'
-import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createBuiltinRegistry } from '@runflow/handlers'
@@ -12,6 +9,7 @@ import {
   buildDiscoverCatalog,
   buildRegistryFromConfig,
   findConfigFile,
+  isDevelopment,
   loadConfig,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
@@ -47,6 +45,8 @@ let cachedConfig: ConfigAndRegistry | null = null
 let loadPromise: Promise<ConfigAndRegistry> | null = null
 
 function getConfigAndRegistry(): Promise<ConfigAndRegistry> {
+  if (isDevelopment())
+    return loadConfigOnce()
   if (cachedConfig)
     return Promise.resolve(cachedConfig)
   if (!loadPromise) {
@@ -65,7 +65,7 @@ let catalogConfigSnapshot: { configDir: string, cwd: string } | null = null
 async function getDiscoverCatalog(): Promise<DiscoverEntry[]> {
   const { config, configDir } = await getConfigAndRegistry()
   const cwd = process.cwd()
-  if (cachedCatalog != null && catalogConfigSnapshot?.configDir === configDir && catalogConfigSnapshot?.cwd === cwd)
+  if (!isDevelopment() && cachedCatalog != null && catalogConfigSnapshot?.configDir === configDir && catalogConfigSnapshot?.cwd === cwd)
     return cachedCatalog
   const catalog = await buildDiscoverCatalog(config, configDir, cwd)
   cachedCatalog = catalog

@@ -43,6 +43,7 @@ export function operationToFlow(
     id: apiStepId,
     type: stepType,
     url,
+    pathname: pathWithTemplates,
     method: op.method,
     dependsOn: [],
   }

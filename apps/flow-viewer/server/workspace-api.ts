@@ -1,14 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { TreeNode } from '../src/types.js'
 import { Buffer } from 'node:buffer'
-import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   buildRegistryFromConfig,
-  CONFIG_NAMES,
   createResolveFlow,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
@@ -18,17 +16,11 @@ import {
   resolveAndLoadFlow,
 } from '@runflow/workspace'
 
-const WORKSPACE_ROOT_ENV = 'FLOW_VIEWER_WORKSPACE_ROOT'
-
 export interface WorkspaceContext {
   cwd: string
   configPath: string | null
   configDir: string
   config: Awaited<ReturnType<typeof loadConfig>>
-}
-
-function isConfigFileName(name: string): boolean {
-  return CONFIG_NAMES.includes(name as (typeof CONFIG_NAMES)[number])
 }
 
 /** Entry from discover catalog; compatible with workspace DiscoverEntry. */
@@ -144,21 +136,12 @@ export function buildTreeFromCatalog(catalog: DiscoverEntryLike[]): TreeNode[] {
 }
 
 function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, configDir: string } {
-  const env = process.env[WORKSPACE_ROOT_ENV] || '../../examples'
-  const base = env && env.trim() ? path.resolve(env) : process.cwd()
-
-  if (existsSync(base) && statSync(base).isFile()) {
-    if (isConfigFileName(path.basename(base))) {
-      const configDir = path.dirname(base)
-      return { cwd: configDir, configPath: base, configDir }
-    }
-  }
-
-  let configPath = findConfigFile(base)
-  if (!configPath && existsSync(base) && statSync(base).isDirectory()) {
-    configPath = findConfigFile(path.join(base, 'config'))
-  }
-  const configDir = configPath ? path.dirname(configPath) : base
+  const runflowConfigPath = process.env.RUNFLOW_CONFIG_PATH
+  const cwd = process.cwd()
+  const configPath = runflowConfigPath?.trim()
+    ? path.resolve(runflowConfigPath)
+    : findConfigFile(cwd)
+  const configDir = configPath ? path.dirname(configPath) : cwd
   return { cwd: configDir, configPath, configDir }
 }
 
@@ -236,7 +219,7 @@ async function handleGraph(
       flowName: loaded.flow.name,
       flowDescription: loaded.flow.description,
       flowId,
-      params: loaded.flow.params,
+      params: mergeParamDeclarations(ctx.config?.params, loaded.flow.params),
       steps: stepsSummary,
     })
   }

@@ -163,7 +163,7 @@ export async function runStepByIdImpl(
       newContext: ctx,
     }
   }
-  const sub = substituteStep(st, ctx)
+  const sub = substituteStep(st, { ...ctx, params: ctx })
   const ent = registry[st.type]
   if (!ent) {
     return {
@@ -438,7 +438,7 @@ export async function run(flow: FlowDefinition, options: RunOptions = {}): Promi
     ctx: Record<string, unknown>,
   ): Promise<{ result: StepResult, outputs?: Record<string, unknown>, nextSteps?: string[] }> => {
     const step = stepByIdMap.get(stepId)!
-    const substitutedStep = substituteStep(step, ctx)
+    const substitutedStep = substituteStep(step, { ...ctx, params: ctx })
     // Dispatch by step.type only for registry lookup; all behavior uses IStepHandler interface (validate, run, getAllowedDependentIds, etc.).
     const entry = registry[step.type]
     if (!entry) {
