@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Step type `loop`: runs a **loop body sub-graph** repeatedly, driven by exactly one of `items`, `count`, or `when`. The iteration scope is the **closure from entry** (computed from the flow's steps and dependsOn). The closure is executed by the **same executor** (same DAG, condition, nextSteps semantics) so that body steps can branch, run in DAG order, and **early exit** by returning nextSteps that point outside the closure. No fixed execution order or handler-coupled step id lists; the engine layer runs the closure as a sub-flow each iteration.
+Step type `loop`: runs a **loop body sub-graph** repeatedly, driven by exactly one of `items`, `count`, or `when`. The iteration scope is the **closure from entry** (computed from the flow's steps and dependsOn). Each iteration the handler builds a **sub-flow** from that closure (minus done and its dependents), calls **context.run(subFlow, bodyCtx, { scopeStepIds: bodyStepIds })**, and uses the RunResult (steps, finalParams, earlyExit). The same DAG/condition/nextSteps semantics apply so that body steps can branch and **early exit** by returning nextSteps outside the scope; when the run returns earlyExit, the loop completes with that nextSteps. No fixed execution order or handler-coupled step id lists; the engine runs the sub-flow as a normal flow each iteration.
 
 ## Requirements
 
@@ -49,28 +49,28 @@ If none or more than one of these is present, the step SHALL be invalid (validat
 
 - **GIVEN** a loop step with `entry: [loopBody]`, `done: [nap]`, closure from loopBody includes loopBody, earlyExitCond, noop, nap2, nap (nap has dependsOn: [loop])
 - **WHEN** the executor runs the loop
-- **THEN** the handler SHALL pass body = closure minus (done ∪ steps that transitively depend on done) (e.g. [loopBody, earlyExitCond, noop, nap2]; nap, req, sub, summary excluded) to runSubFlow each iteration
+- **THEN** the handler SHALL pass body = closure minus (done ∪ steps that transitively depend on done) (e.g. [loopBody, earlyExitCond, noop, nap2]; nap, req, sub, summary excluded), build a sub-flow from those step ids, and call **context.run(subFlow, bodyCtx, { scopeStepIds: bodyStepIds })** each iteration
 - **AND** the handler SHALL exclude `done` and any step that depends on done (transitively) from the iteration body so they run once when the loop returns nextSteps
 - **AND** the handler SHALL NOT exclude any step id based on `end` alone
 - **AND** when `end` is omitted, the engine or UI MAY infer end as the sink nodes of the closure (e.g. [noop, nap2])
 
 ### Requirement: Round complete vs control leaves round; done only on round complete
 
-- **Round complete**: When runSubFlow(closureIds) returns **without** earlyExit (no step returned nextSteps containing a step id outside the closure), the round SHALL be considered complete. The engine SHALL then evaluate when/items/count; if the loop is done (items exhausted, count reached, or when expression true), the loop step SHALL return `nextSteps: done` and the executor SHALL run done steps once. Otherwise the engine SHALL run the next round (runSubFlow again).
+- **Round complete**: When the run (context.run(subFlow, bodyCtx, { scopeStepIds })) returns **without** earlyExit (no step returned nextSteps containing a step id outside the scope), the round SHALL be considered complete. The handler SHALL then evaluate when/items/count; if the loop is done (items exhausted, count reached, or when expression true), the loop step SHALL return `nextSteps: done` and the executor SHALL run done steps once. Otherwise the handler SHALL run the next round (call context.run again).
 
-- **Control leaves round**: When runSubFlow returns **with** earlyExit (a step returned nextSteps that include a step id **not** in the closure), the loop SHALL complete immediately with that same nextSteps. The executor SHALL continue with those steps. The loop step SHALL NOT return done; done SHALL NOT be run.
+- **Control leaves round**: When the run returns **with** earlyExit (a step returned nextSteps that include a step id **not** in the scope), the loop SHALL complete immediately with that same nextSteps. The executor SHALL continue with those steps. The loop step SHALL NOT return done; done SHALL NOT be run.
 
 #### Scenario: Round complete then done
 
 - **GIVEN** a loop step with `count: 2`, `entry: [A]`, `done: [D]`, closure {A, B, C}; no step returns nextSteps outside the closure
-- **WHEN** runSubFlow runs twice and each time returns normally
+- **WHEN** the run is invoked twice (two iterations) and each time returns without earlyExit
 - **THEN** after the second round the loop SHALL return `nextSteps: [D]`; the executor SHALL run D once
 
 #### Scenario: Control leaves round; done is not run
 
 - **GIVEN** a loop step with `entry: [A]`, `done: [D]`, closure {A, B, C}; step B returns `nextSteps: [out]` where out is not in the closure
 - **WHEN** B returns that nextSteps during an iteration
-- **THEN** runSubFlow SHALL return earlyExit with that nextSteps; the loop SHALL complete with `nextSteps: [out]`
+- **THEN** the run SHALL return earlyExit with that nextSteps; the loop SHALL complete with `nextSteps: [out]`
 - **AND** the executor SHALL continue with step out; step D (done) SHALL NOT be run
 
 ### Requirement: Early exit — use step's nextSteps; entire iteration stops; done is not used
@@ -97,7 +97,7 @@ The loop step SHALL NOT require the engine to execute iteration steps in a fixed
 
 ### Requirement: Entry, end, and done step ids are in the same flow
 
-Entry step ids SHALL reference steps that exist in the same flow definition; the closure is computed from that flow. Done and end step ids SHALL reference steps in the same flow (done used as nextSteps on normal completion; end used only for visualization). When a handler (e.g. loop) calls `runSubFlow` with ids that are not in the flow, the executor SHALL return an error so the step fails with a clear message (see step-context: runSubFlow SHALL validate body step ids).
+Entry step ids SHALL reference steps that exist in the same flow definition; the closure is computed from that flow. Done and end step ids SHALL reference steps in the same flow (done used as nextSteps on normal completion; end used only for visualization). When a handler (e.g. loop) calls context.run with body step ids that are not in the flow (context.steps), the handler SHALL validate and return an error so the step fails with a clear message (see step-context: handler SHALL validate body step ids when building sub-flow).
 
 #### Scenario: Entry and done reference same-flow steps
 
@@ -116,21 +116,21 @@ When the loop step does not specify `end`, the engine or UI MAY compute the set 
 - **THEN** it MAY infer end as [noop, nap2]
 - **AND** the handler SHALL still run the full closure each iteration
 
-### Requirement: Loop handler MAY push marker steps between body iterations for timeline display
+### Requirement: Loop handler SHALL return subSteps for execution order (iteration markers + prefixed body steps)
 
-When the executor provides `context.pushMarkerStep`, the loop handler MAY call it so that RunResult.steps reflects execution order with markers between body rounds. The handler MAY push an iteration marker (e.g. `${step.id}.iteration_1`, `iteration_2`, ...) before each runSubFlow so that steps order is: iteration_1 → body round 1 → iteration_2 → body round 2 → … → loop step result. Completion (done or early exit) SHALL be indicated via the loop step's result.log (e.g. "done, N iteration(s)" or "early exit after N iteration(s)"). Marker stepIds SHALL be chosen so they do not collide with flow step ids.
+The loop handler SHALL return **subSteps** on its StepResult for each iteration: for each round it SHALL append a marker step (e.g. `${step.id}.iteration_${i+1}`) and then each step result from the run with stepId prefixed (e.g. `${step.id}.iteration_${i+1}.${bodyStepId}`). Completion (done or early exit) SHALL be indicated via the loop step's result.log (e.g. "done, N iteration(s)" or "early exit after N iteration(s)"). The executor SHALL flatten subSteps into RunResult.steps so that a consumer that renders steps in array order sees the correct execution timeline.
 
-#### Scenario: Loop with marker steps yields ordered steps
+#### Scenario: Loop with subSteps yields ordered flattened steps
 
-- **GIVEN** a loop step with `count: 2`, `entry: [A]`, closure {A}; executor provides pushMarkerStep
-- **WHEN** the loop handler runs and pushes iteration_1, runs runSubFlow (round 1), pushes iteration_2, runs runSubFlow (round 2), then returns StepResult with log "done, 2 iteration(s)"
-- **THEN** RunResult.steps SHALL contain in order: marker (iteration_1), step A result (round 1), marker (iteration_2), step A result (round 2), then the loop step's own result
+- **GIVEN** a loop step with `count: 2`, `entry: [A]`, closure {A}
+- **WHEN** the loop handler runs, calls context.run(subFlow, bodyCtx, { scopeStepIds }) twice, and returns StepResult with subSteps: marker `l1.iteration_1`, `l1.iteration_1.A`, marker `l1.iteration_2`, `l1.iteration_2.A`, and log "done, 2 iteration(s)"
+- **THEN** RunResult.steps (after flattening) SHALL contain in order: marker (iteration_1), step A result (round 1), marker (iteration_2), step A result (round 2), then the loop step's own result
 - **AND** a consumer that renders steps in array order SHALL see the correct execution timeline
 
-#### Scenario: Loop without pushMarkerStep behaves unchanged
+#### Scenario: Loop without subSteps (legacy or minimal executor)
 
-- **WHEN** the executor does not provide pushMarkerStep (or handler does not call it)
-- **THEN** RunResult.steps SHALL contain body step results in execution order followed by the loop step result, as before
+- **WHEN** the handler does not return subSteps (e.g. executor does not require them)
+- **THEN** RunResult.steps SHALL still contain the loop step's own result
 - **AND** the loop step MAY set result.log to indicate completion (e.g. "done, N iteration(s)" or "early exit after N iteration(s)")
 
 ## BREAKING CHANGES

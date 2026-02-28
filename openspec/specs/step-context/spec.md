@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定義步驟間傳參：每一步執行時可讀取「執行時參數 + 前面所有步驟的輸出」作為當前 context；步驟產出的 outputs 以 **effective output key（step.outputKey 若存在則用，否則 step id）** 寫入 context（不攤平），方便對應節點。本 spec 涵蓋 StepResult.outputs、executor 累積 context、js 步驟讀取 params 與回傳 outputs、以及 context 上 runSubFlow 對 body step id 的驗證（不存在即回傳錯誤，避免靜默成功）。
+定義步驟間傳參：每一步執行時可讀取「執行時參數 + 前面所有步驟的輸出」作為當前 context；步驟產出的 outputs 以 **effective output key（step.outputKey 若存在則用，否則 step id）** 寫入 context（不攤平），方便對應節點。本 spec 涵蓋 StepResult.outputs、executor 累積 context、js 步驟讀取 params 與回傳 outputs、以及 **context.run**（RunFlowFn）與 **scopeStepIds**：handler（如 loop）以 sub-flow 呼叫 `run(subFlow, params, { scopeStepIds })` 時，若某步回傳 nextSteps 含 scope 外 id，run 立即回傳 earlyExit + finalParams；handler 可驗證 body step id 存在於 context.steps 再呼叫 run，避免靜默成功。
 
 ## Requirements
 
@@ -85,15 +85,15 @@ A js step MUST be executed with the current context available in the vm as a rea
 - **THEN** step 2's code sees `params.step1.x === 'from-step1'` (outputs namespaced by step id)
 - **AND** step 2 can return further outputs; the executor will set `context.step2 = step2Outputs` for step 3
 
-### Requirement: runSubFlow SHALL validate body step ids
+### Requirement: context.run (RunFlowFn) and scopeStepIds; handler SHALL validate body step ids when building sub-flow
 
-The executor SHALL provide `runSubFlow(bodyStepIds, ctx)` on the step context so handlers (e.g. loop) can run a sub-graph of the current flow. When any element of `bodyStepIds` is not a step id in the current flow, the executor SHALL NOT run any of the requested steps; it SHALL return a result that includes an `error` (e.g. `Step(s) not found: <ids>`) so the calling handler can fail the step. The executor SHALL NOT silently succeed with zero steps run when some requested ids are missing, so that users get a clear error instead of believing the sub-flow completed successfully.
+The executor SHALL provide optional `run?: RunFlowFn` on the step context, where `RunFlowFn(flow, params, runOptions?)` runs the given flow with initial params and returns `Promise<RunResult>`. When `runOptions.scopeStepIds` is set, if any step in that run returns `nextSteps` containing an id **not** in scopeStepIds, the run SHALL stop immediately and return `RunResult` with `earlyExit: { nextSteps }` and `finalParams` (current context). Handlers that run a sub-graph (e.g. loop) SHALL build a sub-flow from the flow steps (e.g. from `context.steps`) restricted to body step ids, and call `context.run(subFlow, params, { scopeStepIds: bodyStepIds })`. When any requested body step id is not present in the flow steps, the handler SHALL return a StepResult with success: false and an error (e.g. "Step(s) not found: &lt;ids&gt;") so the flow run fails with a clear message.
 
-#### Scenario: runSubFlow with non-existent body id returns error
+#### Scenario: Handler validates body step ids before calling run
 
-- **WHEN** a handler calls `runSubFlow(['nonexistent'], ctx)` and no step with id `nonexistent` exists in the flow
-- **THEN** the executor SHALL return (e.g. in the promise result) an `error` indicating the missing step id(s)
-- **AND** the handler SHALL be able to return a StepResult with success: false and that error, so the flow run fails with a clear message
+- **WHEN** a handler builds a sub-flow for body ids that include `nonexistent` and that id is not in `context.steps`
+- **THEN** the handler SHALL return a StepResult with success: false and an error indicating the missing step id(s)
+- **AND** the handler SHALL NOT call `context.run` with that id in scopeStepIds when the step is missing from the flow, so that users get a clear error instead of a silent empty run
 
 ### Requirement: StepContext SHALL provide optional appendLog for lifecycle log lines
 
@@ -105,30 +105,22 @@ StepContext SHALL include an optional `appendLog?: (message: string) => void`. W
 - **THEN** the StepResult for that step SHALL have log equal to the concatenation of accumulated lines and the returned log (e.g. "start\niteration 1/3\niteration 2/3\niteration 3/3\ncomplete\niterations: 3" or equivalent)
 - **AND** the formatter SHALL display that log so that lifecycle and final summary are both visible
 
-### Requirement: runSubFlow body results SHALL be pushed immediately
+### Requirement: Sub-flow run result and subSteps; executor SHALL flatten subSteps with parent prefix
 
-When a handler invokes runSubFlow, the executor SHALL push each body step result to the main steps array as soon as that body step completes (immediate push). The caller step's own result SHALL be pushed when the handler returns, so it may appear after its body steps in the final steps order.
+When a handler invokes `context.run(subFlow, params, { scopeStepIds })`, the run returns a `RunResult` with `steps`, `finalParams`, and optionally `earlyExit`. The handler MAY return `subSteps` on its own StepResult (e.g. iteration markers and prefixed body step results). The executor SHALL flatten each step's `subSteps` into the main RunResult.steps with stepId prefix `{parentStepId}.{childStepId}` so that the execution timeline is preserved. The caller step's own result SHALL appear after its subSteps in the flattened order when the handler returns.
 
-#### Scenario: Loop body steps appear in execution order before loop step
+#### Scenario: Loop step returns subSteps; executor flattens with prefix
+- **WHEN** A loop step runs and returns `StepResult` with `subSteps`: e.g., `['loop.iteration_1', 'loop.iteration_1.body']`, then `['loop.iteration_2', 'loop.iteration_2.body']`, and finally the loop step's own result.
+- **THEN** The main `RunResult.steps` SHALL contain these entries in that order (flattened with parent prefix as given).
+- **AND** The loop step MAY set `result.log` to indicate completion (e.g., "done, N iteration(s)" or "early exit after N iteration(s)").
 
-- **WHEN** a loop step runs and the body runs three iterations producing body step results R1, R2, R3
-- **THEN** the main RunResult.steps SHALL contain R1, R2, R3 in that order, followed by the loop step's own result
-- **AND** the loop step MAY use appendLog to record "loop start", "iteration 1/3", etc., and "loop complete" in its result.log
+### Requirement: StepContext SHALL provide run (RunFlowFn) for nested flows; no pushMarkerStep
 
-### Requirement: StepContext MAY provide pushMarkerStep for marker steps in execution order
-
-StepContext SHALL include an optional `pushMarkerStep?: (stepId: string, log?: string) => void`. When the executor provides it, calling it SHALL append a marker step to the main RunResult.steps array with shape `{ stepId, success: true, ...(log !== undefined && { log }) }` (no outputs, no nextSteps). The executor SHALL provide the same steps array reference to both pushMarkerStep and runSubFlow so that markers and body step results appear in invocation order. Handlers (e.g. loop) MAY call pushMarkerStep at appropriate times so that GUI/Server/CLI can reconstruct the execution timeline from steps alone.
-
-#### Scenario: pushMarkerStep appends marker to main steps in order
-
-- **WHEN** a handler calls `context.pushMarkerStep?.('loop.iteration_1')`, then `context.runSubFlow(bodyIds, ctx)` which pushes body results, then `context.pushMarkerStep?.('loop.iteration_2')`
-- **THEN** RunResult.steps SHALL contain in order: a step with stepId `loop.iteration_1` and success true, then the body step results from the first runSubFlow, then a step with stepId `loop.iteration_2`, then the next body results
-- **AND** each marker step SHALL have success: true and no outputs or nextSteps
-
-#### Scenario: pushMarkerStep absent when not provided by executor
-
-- **WHEN** the executor does not set pushMarkerStep on context (e.g. in an environment where steps are not collected)
-- **THEN** handlers that call `context.pushMarkerStep?.('id', log)` SHALL not throw and SHALL have no effect (optional chaining)
+#### Scenario: Handler uses context.run and scopeStepIds
+- **WHEN** A handler calls `context.run(subFlow, params, { scopeStepIds: ['bodyStep1', 'bodyStep2'] })` and the sub-flow executes. If a step in the sub-flow returns `nextSteps` including an ID not in `scopeStepIds` (e.g., `['bodyStep1', 'externalStep']`), the run SHALL stop immediately.
+- **THEN** The `context.run` call SHALL return `earlyExit: { nextSteps: ['bodyStep1', 'externalStep'] }` and `finalParams`.
+- **AND** If a handler attempts to `context.run` with `scopeStepIds` for a `subFlow` where a step ID in `scopeStepIds` is missing from the `context.steps` available to the handler, the handler SHALL return a `StepResult` with `success: false` and an appropriate error message (e.g., "Step(s) not found: nonexistentId").
+- **AND** The `pushMarkerStep` functionality is deprecated and SHALL NOT be used; timeline order is managed via `subSteps`.
 
 ### Requirement: Command steps and outputs (reserved)
 

@@ -53,7 +53,7 @@ export class HttpHandler implements IStepHandler {
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:')
       return context.stepResult(step.id, false, { error: 'http step only allows http and https' })
-    const allowedHosts = context.allowedHttpHosts
+    const allowedHosts = (step as FlowStep & { allowedHttpHosts?: string[] }).allowedHttpHosts
     if (allowedHosts !== undefined && Array.isArray(allowedHosts) && allowedHosts.length > 0) {
       const hostLower = url.hostname.toLowerCase()
       const allowed = allowedHosts.some(h => String(h).toLowerCase() === hostLower)

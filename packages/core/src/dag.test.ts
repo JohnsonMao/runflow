@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { buildDAG, getDAGStepIds, topologicalSort } from './dag'
 
 describe('buildDAG', () => {
-  it('excludes steps with no dependsOn (orphans)', () => {
+  it('includes steps with no dependsOn as roots (empty deps)', () => {
     const steps: FlowStep[] = [
       { id: 'a', type: 'set', set: {} },
       { id: 'b', type: 'set', set: {}, dependsOn: [] },
     ]
     const g = buildDAG(steps)
-    expect(g.has('a')).toBe(false)
+    expect(g.has('a')).toBe(true)
+    expect(g.get('a')).toEqual([])
     expect(g.has('b')).toBe(true)
     expect(g.get('b')).toEqual([])
   })
@@ -34,13 +35,13 @@ describe('buildDAG', () => {
 })
 
 describe('getDAGStepIds', () => {
-  it('returns only ids that have dependsOn', () => {
+  it('returns all step ids', () => {
     const steps: FlowStep[] = [
       { id: 'orphan', type: 'c' },
       { id: 'in', type: 'c', dependsOn: [] },
     ]
     const ids = getDAGStepIds(steps)
-    expect(ids.has('orphan')).toBe(false)
+    expect(ids.has('orphan')).toBe(true)
     expect(ids.has('in')).toBe(true)
   })
 })
@@ -86,17 +87,19 @@ describe('topologicalSort', () => {
       expect(r.error).toContain('Cycle')
   })
 
-  it('orphan exclusion: only steps with dependsOn are in order', () => {
+  it('steps with no dependsOn are in order as roots', () => {
     const steps: FlowStep[] = [
-      { id: 'orphan', type: 'c' },
+      { id: 'noDeps', type: 'c' },
       { id: 'a', type: 'c', dependsOn: [] },
       { id: 'b', type: 'c', dependsOn: ['a'] },
     ]
     const r = topologicalSort(steps)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.order).not.toContain('orphan')
-      expect(r.order).toEqual(['a', 'b'])
+      expect(r.order).toContain('noDeps')
+      expect(r.order).toContain('a')
+      expect(r.order).toContain('b')
+      expect(r.order).toHaveLength(3)
     }
   })
 
@@ -111,14 +114,13 @@ describe('topologicalSort', () => {
       expect(r.order).toEqual(['root', 'child'])
   })
 
-  it('missing dependency (depends on non-DAG id) returns error', () => {
+  it('missing dependency (depends on step id not in flow) returns error', () => {
     const steps: FlowStep[] = [
-      { id: 'a', type: 'c' },
-      { id: 'b', type: 'c', dependsOn: ['a'] },
+      { id: 'b', type: 'c', dependsOn: ['nonexistent'] },
     ]
     const r = topologicalSort(steps)
     expect(r.ok).toBe(false)
     if (!r.ok)
-      expect(r.error).toMatch(/not in the DAG|orphan/)
+      expect(r.error).toMatch(/not in the DAG|nonexistent/)
   })
 })

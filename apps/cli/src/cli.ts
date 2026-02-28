@@ -2,15 +2,18 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { flowGraphToJson, flowGraphToMermaid, run } from '@runflow/core'
+import { run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
+  buildFlowMapForRun,
   buildRegistryFromConfig,
   createResolveFlow,
   DEFAULT_DISCOVER_LIMIT,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
+  flowGraphToJson,
+  flowGraphToMermaid,
   formatDetailAsMarkdown,
   formatListAsMarkdown,
   getDiscoverEntry,
@@ -139,12 +142,13 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
   }
 
   const resolveFlow = createResolveFlow(config, configDir, cwd)
+  const flowMap = await buildFlowMapForRun(flow.flow, resolveFlow)
   const result = await run(flow.flow, {
     dryRun: options.dryRun,
     params: Object.keys(params).length ? params : undefined,
     effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
     registry,
-    resolveFlow,
+    flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
   })
 
   if (options.verbose) {
@@ -161,7 +165,8 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
   if (!result.success) {
     if (result.error)
       console.error(`Error: ${result.error}`)
-    console.error(`Flow "${result.flowName}" failed.`)
+    const name = flow.flow.name ?? 'Flow'
+    console.error(`Flow "${name}" failed.`)
     process.exit(1)
   }
 }

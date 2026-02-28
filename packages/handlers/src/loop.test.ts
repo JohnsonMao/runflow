@@ -1,9 +1,8 @@
-import type { FlowStep, RunSubFlowFn, StepResult } from '@runflow/core'
-import { stepResult } from '@runflow/core'
+import type { FlowDefinition, FlowStep, RunResult, StepContext } from '@runflow/core'
 import { describe, expect, it, vi } from 'vitest'
 import { LoopHandler } from './loop'
+import { stepResult } from './test-helpers'
 
-const noopRunSubFlow: RunSubFlowFn = async () => ({ results: [], newContext: {} })
 /** Default steps: only body so closure from entry ['body'] is ['body'] for loop id 'l1'. */
 const defaultSteps: FlowStep[] = [
   { id: 'body', type: 'set', dependsOn: ['l1'] },
@@ -11,18 +10,16 @@ const defaultSteps: FlowStep[] = [
 
 function ctx(overrides: Partial<{
   params: Record<string, unknown>
-  runSubFlow: RunSubFlowFn
+  run: NonNullable<StepContext['run']>
   steps: FlowStep[]
   appendLog: (line: string) => void
-  pushMarkerStep: (stepId: string, log?: string) => void
 }> = {}) {
   return {
     params: {},
-    runSubFlow: noopRunSubFlow,
     stepResult,
     steps: overrides.steps ?? defaultSteps,
     ...overrides,
-  }
+  } as StepContext
 }
 
 describe('loop handler', () => {
@@ -82,9 +79,10 @@ describe('loop handler', () => {
 
   describe('run', () => {
     it('runs closure per item then returns nextSteps: done', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-        newContext: { ...runCtx },
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'l1',
@@ -94,44 +92,19 @@ describe('loop handler', () => {
         done: ['after'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow }))
+      const result = await handler.run(step, ctx({ run }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['after'])
       expect(result.outputs).toMatchObject({ count: 3, items: [1, 2, 3] })
-      expect(runSubFlow).toHaveBeenCalledTimes(3)
-      expect(runSubFlow).toHaveBeenCalledWith(['body'], expect.any(Object))
+      expect(run).toHaveBeenCalledTimes(3)
+      expect(run).toHaveBeenCalledWith(expect.objectContaining({ steps: expect.any(Array) }), expect.any(Object), { scopeStepIds: ['body'] })
     })
 
-    it('pushMarkerStep: steps order is iteration_1 → body → iteration_2 → body (no start/complete; complete via loop log)', async () => {
-      const steps: StepResult[] = []
-      const pushMarkerStep = (stepId: string, log?: string) => steps.push({ stepId, success: true, ...(log !== undefined && { log }) })
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
-        steps.push({ stepId: 'body', success: true, outputs: { ...runCtx } })
-        return {
-          results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-          newContext: { ...runCtx },
-        }
-      })
-      const step: FlowStep = {
-        id: 'l1',
-        type: 'loop',
-        count: 2,
-        entry: ['body'],
-        done: ['after'],
-        dependsOn: [],
-      }
-      const result = await handler.run(step, ctx({ runSubFlow, pushMarkerStep }))
-      const stepIds = steps.map(s => s.stepId)
-      expect(stepIds).toEqual(['l1.iteration_1', 'body', 'l1.iteration_2', 'body'])
-      expect(steps[0].log).toBeUndefined()
-      expect(steps[2].log).toBeUndefined()
-      expect(result.log).toBe('done, 2 iteration(s)')
-    })
-
-    it('runs closure N times with count then returns nextSteps: done', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-        newContext: { ...runCtx },
+    it('subSteps order is iteration_1 → body → iteration_2 → body (complete via loop log)', async () => {
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'l1',
@@ -141,29 +114,47 @@ describe('loop handler', () => {
         done: ['after'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow }))
+      const result = await handler.run(step, ctx({ run }))
+      const stepIds = (result.subSteps ?? []).map(s => s.stepId)
+      expect(stepIds).toEqual(['l1.iteration_1', 'l1.iteration_1.body', 'l1.iteration_2', 'l1.iteration_2.body'])
+      expect(result.log).toBe('done, 2 iteration(s)')
+    })
+
+    it('runs closure N times with count then returns nextSteps: done', async () => {
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        finalParams: { ...runCtx },
+      }))
+      const step: FlowStep = {
+        id: 'l1',
+        type: 'loop',
+        count: 2,
+        entry: ['body'],
+        done: ['after'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, ctx({ run }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['after'])
       expect(result.outputs).toMatchObject({ count: 2 })
-      expect(runSubFlow).toHaveBeenCalledTimes(2)
+      expect(run).toHaveBeenCalledTimes(2)
     })
 
     it('early exit: returns earlyExit nextSteps and does not run remaining iterations', async () => {
       const stepsForB: FlowStep[] = [{ id: 'b', type: 'set', dependsOn: ['l1'] }]
       let callCount = 0
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => {
         callCount++
         if (callCount === 1) {
           return {
-            results: [{ stepId: 'b', success: true }],
-            newContext: { ...runCtx },
+            success: true,
+            steps: [{ stepId: 'b', success: true }],
+            finalParams: { ...runCtx },
             earlyExit: { nextSteps: ['early'] },
           }
         }
-        return {
-          results: [],
-          newContext: runCtx,
-        }
+        return { success: true, steps: [], finalParams: runCtx }
       })
       const step: FlowStep = {
         id: 'l1',
@@ -173,17 +164,18 @@ describe('loop handler', () => {
         done: ['after'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps: stepsForB }))
+      const result = await handler.run(step, ctx({ run, steps: stepsForB }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['early'])
       expect(result.outputs?.count).toBe(1)
-      expect(runSubFlow).toHaveBeenCalledTimes(1)
+      expect(run).toHaveBeenCalledTimes(1)
     })
 
     it('passes item, index, items in body context for items driver', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { seen: runCtx } }],
-        newContext: { ...runCtx },
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { seen: runCtx } }],
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'l1',
@@ -192,19 +184,19 @@ describe('loop handler', () => {
         entry: ['body'],
         dependsOn: [],
       }
-      await handler.run(step, ctx({ runSubFlow }))
-      expect(runSubFlow).toHaveBeenNthCalledWith(1, ['body'], expect.objectContaining({ item: 'a', index: 0, items: ['a', 'b'] }))
-      expect(runSubFlow).toHaveBeenNthCalledWith(2, ['body'], expect.objectContaining({ item: 'b', index: 1, items: ['a', 'b'] }))
+      await handler.run(step, ctx({ run }))
+      expect(run).toHaveBeenNthCalledWith(1, expect.any(Object), expect.objectContaining({ item: 'a', index: 0, items: ['a', 'b'] }), expect.any(Object))
+      expect(run).toHaveBeenNthCalledWith(2, expect.any(Object), expect.objectContaining({ item: 'b', index: 1, items: ['a', 'b'] }), expect.any(Object))
     })
 
     it('items driver with earlyExit returns early with nextSteps and does not run remaining items', async () => {
       const stepsForB: FlowStep[] = [{ id: 'b', type: 'set', dependsOn: ['l1'] }]
       let callCount = 0
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => {
         callCount++
         if (callCount === 1)
-          return { results: [{ stepId: 'b', success: true }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['out'] } }
-        return { results: [], newContext: runCtx }
+          return { success: true, steps: [{ stepId: 'b', success: true }], finalParams: { ...runCtx }, earlyExit: { nextSteps: ['out'] } }
+        return { success: true, steps: [], finalParams: runCtx }
       })
       const step: FlowStep = {
         id: 'l1',
@@ -213,17 +205,18 @@ describe('loop handler', () => {
         entry: ['b'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps: stepsForB }))
+      const result = await handler.run(step, ctx({ run, steps: stepsForB }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['out'])
       expect(result.outputs).toMatchObject({ count: 1, items: [1, 2, 3] })
-      expect(runSubFlow).toHaveBeenCalledTimes(1)
+      expect(run).toHaveBeenCalledTimes(1)
     })
 
     it('items driver without done returns no nextSteps', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-        newContext: { ...runCtx },
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'l1',
@@ -232,16 +225,17 @@ describe('loop handler', () => {
         entry: ['body'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow }))
+      const result = await handler.run(step, ctx({ run }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toBeUndefined()
       expect(result.outputs).toMatchObject({ count: 1, items: [1] })
     })
 
     it('count driver without done returns no nextSteps', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (_bodyStepIds: string[], runCtx: Record<string, unknown>) => ({
-        results: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
-        newContext: { ...runCtx },
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: [{ stepId: 'body', success: true, outputs: { ...runCtx } }],
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'l1',
@@ -250,7 +244,7 @@ describe('loop handler', () => {
         entry: ['body'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow }))
+      const result = await handler.run(step, ctx({ run }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toBeUndefined()
     })
@@ -258,12 +252,13 @@ describe('loop handler', () => {
 
   describe('run (when driver)', () => {
     it('when: exits when expression is true', async () => {
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (bodyStepIds: string[], runCtx: Record<string, unknown>) => {
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => {
         const index = runCtx.index as number
         const outputs = { iterIndex: String(index), iterCount: String(runCtx.count) }
         return {
-          results: [{ stepId: 'body', success: true, outputs }],
-          newContext: { ...runCtx, body: outputs },
+          success: true,
+          steps: [{ stepId: 'body', success: true, outputs }],
+          finalParams: { ...runCtx, body: outputs },
         }
       })
       const step: FlowStep = {
@@ -274,11 +269,11 @@ describe('loop handler', () => {
         done: ['after'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow }))
+      const result = await handler.run(step, ctx({ run }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['after'])
       expect(result.outputs?.count).toBe(3)
-      expect(runSubFlow).toHaveBeenCalledTimes(3)
+      expect(run).toHaveBeenCalledTimes(3)
     })
 
     it('entry A only, closure A→B→C→D, count 2, done E', async () => {
@@ -288,9 +283,10 @@ describe('loop handler', () => {
         { id: 'C', type: 'set', dependsOn: ['B'] },
         { id: 'D', type: 'set', dependsOn: ['C'] },
       ]
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true, outputs: { ...runCtx } })),
-        newContext: { ...runCtx },
+      const run = vi.fn(async (_flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: (_flow.steps as FlowStep[]).map(s => ({ stepId: s.id, success: true, outputs: { ...runCtx } })),
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'loop',
@@ -300,12 +296,16 @@ describe('loop handler', () => {
         done: ['E'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      const result = await handler.run(step, ctx({ run, steps }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['E'])
       expect(result.outputs?.count).toBe(2)
-      expect(runSubFlow).toHaveBeenCalledTimes(2)
-      expect(runSubFlow).toHaveBeenCalledWith(['A', 'B', 'C', 'D'], expect.any(Object))
+      expect(run).toHaveBeenCalledTimes(2)
+      expect(run).toHaveBeenCalledWith(
+        expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ id: 'A' }), expect.objectContaining({ id: 'B' }), expect.objectContaining({ id: 'C' }), expect.objectContaining({ id: 'D' })]) }),
+        expect.any(Object),
+        { scopeStepIds: ['A', 'B', 'C', 'D'] },
+      )
     })
 
     it('entry [A,G] two chains merging at D', async () => {
@@ -317,9 +317,10 @@ describe('loop handler', () => {
         { id: 'H', type: 'set', dependsOn: ['G'] },
         { id: 'D', type: 'set', dependsOn: ['C', 'H'] },
       ]
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true })),
-        newContext: { ...runCtx },
+      const run = vi.fn(async (flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: (flow.steps as FlowStep[]).map(s => ({ stepId: s.id, success: true })),
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'loop',
@@ -329,10 +330,11 @@ describe('loop handler', () => {
         done: ['J'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      const result = await handler.run(step, ctx({ run, steps }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['J'])
-      expect(runSubFlow.mock.calls[0][0].slice().sort()).toEqual(['A', 'B', 'C', 'D', 'G', 'H'])
+      const bodyStepIds = (run.mock.calls[0][0] as FlowDefinition).steps.map(s => s.id).slice().sort()
+      expect(bodyStepIds).toEqual(['A', 'B', 'C', 'D', 'G', 'H'])
     })
 
     it('early exit from step in closure returns nextSteps outside closure', async () => {
@@ -342,13 +344,14 @@ describe('loop handler', () => {
         { id: 'C', type: 'set', dependsOn: ['B'] },
       ]
       let callCount = 0
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => {
+      const run = vi.fn(async (flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => {
         callCount++
         if (callCount === 2)
-          return { results: [{ stepId: 'B', success: true }], newContext: { ...runCtx }, earlyExit: { nextSteps: ['F'] } }
+          return { success: true, steps: [{ stepId: 'B', success: true }], finalParams: { ...runCtx }, earlyExit: { nextSteps: ['F'] } }
         return {
-          results: scopeIds.map(stepId => ({ stepId, success: true })),
-          newContext: { ...runCtx },
+          success: true,
+          steps: (flow.steps as FlowStep[]).map(s => ({ stepId: s.id, success: true })),
+          finalParams: { ...runCtx },
         }
       })
       const step: FlowStep = {
@@ -359,11 +362,11 @@ describe('loop handler', () => {
         done: ['E'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      const result = await handler.run(step, ctx({ run, steps }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['F'])
       expect(result.outputs?.count).toBe(2)
-      expect(runSubFlow).toHaveBeenCalledTimes(2)
+      expect(run).toHaveBeenCalledTimes(2)
     })
 
     it('body excludes done and steps that transitively depend on done (e.g. req→nap)', async () => {
@@ -377,9 +380,10 @@ describe('loop handler', () => {
         { id: 'sub', type: 'flow', flow: 'x', dependsOn: ['req'] },
         { id: 'summary', type: 'set', set: {}, dependsOn: ['sub'] },
       ]
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true })),
-        newContext: { ...runCtx },
+      const run = vi.fn(async (flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: (flow.steps as FlowStep[]).map(s => ({ stepId: s.id, success: true })),
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'loop',
@@ -389,10 +393,10 @@ describe('loop handler', () => {
         done: ['nap'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      const result = await handler.run(step, ctx({ run, steps }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['nap'])
-      const bodyStepIds = runSubFlow.mock.calls[0][0].slice().sort()
+      const bodyStepIds = (run.mock.calls[0][0] as FlowDefinition).steps.map(s => s.id).slice().sort()
       expect(bodyStepIds).toEqual(['earlyExitCond', 'loopBody', 'nap2', 'noop'])
     })
 
@@ -404,9 +408,10 @@ describe('loop handler', () => {
         { id: 'nap2', type: 'sleep', ms: 0, dependsOn: ['earlyExitCond'] },
         { id: 'nap', type: 'sleep', ms: 0, dependsOn: ['loop'] },
       ]
-      const runSubFlow = vi.fn<RunSubFlowFn>(async (scopeIds: string[], runCtx: Record<string, unknown>) => ({
-        results: scopeIds.map(stepId => ({ stepId, success: true })),
-        newContext: { ...runCtx },
+      const run = vi.fn(async (flow: FlowDefinition, runCtx: Record<string, unknown>): Promise<RunResult> => ({
+        success: true,
+        steps: (flow.steps as FlowStep[]).map(s => ({ stepId: s.id, success: true })),
+        finalParams: { ...runCtx },
       }))
       const step: FlowStep = {
         id: 'loop',
@@ -416,15 +421,16 @@ describe('loop handler', () => {
         done: ['nap'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ runSubFlow, steps }))
+      const result = await handler.run(step, ctx({ run, steps }))
       expect(result.success).toBe(true)
       expect(result.nextSteps).toEqual(['nap'])
-      expect(runSubFlow).toHaveBeenCalledTimes(2)
-      const bodyStepIds = runSubFlow.mock.calls[0][0].slice().sort()
+      expect(run).toHaveBeenCalledTimes(2)
+      const bodyStepIds = (run.mock.calls[0][0] as FlowDefinition).steps.map(s => s.id).slice().sort()
       expect(bodyStepIds).toEqual(['earlyExitCond', 'loopBody', 'nap2', 'noop'])
     })
 
     it('steps missing or empty returns success: false', async () => {
+      const run = vi.fn(async (): Promise<RunResult> => ({ success: true, steps: [], finalParams: {} }))
       const step: FlowStep = {
         id: 'l1',
         type: 'loop',
@@ -432,7 +438,7 @@ describe('loop handler', () => {
         entry: ['body'],
         dependsOn: [],
       }
-      const result = await handler.run(step, ctx({ steps: [] }))
+      const result = await handler.run(step, ctx({ steps: [], run }))
       expect(result.success).toBe(false)
       expect(result.error).toContain('steps')
     })

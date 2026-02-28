@@ -4,6 +4,7 @@ import type { StepRegistry } from '@runflow/core'
 import type { DiscoverEntry, RunflowConfig } from '@runflow/workspace'
 import { run } from '@runflow/core'
 import {
+  buildFlowMapForRun,
   createResolveFlow,
   DEFAULT_DISCOVER_LIMIT,
   formatDetailAsMarkdown,
@@ -50,9 +51,10 @@ function formatStepIdDisplay(stepId: string): string {
 }
 
 /** Format run result for MCP tool text content. Exported for tests. */
-export function formatRunResult(result: Awaited<ReturnType<typeof run>>): string {
+export function formatRunResult(result: Awaited<ReturnType<typeof run>>, flowName?: string): string {
   const status = result.success ? '**Success**' : '**Failed**'
-  const headline = `${status} — Flow "${result.flowName}" (${result.steps.length} step(s)).`
+  const name = flowName ?? 'Flow'
+  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
   const stepLines = result.steps.map((s) => {
     const displayId = formatStepIdDisplay(s.stepId)
     const isMarker = MARKER_STEP_ID_RE.test(s.stepId)
@@ -112,6 +114,7 @@ export async function executeTool(
     return { content: [{ type: 'text' as const, text: message }], isError: true }
   }
   const resolveFlow = createResolveFlow(config, configDir, cwd)
+  const flowMap = await buildFlowMapForRun(loaded.flow, resolveFlow)
   const effectiveParamsDeclaration = mergeParamDeclarations(config?.params, loaded.flow.params)
   const toolParams: Record<string, unknown> = { ...(params ?? {}) }
   try {
@@ -119,9 +122,9 @@ export async function executeTool(
       registry,
       params: Object.keys(toolParams).length ? toolParams : undefined,
       effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
-      resolveFlow,
+      flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
     })
-    const text = formatRunResult(result)
+    const text = formatRunResult(result, loaded.flow.name)
     return { content: [{ type: 'text' as const, text }], isError: !result.success }
   }
   catch (err) {

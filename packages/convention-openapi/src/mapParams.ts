@@ -2,6 +2,12 @@ import type { ParamDeclaration } from '@runflow/core'
 import type { CollectedOperation } from './collectOperations.js'
 import type { OpenApiDocument, OpenApiSchema, ParameterObject } from './types.js'
 
+/** Param location for API flows (path, query, header, cookie, body). Used by OpenAPI mapping and discover/filtering. */
+export type ParamIn = 'path' | 'query' | 'header' | 'cookie' | 'body'
+
+/** ParamDeclaration with optional API location (in). Returned by mapParamsToDeclarations. */
+export type ApiParamDeclaration = ParamDeclaration & { in?: ParamIn }
+
 type FlowParamType = ParamDeclaration['type']
 
 /** Resolve #/components/schemas/<name> to the actual schema. */
@@ -99,8 +105,8 @@ function schemaToParamDeclaration(name: string, schema: OpenApiSchema, required?
  * $ref and allOf for request body (and param) schemas so body is typed as object
  * with properties (e.g. PayByTxnTokenRequestEntity) instead of string.
  */
-export function mapParamsToDeclarations(op: CollectedOperation, doc: OpenApiDocument | null = null): ParamDeclaration[] {
-  const params: ParamDeclaration[] = []
+export function mapParamsToDeclarations(op: CollectedOperation, doc: OpenApiDocument | null = null): ApiParamDeclaration[] {
+  const params: ApiParamDeclaration[] = []
   const seen = new Set<string>()
 
   const pathParams = (op.pathItem.parameters as ParameterObject[] | undefined) ?? []
@@ -113,7 +119,7 @@ export function mapParamsToDeclarations(op: CollectedOperation, doc: OpenApiDocu
     seen.add(p.name)
     const rawSchema = p.schema ?? {}
     const schema = doc ? (resolveSchema(rawSchema, doc) ?? rawSchema) : rawSchema
-    const decl = schemaToParamDeclaration(p.name, schema, p.required)
+    const decl = schemaToParamDeclaration(p.name, schema, p.required) as ApiParamDeclaration
     if (p.description)
       decl.description = p.description
     decl.in = p.in
@@ -127,7 +133,7 @@ export function mapParamsToDeclarations(op: CollectedOperation, doc: OpenApiDocu
       seen.add('body')
       const rawBodySchema = jsonContent.schema
       const bodySchema = doc ? (resolveSchema(rawBodySchema, doc) ?? rawBodySchema) : rawBodySchema
-      const bodyDecl = schemaToParamDeclaration('body', bodySchema, false)
+      const bodyDecl = schemaToParamDeclaration('body', bodySchema, false) as ApiParamDeclaration
       if (body?.description)
         bodyDecl.description = body.description
       bodyDecl.in = 'body'

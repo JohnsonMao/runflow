@@ -1,17 +1,14 @@
-import type { FlowStep, RunResult, StepContext } from '@runflow/core'
-import { stepResult } from '@runflow/core'
+import type { FlowDefinition, FlowStep, RunResult, StepContext } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
 import { FlowHandler } from './flow'
+import { stepResult } from './test-helpers'
 
-const noopRunSubFlow = async () => ({ results: [], newContext: {} })
-
-function ctx(runFlow?: StepContext['runFlow']) {
+function ctx(run?: StepContext['run'], flowMap?: StepContext['flowMap']) {
   return {
     params: {},
-    flowFilePath: undefined,
-    runSubFlow: noopRunSubFlow,
+    flowMap,
     stepResult,
-    runFlow,
+    run,
   } as StepContext
 }
 
@@ -47,84 +44,87 @@ describe('flow handler', () => {
   })
 
   describe('run', () => {
-    it('returns error when runFlow is not available', async () => {
+    it('returns error when run is not available', async () => {
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', dependsOn: [] }
       const result = await handler.run(step, ctx(undefined))
       expect(result.success).toBe(false)
-      expect(result.error).toMatch(/runFlow not available/)
+      expect(result.error).toMatch(/run not available/)
     })
 
-    it('calls runFlow with path and params and returns success with merged outputs and subSteps', async () => {
+    it('calls run with flow and params and returns success with merged outputs and subSteps', async () => {
       const subSteps = [
         stepResult('a', true, { outputs: { k: 'v1' } }),
         stepResult('b', true, { outputs: { k: 'v2', x: 1 } }),
       ]
-      const runFlow = async (_path: string, _params: Record<string, unknown>): Promise<RunResult> => ({
-        flowName: 'sub',
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
+      const run = async (_flow: FlowDefinition, _params: Record<string, unknown>): Promise<RunResult> => ({
         success: true,
         steps: subSteps,
       })
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', params: { a: 1 }, dependsOn: [] }
-      const result = await handler.run(step, ctx(runFlow))
+      const result = await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(result.success).toBe(true)
       expect(result.outputs).toEqual({ k: 'v2', x: 1 })
       expect(result.subSteps).toEqual(subSteps)
     })
 
-    it('returns failure when runFlow returns success: false', async () => {
-      const runFlow = async (): Promise<RunResult> => ({
-        flowName: 'sub',
+    it('returns failure when run returns success: false', async () => {
+      const run = async (): Promise<RunResult> => ({
         success: false,
         steps: [],
         error: 'callee flow failed',
       })
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', dependsOn: [] }
-      const result = await handler.run(step, ctx(runFlow))
+      const result = await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(result.success).toBe(false)
       expect(result.error).toBe('callee flow failed')
     })
 
-    it('returns failure when runFlow throws', async () => {
-      const runFlow = async (): Promise<RunResult> => {
+    it('returns failure when run throws', async () => {
+      const run = async (): Promise<RunResult> => {
         throw new Error('load error')
       }
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', dependsOn: [] }
-      const result = await handler.run(step, ctx(runFlow))
+      const result = await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/load error/)
     })
 
-    it('passes params from step to runFlow', async () => {
+    it('passes params from step to run', async () => {
       let capturedParams: Record<string, unknown> = {}
-      const runFlow = async (_path: string, params: Record<string, unknown>): Promise<RunResult> => {
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
+      const run = async (_flow: FlowDefinition, params: Record<string, unknown>): Promise<RunResult> => {
         capturedParams = params
-        return { flowName: 'sub', success: true, steps: [] }
+        return { success: true, steps: [] }
       }
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', params: { a: 1, b: 'two' }, dependsOn: [] }
-      await handler.run(step, ctx(runFlow))
+      await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(capturedParams).toEqual({ a: 1, b: 'two' })
     })
 
     it('passes empty object when step has no params', async () => {
       let capturedParams: Record<string, unknown> = { notEmpty: true }
-      const runFlow = async (_path: string, params: Record<string, unknown>): Promise<RunResult> => {
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
+      const run = async (_flow: FlowDefinition, params: Record<string, unknown>): Promise<RunResult> => {
         capturedParams = params
-        return { flowName: 'sub', success: true, steps: [] }
+        return { success: true, steps: [] }
       }
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', dependsOn: [] }
-      await handler.run(step, ctx(runFlow))
+      await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(capturedParams).toEqual({})
     })
 
     it('returns validation error in StepResult when callee params validation fails', async () => {
-      const runFlow = async (): Promise<RunResult> => ({
-        flowName: 'sub',
+      const run = async (): Promise<RunResult> => ({
         success: false,
         steps: [],
         error: 'a: Required',
       })
+      const subFlow: FlowDefinition = { name: 'sub', params: [], steps: [] }
       const step: FlowStep = { id: 'f1', type: 'flow', flow: 'sub.yaml', params: {}, dependsOn: [] }
-      const result = await handler.run(step, ctx(runFlow))
+      const result = await handler.run(step, ctx(run, { 'sub.yaml': subFlow }))
       expect(result.success).toBe(false)
       expect(result.error).toBe('a: Required')
     })

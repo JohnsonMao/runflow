@@ -1,18 +1,12 @@
-import type { StepResult, StepResultOptions } from './types'
+import type { StepResult, StepResultOptions } from '@runflow/core'
 
-/**
- * Build a StepResult with consistent shape and defaults.
- * Executor injects this as context.stepResult so handlers use it; executor also uses it internally.
- */
-export function stepResult(
-  stepId: string,
-  success: boolean,
-  opts: StepResultOptions = {},
-): StepResult {
-  const out: StepResult = {
-    stepId,
-    success,
-  }
+/** Minimal stepResult for building StepContext in tests (engine provides the real one at runtime). */
+export const stepResult: (stepId: string, success: boolean, opts?: StepResultOptions) => StepResult = (
+  stepId,
+  success,
+  opts = {},
+) => {
+  const out: StepResult = { stepId, success }
   if (opts.error !== undefined)
     out.error = opts.error
   if (opts.outputs !== undefined)

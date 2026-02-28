@@ -1,5 +1,6 @@
 import type { FlowDefinition, FlowStep, ParamDeclaration } from '@runflow/core'
 import type { CollectedOperation } from './collectOperations.js'
+import type { ApiParamDeclaration } from './mapParams.js'
 import type { OpenApiDocument, ParamExposeConfig } from './types.js'
 import { mapParamsToDeclarations } from './mapParams.js'
 
@@ -11,7 +12,7 @@ const DEFAULT_PARAM_EXPOSE: ParamExposeConfig = {
   cookie: false,
 }
 
-function filterParamsByExpose(params: ParamDeclaration[], paramExpose?: ParamExposeConfig): ParamDeclaration[] {
+function filterParamsByExpose(params: ApiParamDeclaration[], paramExpose?: ParamExposeConfig): ParamDeclaration[] {
   const expose = paramExpose ?? DEFAULT_PARAM_EXPOSE
   return params.filter((p) => {
     if (p.in == null)

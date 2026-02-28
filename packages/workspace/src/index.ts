@@ -1,4 +1,5 @@
 export {
+  buildFlowMapForRun,
   buildRegistryFromConfig,
   createResolveFlow,
   findConfigFile,
@@ -17,6 +18,7 @@ export type {
   ResolvedFileFlow,
   ResolvedFlow,
   ResolvedOpenApiFlow,
+  ResolveFlowFn,
   RunflowConfig,
 } from './config'
 export {
@@ -29,5 +31,11 @@ export {
 } from './discover'
 export type { DiscoverEntry, DiscoverStepSummary, FindFlowFilesOptions } from './discover'
 export { findFlowFiles } from './discover'
-export { flowDefinitionToGraphForVisualization } from './flowGraph'
+export {
+  flowDefinitionToGraph,
+  flowDefinitionToGraphForVisualization,
+  flowGraphToJson,
+  flowGraphToMermaid,
+} from './flowGraph'
+export type { FlowGraph, FlowGraphEdge, FlowGraphEdgeKind, FlowGraphJson, FlowGraphNode, FlowGraphNodeShape } from './flowGraph'
 export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'

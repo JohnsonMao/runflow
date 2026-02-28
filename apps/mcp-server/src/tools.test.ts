@@ -23,11 +23,10 @@ function createGetDiscoverCatalog(getConfig: GetConfigAndRegistry) {
 
 describe('formatRunResult', () => {
   it('formats success with flow name, step count, and per-step lines', () => {
-    const text = formatRunResult({
-      flowName: 'my-flow',
-      success: true,
-      steps: [{ stepId: 'a', success: true }],
-    })
+    const text = formatRunResult(
+      { success: true, steps: [{ stepId: 'a', success: true }] },
+      'my-flow',
+    )
     expect(text).toContain('**Success**')
     expect(text).toContain('my-flow')
     expect(text).toContain('1 step')
@@ -35,15 +34,17 @@ describe('formatRunResult', () => {
   })
 
   it('formats failure with error and failed step', () => {
-    const text = formatRunResult({
-      flowName: 'x',
-      success: false,
-      error: 'Flow failed',
-      steps: [
-        { stepId: 'a', success: true },
-        { stepId: 'b', success: false, error: 'step b failed' },
-      ],
-    })
+    const text = formatRunResult(
+      {
+        success: false,
+        error: 'Flow failed',
+        steps: [
+          { stepId: 'a', success: true },
+          { stepId: 'b', success: false, error: 'step b failed' },
+        ],
+      },
+      'x',
+    )
     expect(text).toContain('**Failed**')
     expect(text).toContain('Flow failed')
     expect(text).toContain('Step "b"')
@@ -51,38 +52,36 @@ describe('formatRunResult', () => {
   })
 
   it('formats failure with error only when no step has error', () => {
-    const text = formatRunResult({
-      flowName: 'x',
-      success: false,
-      error: 'Unknown error',
-      steps: [{ stepId: 'a', success: true }],
-    })
+    const text = formatRunResult(
+      { success: false, error: 'Unknown error', steps: [{ stepId: 'a', success: true }] },
+      'x',
+    )
     expect(text).toContain('**Failed**')
     expect(text).toContain('Unknown error')
   })
 
   it('formats failure with unknown error when result.error is undefined', () => {
-    const text = formatRunResult({
-      flowName: 'x',
-      success: false,
-      error: undefined,
-      steps: [],
-    })
+    const text = formatRunResult(
+      { success: false, error: undefined, steps: [] },
+      'x',
+    )
     expect(text).toContain('**Failed**')
     expect(text).toContain('Unknown error')
   })
 
   it('formats marker steps (iteration_1, iteration_2) without bullet and regular steps with id — log on one line', () => {
-    const text = formatRunResult({
-      flowName: 'f',
-      success: true,
-      steps: [
-        { stepId: 'init', success: true, log: 'ready' },
-        { stepId: 'loop.iteration_1', success: true },
-        { stepId: 'loop.iteration_2', success: true },
-        { stepId: 'loop', success: true, log: 'done, 2 iteration(s)' },
-      ],
-    })
+    const text = formatRunResult(
+      {
+        success: true,
+        steps: [
+          { stepId: 'init', success: true, log: 'ready' },
+          { stepId: 'loop.iteration_1', success: true },
+          { stepId: 'loop.iteration_2', success: true },
+          { stepId: 'loop', success: true, log: 'done, 2 iteration(s)' },
+        ],
+      },
+      'f',
+    )
     expect(text).toContain('- ✓ init — log: ready')
     expect(text).toContain('  loop [iteration 1]')
     expect(text).toContain('  loop [iteration 2]')

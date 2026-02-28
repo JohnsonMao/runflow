@@ -448,6 +448,9 @@ importers:
       '@runflow/handlers':
         specifier: workspace:*
         version: link:../handlers
+      yaml:
+        specifier: catalog:prod
+        version: 2.8.2
     devDependencies:
       '@antfu/eslint-config':
         specifier: catalog:dev

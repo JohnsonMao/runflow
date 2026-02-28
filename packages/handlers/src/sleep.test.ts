@@ -1,10 +1,9 @@
 import type { FlowStep, StepContext } from '@runflow/core'
-import { stepResult } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
 import { SleepHandler } from './sleep'
+import { stepResult } from './test-helpers'
 
-const noopRunSubFlow = async () => ({ results: [], newContext: {} })
-const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
+const emptyContext: StepContext = { params: {}, stepResult }
 
 describe('sleep handler', () => {
   const handler = new SleepHandler()

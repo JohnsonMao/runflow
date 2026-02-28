@@ -1,10 +1,9 @@
 import type { FlowStep, StepContext } from '@runflow/core'
-import { stepResult } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
 import { ConditionHandler } from './condition'
+import { stepResult } from './test-helpers'
 
-const noopRunSubFlow = async () => ({ results: [], newContext: {} })
-const ctx = (params: Record<string, unknown> = {}): StepContext => ({ params, runSubFlow: noopRunSubFlow, stepResult })
+const ctx = (params: Record<string, unknown> = {}): StepContext => ({ params, stepResult })
 
 describe('condition handler', () => {
   const handler = new ConditionHandler()

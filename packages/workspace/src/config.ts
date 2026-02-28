@@ -1,11 +1,11 @@
 import type { OpenApiDocument, OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
-import type { FlowDefinition, IStepHandler, ParamDeclaration, ResolveFlowFn, StepRegistry } from '@runflow/core'
+import type { FlowDefinition, IStepHandler, ParamDeclaration, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadOpenApiDocument, openApiToFlows } from '@runflow/convention-openapi'
-import { loadFromFile } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
+import { loadFromFile } from './loadFlow'
 
 /** OpenAPI entry in handlers: specPaths required; paths resolved relative to config file directory. */
 export interface OpenApiHandlerEntry {
@@ -42,6 +42,41 @@ export interface ResolvedOpenApiFlow {
 }
 
 export type ResolvedFlow = ResolvedFileFlow | ResolvedOpenApiFlow
+
+/** (flowId: string) => Promise<{ flow: FlowDefinition } | null>. Used when building flowMap or resolving flows for run. */
+export type ResolveFlowFn = (flowId: string) => Promise<{ flow: FlowDefinition } | null>
+
+/**
+ * Build a flowMap for run(): collect all step.flow ids from mainFlow (and nested flows), resolve and load each, return map.
+ * Used by CLI/apps so core run() receives flowMap instead of resolveFlow.
+ */
+export async function buildFlowMapForRun(
+  mainFlow: FlowDefinition,
+  resolveFlow: ResolveFlowFn,
+): Promise<Record<string, FlowDefinition>> {
+  const flowMap: Record<string, FlowDefinition> = {}
+  const toLoad = new Set<string>()
+  function collect(flow: FlowDefinition): void {
+    for (const step of flow.steps) {
+      const id = (step as { flow?: string }).flow
+      if (typeof id === 'string' && id.trim() && !flowMap[id])
+        toLoad.add(id)
+    }
+  }
+  collect(mainFlow)
+  while (toLoad.size > 0) {
+    const id = toLoad.values().next().value as string
+    toLoad.delete(id)
+    if (flowMap[id])
+      continue
+    const loaded = await resolveFlow(id)
+    if (!loaded)
+      continue
+    flowMap[id] = loaded.flow
+    collect(loaded.flow)
+  }
+  return flowMap
+}
 
 /**
  * Load multiple OpenAPI spec files, merge into one document (paths and components: later overwrites).

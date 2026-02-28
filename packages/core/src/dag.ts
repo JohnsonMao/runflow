@@ -3,34 +3,21 @@ import type { FlowStep } from './types'
 export type DAGResult = { ok: true, order: string[] } | { ok: false, error: string }
 
 /**
- * Build DAG from steps that have `dependsOn` (present and array).
- * Steps with no `dependsOn` field are excluded (orphans).
- * Steps with `dependsOn: []` are roots.
+ * Build DAG from all steps. Steps with no `dependsOn` or non-array `dependsOn` are treated as roots (empty deps).
  */
 export function buildDAG(steps: FlowStep[]): Map<string, string[]> {
   const idToDepIds = new Map<string, string[]>()
-  const inGraph = new Set<string>()
   for (const step of steps) {
-    if (step.dependsOn == null)
-      continue
-    if (!Array.isArray(step.dependsOn))
-      continue
-    inGraph.add(step.id)
-    idToDepIds.set(step.id, [...step.dependsOn])
+    idToDepIds.set(step.id, Array.isArray(step.dependsOn) ? [...step.dependsOn] : [])
   }
   return idToDepIds
 }
 
 /**
- * Get set of step ids that are in the DAG (have dependsOn).
+ * Get set of all step ids (used for DAG validation and order).
  */
 export function getDAGStepIds(steps: FlowStep[]): Set<string> {
-  const ids = new Set<string>()
-  for (const step of steps) {
-    if (step.dependsOn != null && Array.isArray(step.dependsOn))
-      ids.add(step.id)
-  }
-  return ids
+  return new Set(steps.map(s => s.id))
 }
 
 /**

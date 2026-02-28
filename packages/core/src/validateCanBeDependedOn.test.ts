@@ -121,7 +121,7 @@ describe('validateCanBeDependedOn', () => {
     expect(err).toContain('other')
   })
 
-  it('ignores steps not in DAG (no dependsOn)', () => {
+  it('includes steps with no dependsOn in DAG; canBeDependedOn still validates', () => {
     const conditionHandler: IStepHandler = {
       getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
       validate: () => true,
@@ -136,7 +136,7 @@ describe('validateCanBeDependedOn', () => {
         { id: 'elseStep', type: 'step', dependsOn: ['cond'] },
       ],
     }
-    expect(getDAGStepIds(flow.steps).has('cond')).toBe(false)
+    expect(getDAGStepIds(flow.steps).has('cond')).toBe(true)
     const registry = { ...noRestrictRegistry, condition: conditionHandler }
     expect(validateCanBeDependedOn(flow, registry)).toBe(null)
   })

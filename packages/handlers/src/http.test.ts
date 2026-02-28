@@ -1,10 +1,9 @@
 import type { FlowStep, StepContext } from '@runflow/core'
-import { stepResult } from '@runflow/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HttpHandler } from './http'
+import { stepResult } from './test-helpers'
 
-const noopRunSubFlow = async () => ({ results: [], newContext: {} })
-const emptyContext: StepContext = { params: {}, runSubFlow: noopRunSubFlow, stepResult }
+const emptyContext: StepContext = { params: {}, stepResult }
 
 describe('http handler', () => {
   const handler = new HttpHandler()
@@ -126,23 +125,33 @@ describe('http handler', () => {
       expect(result.success).toBe(true)
     })
 
-    it('when allowedHttpHosts is set, only those hosts are allowed', async () => {
-      const step: FlowStep = { id: 'h1', type: 'http', url: 'http://localhost:8080/', dependsOn: [] }
-      const ctx: StepContext = { ...emptyContext, allowedHttpHosts: ['api.example.com'] }
-      const result = await handler.run(step, ctx)
+    it('when allowedHttpHosts is set on step, only those hosts are allowed', async () => {
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'http://localhost:8080/',
+        allowedHttpHosts: ['api.example.com'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/not allowed|Allowed/)
     })
 
-    it('when allowedHttpHosts includes the request host, request is allowed', async () => {
+    it('when allowedHttpHosts on step includes the request host, request is allowed', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         status: 200,
         headers: new Headers(),
         text: () => Promise.resolve('ok'),
       } as Response)
-      const step: FlowStep = { id: 'h1', type: 'http', url: 'http://localhost:8080/', dependsOn: [] }
-      const ctx: StepContext = { ...emptyContext, allowedHttpHosts: ['localhost', 'api.example.com'] }
-      const result = await handler.run(step, ctx)
+      const step: FlowStep = {
+        id: 'h1',
+        type: 'http',
+        url: 'http://localhost:8080/',
+        allowedHttpHosts: ['localhost', 'api.example.com'],
+        dependsOn: [],
+      }
+      const result = await handler.run(step, emptyContext)
       expect(result.success).toBe(true)
     })
 

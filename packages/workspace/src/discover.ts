@@ -1,10 +1,10 @@
-import type { ParamDeclaration } from '@runflow/core'
+import type { FlowStep, ParamDeclaration } from '@runflow/core'
 import type { RunflowConfig } from './config'
 import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { openApiToFlows } from '@runflow/convention-openapi'
-import { loadFromFile } from '@runflow/core'
 import { isOpenApiHandlerEntry, mergeOpenApiSpecs, mergeParamDeclarations } from './config'
+import { loadFromFile } from './loadFlow'
 
 export const DEFAULT_MAX_DEPTH = 32
 export const DEFAULT_MAX_FILES = 1000
@@ -106,10 +106,10 @@ export async function buildDiscoverCatalog(
     const flowId = path.relative(baseDir, filePath)
     entries.push({
       flowId: flowId || filePath,
-      name: flow.name,
+      name: flow.name ?? (flowId || filePath),
       description: flow.description,
       params: mergeParamDeclarations(config?.params, flow.params),
-      steps: flow.steps.map(s => ({
+      steps: flow.steps.map((s: FlowStep) => ({
         id: s.id,
         type: s.type,
         ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
@@ -139,10 +139,10 @@ export async function buildDiscoverCatalog(
         for (const [operationKey, flow] of flows) {
           entries.push({
             flowId: `${key}:${operationKey}`,
-            name: flow.name,
+            name: flow.name ?? `${key}:${operationKey}`,
             description: flow.description,
             params: mergeParamDeclarations(config?.params, flow.params),
-            steps: flow.steps.map(s => ({
+            steps: flow.steps.map((s: FlowStep) => ({
               id: s.id,
               type: s.type,
               ...(s.name != null && s.name !== '' ? { name: s.name } : {}),

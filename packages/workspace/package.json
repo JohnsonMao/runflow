@@ -12,7 +12,10 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./src/index.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -23,7 +26,8 @@
   "dependencies": {
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
-    "@runflow/handlers": "workspace:*"
+    "@runflow/handlers": "workspace:*",
+    "yaml": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",

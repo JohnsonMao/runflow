@@ -29,7 +29,6 @@ const server = new McpServer({
 
 /** Performs one config load from current cwd (no cache). Useful when cwd or config location may change. */
 export async function loadConfigOnce(): Promise<ConfigAndRegistry> {
-  console.error('[runflow-mcp] loading config...')
   const cwd = process.cwd()
   const cliConfig = program.opts().config
   const configPath = cliConfig != null

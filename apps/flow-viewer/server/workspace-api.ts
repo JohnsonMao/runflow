@@ -6,6 +6,7 @@ import { run } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
+  buildFlowMapForRun,
   buildRegistryFromConfig,
   createResolveFlow,
   findConfigFile,
@@ -256,9 +257,10 @@ async function handleDetail(
   }
 }
 
-function formatRunResult(result: Awaited<ReturnType<typeof run>>): string {
+function formatRunResult(result: Awaited<ReturnType<typeof run>>, flowName?: string): string {
   const status = result.success ? '**Success**' : '**Failed**'
-  const headline = `${status} — Flow "${result.flowName}" (${result.steps.length} step(s)).`
+  const name = flowName ?? 'Flow'
+  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
   const stepLines = result.steps.map((s) => {
     const badge = s.success ? '✓' : '✗'
     const extra: string[] = []
@@ -294,15 +296,16 @@ async function handleRun(
   try {
     const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
     const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
+    const flowMap = await buildFlowMapForRun(loaded.flow, resolveFlow)
     const effectiveParamsDeclaration = mergeParamDeclarations(ctx.config?.params, loaded.flow.params)
     const registry = ctx.config ? await buildRegistryFromConfig(ctx.config, ctx.configDir) : createBuiltinRegistry()
     const result = await run(loaded.flow, {
       registry,
       params: params && Object.keys(params).length > 0 ? params : undefined,
       effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
-      resolveFlow,
+      flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
     })
-    const text = formatRunResult(result)
+    const text = formatRunResult(result, loaded.flow.name)
     sendJson(res, 200, { success: result.success, text })
   }
   catch (err) {

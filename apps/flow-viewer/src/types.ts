@@ -1,5 +1,5 @@
 /**
- * Flow-viewer 型別：flow graph 從 @runflow/core re-export；
+ * Flow-viewer 型別：flow graph 從 @runflow/workspace re-export；
  * workspace API 回應型別與 vite-plugin-workspace-api 一致，前端與 plugin 共用。
  */
 export type {
@@ -8,7 +8,7 @@ export type {
   FlowGraphEdgeKind,
   FlowGraphNode,
   FlowGraphNodeShape,
-} from '@runflow/core'
+} from '@runflow/workspace'
 
 export interface WorkspaceStatus {
   workspaceRoot: string
