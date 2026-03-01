@@ -15,7 +15,7 @@ export interface FlowGraphNode {
   shape?: FlowGraphNodeShape
 }
 
-/** Edge kind for visualization: loop back (connect→loop), done (loop→done), then/else (condition branches). */
+/** Edge kind for visualization: loop back (iterationCompleteSignals→loop), done (loop→done), then/else (condition branches). */
 export type FlowGraphEdgeKind = 'dependsOn' | 'loopBack' | 'done' | 'then' | 'else'
 
 /** Directed edge: source is dependency of target (target has source in dependsOn). Optional kind for styling/labels. */
@@ -181,7 +181,7 @@ export function flowGraphToJson(graph: FlowGraph): FlowGraphJson {
 // --- flowDefinitionToGraphForVisualization (enriched with loop back edges, edge kinds, node shape) ---
 
 /**
- * Collect edges from loop "connect" and "end" steps back to the loop step for visualization.
+ * Collect edges from loop "iterationCompleteSignals" and "end" steps back to the loop step for visualization.
  * Only includes edges where both endpoints are in nodeIds. Marked as kind 'loopBack'.
  */
 function getLoopBackEdges(flow: FlowDefinition, nodeIds: Set<string>): FlowGraphEdge[] {
@@ -189,11 +189,11 @@ function getLoopBackEdges(flow: FlowDefinition, nodeIds: Set<string>): FlowGraph
   for (const step of flow.steps) {
     if (step.type !== 'loop')
       continue
-    const connectIds = [...new Set([
-      ...normalizeStepIds(step.connect),
+    const signalIds = [...new Set([
+      ...normalizeStepIds(step.iterationCompleteSignals),
       ...normalizeStepIds(step.end),
     ])]
-    for (const fromId of connectIds) {
+    for (const fromId of signalIds) {
       if (nodeIds.has(fromId) && nodeIds.has(step.id))
         edges.push({ source: fromId, target: step.id, kind: 'loopBack' })
     }
@@ -226,7 +226,7 @@ function getEdgeKind(edge: FlowGraphEdge, flow: FlowDefinition): FlowGraphEdgeKi
 function nodeShape(
   node: { id: string, type?: string },
   dagEdges: FlowGraphEdge[],
-  connectSourceIds: Set<string>,
+  signalSourceIds: Set<string>,
 ): FlowGraphNodeShape {
   if (node.type === 'condition')
     return 'decision'
@@ -237,7 +237,7 @@ function nodeShape(
   if (inDegree === 0)
     return 'start'
   if (outDegree === 0) {
-    if (connectSourceIds.has(node.id))
+    if (signalSourceIds.has(node.id))
       return 'process'
     return 'end'
   }
@@ -256,10 +256,10 @@ export function flowDefinitionToGraphForVisualization(flow: FlowDefinition): Flo
     const kind = getEdgeKind(e, flow)
     return kind ? { ...e, kind } : e
   })
-  const connectSourceIds = new Set(loopBackEdges.map(e => e.source))
+  const signalSourceIds = new Set(loopBackEdges.map(e => e.source))
   const nodes = graph.nodes.map(n => ({
     ...n,
-    shape: nodeShape(n, dagEdgesWithKind, connectSourceIds),
+    shape: nodeShape(n, dagEdgesWithKind, signalSourceIds),
   }))
   return {
     ...graph,

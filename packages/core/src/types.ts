@@ -48,13 +48,11 @@ export interface FlowStep {
 
 /**
  * Run another flow (already resolved). Used by flow step handler. Returns RunResult.
- * When runOptions.scopeStepIds is set, a step returning nextSteps with an id outside scope
- * causes the run to stop and return earlyExit + finalParams.
  */
 export type RunFlowFn = (
   flow: FlowDefinition,
   params: Record<string, unknown>,
-  runOptions?: { scopeStepIds?: string[] },
+  runOptions?: object,
 ) => Promise<RunResult>
 
 /** Context passed to each step handler (params + previous outputs). */
@@ -68,8 +66,6 @@ export interface StepContext {
   flowMap?: Record<string, FlowDefinition>
   /** Flow steps (provided by engine). Handlers that need the full DAG (e.g. loop for closure) can use this. */
   steps?: FlowStep[]
-  /** When provided by engine, handler may call during run to append log lines; engine merges them with result.log when handler returns. */
-  appendLog?: (message: string) => void
 }
 
 export interface FlowDefinition {
@@ -91,7 +87,7 @@ export interface StepResult {
    * When omitted, all dependents are scheduled (default). Handlers that control branching (e.g. condition)
    * return nextSteps so the executor does not need to know step types.
    */
-  nextSteps?: string[]
+  nextSteps?: string[] | null
   /**
    * When set, these step ids are marked completed in the main flow (e.g. they were run inside this step's sub-flow).
    * Executor uses this so it does not run them again at top level. Handlers that run sub-flows (e.g. loop) return this.
@@ -106,7 +102,7 @@ export interface StepResultOptions {
   error?: string
   outputs?: Record<string, unknown>
   log?: string
-  nextSteps?: string[]
+  nextSteps?: string[] | null
   completedStepIds?: string[]
   /** When present, executor flattens into main steps with stepId prefix `{parentStepId}.{childStepId}`. */
   subSteps?: StepResult[]
@@ -156,19 +152,22 @@ export interface RunOptions {
   onStepStart?: (stepId: string, step: FlowStep) => void
   /** Called when a step completes (success or failure). */
   onStepComplete?: (stepId: string, result: StepResult) => void
-  /**
-   * When set, if any step returns nextSteps containing an id not in this set, the run stops
-   * and returns earlyExit with that nextSteps and finalParams (current context). Used by loop.
-   */
-  scopeStepIds?: string[]
 }
 
 export interface RunResult {
   success: boolean
   steps: StepResult[]
   error?: string
-  /** When run stopped due to nextSteps outside scopeStepIds (e.g. loop body early exit). */
-  earlyExit?: { nextSteps: string[] }
+  /**
+   * When the flow finishes or is interrupted, these are the nextSteps returned by steps
+   * that do not target any step within the current FlowDefinition.
+   */
+  unconsumedNextSteps?: string[]
+  /**
+   * When set, indicates that the flow terminated early and this signal should be propagated.
+   * Typically set to `null` to signal immediate termination of the parent flow.
+   */
+  nextSteps?: string[] | null
   /** Final context after the last step (for loop to pass to next iteration). */
   finalParams?: Record<string, unknown>
 }

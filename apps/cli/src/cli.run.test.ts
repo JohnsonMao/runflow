@@ -369,6 +369,7 @@ describe('flow run', () => {
       '    type: loop',
       '    count: 3',
       '    entry: bodyStep',
+      '    iterationCompleteSignals: []', // Added to satisfy validation
       '    dependsOn: []',
       '  - id: bodyStep',
       '    type: set',

@@ -124,12 +124,12 @@ describe('flowGraphToJson', () => {
 })
 
 describe('flowDefinitionToGraphForVisualization', () => {
-  it('adds loop back edges from connect step to loop step', () => {
+  it('adds loop back edges from iterationCompleteSignals step to loop step', () => {
     const flow: FlowDefinition = {
       name: 'with-loop',
       steps: [
         { id: 'init', type: 'set', set: {}, dependsOn: [] },
-        { id: 'loop', type: 'loop', count: 2, entry: ['body'], connect: ['body'], dependsOn: ['init'] },
+        { id: 'loop', type: 'loop', count: 2, entry: ['body'], iterationCompleteSignals: ['body'], dependsOn: ['init'] },
         { id: 'body', type: 'set', set: {}, dependsOn: ['loop'] },
         { id: 'done', type: 'set', set: {}, dependsOn: ['loop'] },
       ],
@@ -140,7 +140,7 @@ describe('flowDefinitionToGraphForVisualization', () => {
     expect(graph.edges).toContainEqual({ source: 'body', target: 'loop', kind: 'loopBack' })
   })
 
-  it('supports end when connect is absent', () => {
+  it('supports end when iterationCompleteSignals is absent', () => {
     const flow: FlowDefinition = {
       name: 'loop-end',
       steps: [
@@ -152,11 +152,11 @@ describe('flowDefinitionToGraphForVisualization', () => {
     expect(graph.edges).toContainEqual({ source: 'a', target: 'loop', kind: 'loopBack' })
   })
 
-  it('does not add edge when connect step is not in graph', () => {
+  it('does not add edge when iterationCompleteSignals step is not in graph', () => {
     const flow: FlowDefinition = {
-      name: 'orphan-connect',
+      name: 'orphan-iterationCompleteSignals',
       steps: [
-        { id: 'loop', type: 'loop', count: 1, entry: ['x'], connect: ['orphan'], dependsOn: [] },
+        { id: 'loop', type: 'loop', count: 1, entry: ['x'], iterationCompleteSignals: ['orphan'], dependsOn: [] },
         { id: 'x', type: 'set', set: {}, dependsOn: ['loop'] },
       ],
     }
@@ -164,11 +164,11 @@ describe('flowDefinitionToGraphForVisualization', () => {
     expect(graph.edges.some(e => e.target === 'loop' && e.source === 'orphan')).toBe(false)
   })
 
-  it('adds loopBack from multiple connect nodes and gives them shape process', () => {
+  it('adds loopBack from multiple iterationCompleteSignals nodes and gives them shape process', () => {
     const flow: FlowDefinition = {
-      name: 'multi-connect',
+      name: 'multi-iterationCompleteSignals',
       steps: [
-        { id: 'loop', type: 'loop', count: 1, entry: ['a'], connect: ['A3', 'nodeB'], dependsOn: [] },
+        { id: 'loop', type: 'loop', count: 1, entry: ['a'], iterationCompleteSignals: ['A3', 'nodeB'], dependsOn: [] },
         { id: 'a', type: 'set', set: {}, dependsOn: ['loop'] },
         { id: 'A3', type: 'set', set: {}, dependsOn: ['a'] },
         { id: 'nodeB', type: 'set', set: {}, dependsOn: ['a'] },
@@ -181,11 +181,11 @@ describe('flowDefinitionToGraphForVisualization', () => {
     expect(graph.nodes.find(n => n.id === 'nodeB')?.shape).toBe('process')
   })
 
-  it('merges connect and end so both get loopBack and shape process', () => {
+  it('merges iterationCompleteSignals and end so both get loopBack and shape process', () => {
     const flow: FlowDefinition = {
-      name: 'connect-and-end',
+      name: 'iterationCompleteSignals-and-end',
       steps: [
-        { id: 'loop', type: 'loop', count: 1, entry: ['a'], connect: ['A3'], end: ['nodeB'], dependsOn: [] },
+        { id: 'loop', type: 'loop', count: 1, entry: ['a'], iterationCompleteSignals: ['A3'], end: ['nodeB'], dependsOn: [] },
         { id: 'a', type: 'set', set: {}, dependsOn: ['loop'] },
         { id: 'A3', type: 'set', set: {}, dependsOn: ['a'] },
         { id: 'nodeB', type: 'set', set: {}, dependsOn: ['a'] },

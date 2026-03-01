@@ -61,13 +61,13 @@ steps:
     set:
       branchResult: else
     dependsOn: [cond]
-  # --- loop：entry -> loopBody，connect 從 noop 兩條分支匯回，done -> nap ---
+  # --- loop：entry -> loopBody，iterationCompleteSignals 從 noop 兩條分支匯回，done -> nap ---
   - id: loop
     name: 迴圈
     type: loop
     when: "params.loopBody.iterIndex >= params.init.count - 1"
     entry: [loopBody]
-    connect: [A3, nodeB]
+    iterationCompleteSignals: [A3, nodeB]
     done: [nap]
     maxIterations: 100
     dependsOn: [thenStep]

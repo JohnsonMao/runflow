@@ -1,10 +1,7 @@
 // @env node
-import type { FlowDefinition, FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
-import { evaluateToBoolean, normalizeStepIds } from '@runflow/core'
-import { closureIdsThatDependOnDone, computeBackwardClosure, computeLoopClosure } from './loopClosure'
-
-/** Max iterations for when-driven loops to prevent infinite loop DoS. */
-export const DEFAULT_MAX_LOOP_ITERATIONS = 10_000
+import type { FlowDefinition, FlowStep, IStepHandler, RunResult, StepContext, StepResult } from '@runflow/core'
+import { normalizeStepIds } from '@runflow/core'
+import { closureIdsThatDependOnDone, computeLoopClosure } from './loopClosure'
 
 /** Build a sub-flow from body step ids: same steps with dependsOn restricted to body (self-contained DAG). */
 function buildSubFlow(flowSteps: FlowStep[], bodyStepIds: string[]): FlowDefinition {
@@ -31,26 +28,20 @@ function parseCount(v: unknown): number | null {
 }
 
 export class LoopHandler implements IStepHandler {
-  getAllowedDependentIds(step: FlowStep): string[] {
-    return [
-      ...normalizeStepIds(step.entry),
-      ...normalizeStepIds(step.done),
-      ...normalizeStepIds(step.connect),
-    ]
-  }
-
   validate(step: FlowStep): true | string {
     const hasItems = Array.isArray(step.items)
     const hasCount = parseCount(step.count) !== null
-    const hasWhen = typeof step.when === 'string' && step.when.length > 0
-    const driverCount = (hasItems ? 1 : 0) + (hasCount ? 1 : 0) + (hasWhen ? 1 : 0)
+    const driverCount = (hasItems ? 1 : 0) + (hasCount ? 1 : 0)
     if (driverCount === 0)
-      return 'loop step requires exactly one of: items (array), count (non-negative number), or when (expression)'
+      return 'loop step requires exactly one of: items (array), or count (non-negative number)'
     if (driverCount > 1)
-      return 'loop step must have exactly one of: items, count, or when (not multiple)'
+      return 'loop step must have exactly one of: items, or count (not both)'
     const entryIds = normalizeStepIds(step.entry)
     if (entryIds.length === 0)
       return 'loop step requires entry (non-empty step id or array of ids)'
+    const sigs = step.iterationCompleteSignals
+    if (sigs !== undefined && !Array.isArray(sigs))
+      return 'loop step iterationCompleteSignals must be an array of step ids'
     return true
   }
 
@@ -60,6 +51,8 @@ export class LoopHandler implements IStepHandler {
     const runFn = context.run
     const entryIds = normalizeStepIds(step.entry)
     const flowSteps = context.steps
+    const iterationCompleteSignals = Array.isArray(step.iterationCompleteSignals) ? step.iterationCompleteSignals : []
+
     if (!runFn) {
       return context.stepResult(step.id, false, { error: 'run not available (loop requires context.run)' })
     }
@@ -68,25 +61,19 @@ export class LoopHandler implements IStepHandler {
         error: 'loop step requires steps on context (provided by executor)',
       })
     }
+
     const closureIds = computeLoopClosure(flowSteps, entryIds, step.id)
     const doneIds = normalizeStepIds(step.done)
-    const connectIds = normalizeStepIds(step.connect)
-    let bodyStepIds: string[]
-    if (connectIds.length > 0) {
-      const backward = computeBackwardClosure(flowSteps, connectIds)
-      bodyStepIds = closureIds.filter(id => backward.has(id))
-    }
-    else {
-      const excludedFromBody = closureIdsThatDependOnDone(flowSteps, closureIds, doneIds)
-      bodyStepIds = closureIds.filter(id => !excludedFromBody.has(id))
-    }
-    if (bodyStepIds.length === 0) {
+
+    const excludedFromBody = closureIdsThatDependOnDone(flowSteps, closureIds, doneIds)
+    const loopBodySteps = closureIds.filter(id => !excludedFromBody.has(id))
+
+    if (loopBodySteps.length === 0) {
       return context.stepResult(step.id, false, {
-        error: connectIds.length > 0
-          ? 'loop closure is empty; ensure entry can reach connect (path entry → connect)'
-          : 'loop closure is empty (or only done steps); ensure entry ids exist and are not all in done',
+        error: 'loop closure is empty (or only done steps); ensure entry ids exist and are not all in done',
       })
     }
+
     const closureSet = new Set(closureIds)
     for (const eid of entryIds) {
       if (!closureSet.has(eid)) {
@@ -95,135 +82,125 @@ export class LoopHandler implements IStepHandler {
         })
       }
     }
-    const completedStepIds = [...bodyStepIds]
+
     let ctx: Record<string, unknown> = { ...context.params }
     let stepSuccess = true
     let iterationCount = 0
     const subSteps: StepResult[] = []
 
-    const runBody = async (bodyCtx: Record<string, unknown>) => {
-      const subFlow = buildSubFlow(flowSteps, bodyStepIds)
-      return runFn(subFlow, bodyCtx, { scopeStepIds: bodyStepIds })
+    const runBody = async (bodyCtx: Record<string, unknown>): Promise<RunResult> => {
+      const subFlow = buildSubFlow(flowSteps, loopBodySteps)
+      return runFn(subFlow, bodyCtx)
     }
 
-    const pushIterationSubSteps = (iterationIndex: number, runResult: Awaited<ReturnType<typeof runBody>>) => {
+    const pushIterationSubSteps = (iterationIndex: number, runResult: RunResult) => {
       const prefix = `${step.id}.iteration_${iterationIndex + 1}`
       subSteps.push({ stepId: prefix, success: true })
       for (const s of runResult.steps)
         subSteps.push({ ...s, stepId: `${prefix}.${s.stepId}` })
     }
 
+    const checkIterationCompleteSignal = (runResult: RunResult): boolean => {
+      if (iterationCompleteSignals.length === 0) {
+        return runResult.success
+      }
+
+      // Check if any executed step in the sub-DAG is one of the signal steps
+      for (const s of runResult.steps) {
+        if (s.success && iterationCompleteSignals.includes(s.stepId)) {
+          return true
+        }
+      }
+      return false
+    }
+
+    // --- Items Driver ---
     if (Array.isArray(step.items)) {
       const items = step.items
       for (let index = 0; index < items.length; index++) {
         const bodyCtx = { ...ctx, item: items[index], index, items }
         const out = await runBody(bodyCtx)
+
         pushIterationSubSteps(index, out)
-        ctx = out.finalParams ?? ctx
-        if (stepSuccess && out.steps.some(r => !r.success))
-          stepSuccess = false
-        iterationCount++
-        if (out.earlyExit) {
-          return context.stepResult(step.id, stepSuccess, {
-            outputs: { ...ctx, count: iterationCount, items: [...items] },
-            nextSteps: out.earlyExit.nextSteps,
-            completedStepIds,
-            subSteps,
-            log: `early exit after ${iterationCount} iteration(s)`,
+
+        if (out.nextSteps === null) {
+          // If sub-flow signals immediate termination, propagate it.
+          return context.stepResult(step.id, out.success, {
+            error: out.error,
+            outputs: out.finalParams ?? ctx,
+            nextSteps: null, // Propagate the null signal
+            subSteps, // accumulated subSteps
           })
         }
+
+        ctx = out.finalParams ?? ctx
+        if (!out.success) // Check sub-flow success
+          stepSuccess = false
+
+        if (!checkIterationCompleteSignal(out)) {
+          // If signal not reached and signals are mandatory, terminate loop early
+          return context.stepResult(step.id, stepSuccess, {
+            outputs: { ...ctx, count: iterationCount + 1, items: [...items] },
+            subSteps,
+            nextSteps: null,
+            log: `loop terminated early after ${iterationCount + 1} iteration(s) (no completion signal reached)`,
+          })
+        }
+        iterationCount++
       }
+      // Normal completion
       return context.stepResult(step.id, stepSuccess, {
         outputs: { ...ctx, count: items.length, items: [...items] },
-        nextSteps: doneIds.length > 0 ? doneIds : undefined,
-        completedStepIds,
+        nextSteps: stepSuccess ? (doneIds.length > 0 ? doneIds : undefined) : null,
         subSteps,
         log: `done, ${items.length} iteration(s)`,
       })
     }
 
+    // --- Count Driver ---
     const countNum = parseCount(step.count)
     if (countNum !== null) {
       const n = countNum
       for (let index = 0; index < n; index++) {
         const bodyCtx = { ...ctx, index, count: n }
         const out = await runBody(bodyCtx)
+
         pushIterationSubSteps(index, out)
-        ctx = out.finalParams ?? ctx
-        if (stepSuccess && out.steps.some(r => !r.success))
-          stepSuccess = false
-        iterationCount++
-        if (out.earlyExit) {
-          return context.stepResult(step.id, stepSuccess, {
-            outputs: { ...ctx, count: iterationCount },
-            nextSteps: out.earlyExit.nextSteps,
-            completedStepIds,
-            subSteps,
-            log: `early exit after ${iterationCount} iteration(s)`,
+
+        if (out.nextSteps === null) {
+          // If sub-flow signals immediate termination, propagate it.
+          return context.stepResult(step.id, out.success, {
+            error: out.error,
+            outputs: out.finalParams ?? ctx,
+            nextSteps: null, // Propagate the null signal
+            subSteps, // accumulated subSteps
           })
         }
+
+        ctx = out.finalParams ?? ctx
+        if (!out.success) // Check sub-flow success
+          stepSuccess = false
+
+        if (!checkIterationCompleteSignal(out)) {
+          // If signal not reached and signals are mandatory, terminate loop early
+          return context.stepResult(step.id, stepSuccess, {
+            outputs: { ...ctx, count: iterationCount + 1 },
+            subSteps,
+            nextSteps: null,
+            log: `loop terminated early after ${iterationCount + 1} iteration(s) (no completion signal reached)`,
+          })
+        }
+        iterationCount++
       }
+      // Normal completion
       return context.stepResult(step.id, stepSuccess, {
         outputs: { ...ctx, count: iterationCount },
-        nextSteps: doneIds.length > 0 ? doneIds : undefined,
-        completedStepIds,
+        nextSteps: stepSuccess ? (doneIds.length > 0 ? doneIds : undefined) : null,
         subSteps,
         log: `done, ${iterationCount} iteration(s)`,
       })
     }
 
-    if (typeof step.when === 'string' && step.when.length > 0) {
-      const whenExpr = step.when
-      const maxIterations = (typeof step.maxIterations === 'number' && step.maxIterations > 0)
-        ? Math.min(step.maxIterations, DEFAULT_MAX_LOOP_ITERATIONS)
-        : DEFAULT_MAX_LOOP_ITERATIONS
-      while (iterationCount < maxIterations) {
-        const bodyCtx = { ...ctx, index: iterationCount, count: maxIterations }
-        const out = await runBody(bodyCtx)
-        pushIterationSubSteps(iterationCount, out)
-        ctx = out.finalParams ?? ctx
-        if (stepSuccess && out.steps.some(r => !r.success))
-          stepSuccess = false
-        iterationCount++
-        if (out.earlyExit) {
-          return context.stepResult(step.id, stepSuccess, {
-            outputs: { ...ctx, count: iterationCount },
-            nextSteps: out.earlyExit.nextSteps,
-            completedStepIds,
-            subSteps,
-            log: `early exit after ${iterationCount} iteration(s)`,
-          })
-        }
-        try {
-          if (evaluateToBoolean(whenExpr, ctx as Record<string, unknown>, { maxLength: 2000 })) {
-            return context.stepResult(step.id, stepSuccess, {
-              outputs: { ...ctx, count: iterationCount },
-              nextSteps: doneIds.length > 0 ? doneIds : undefined,
-              completedStepIds,
-              subSteps,
-              log: `done, ${iterationCount} iteration(s)`,
-            })
-          }
-        }
-        catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          return context.stepResult(step.id, false, {
-            error: `loop when expression failed: ${msg}`,
-            outputs: { ...ctx, count: iterationCount },
-            completedStepIds,
-            subSteps,
-          })
-        }
-      }
-      return context.stepResult(step.id, false, {
-        error: `loop when exceeded max iterations (${maxIterations})`,
-        outputs: { ...ctx, count: iterationCount },
-        completedStepIds,
-        subSteps,
-        log: `exceeded max iterations (${maxIterations})`,
-      })
-    }
-
-    return context.stepResult(step.id, false, { error: 'loop step requires one of: items, count, or when' })
+    return context.stepResult(step.id, false, { error: 'loop step requires one of: items, or count' })
   }
 }

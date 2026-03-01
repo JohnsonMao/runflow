@@ -6,7 +6,7 @@ import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, Ste
 import { topologicalSort } from './dag'
 import { evaluateToBoolean } from './safeExpression'
 import { substituteStep } from './substitute'
-import { buildStepByIdMap, getEffectiveOutputKey, isPlainObject, mergeBatchResultsIntoContext } from './utils'
+import { buildStepByIdMap, getEffectiveOutputKey, isPlainObject } from './utils'
 
 /** Build a StepResult with consistent shape; used as context.stepResult and internally. */
 export function stepResult(
@@ -122,32 +122,36 @@ function getRunnable(
   return runnable
 }
 
-interface ExecuteStepOnceDeps {
+interface RunStepDeps {
   stepByIdMap: Map<string, FlowStep>
   registry: StepRegistry
   stepResult: StepResultFn
   runWithTimeout: (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>) => Promise<StepResult>
   buildStepContext: (ctx: Record<string, unknown>) => StepContext
+  dryRun?: boolean
 }
 
-async function executeStepOnce(
+async function runStep(
   stepId: string,
   ctx: Record<string, unknown>,
-  deps: ExecuteStepOnceDeps,
+  deps: RunStepDeps,
 ): Promise<{ result: StepResult }> {
-  const { stepByIdMap, registry, stepResult, runWithTimeout, buildStepContext } = deps
+  const { stepByIdMap, registry, stepResult, runWithTimeout, buildStepContext, dryRun } = deps
   const step = stepByIdMap.get(stepId)
   if (!step) {
-    return { result: stepResult(stepId, false, { error: `Step not found: ${stepId}` }) }
+    return { result: stepResult(stepId, false, { error: `Step not found: ${stepId}`, nextSteps: null }) }
   }
   const sub = substituteStep(step, { ...ctx, params: ctx })
   const ent = registry[step.type]
   if (!ent) {
-    return { result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}` }) }
+    return { result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}`, nextSteps: null }) }
   }
   const valid = ent.validate?.(sub)
   if (valid !== undefined && valid !== true) {
-    return { result: stepResult(stepId, false, { error: valid }) }
+    return { result: stepResult(stepId, false, { error: valid, nextSteps: null }) }
+  }
+  if (dryRun) {
+    return { result: stepResult(stepId, true) }
   }
   if (evaluateSkip(sub, ctx)) {
     return { result: stepResult(stepId, true) }
@@ -166,7 +170,7 @@ async function executeStepOnce(
 export type RunFn = (flow: FlowDefinition, options: RunOptions) => Promise<RunResult>
 
 /**
- * Execute a single flow: DAG main loop, context.run for nested flows. Optional scopeStepIds for early exit.
+ * Execute a single flow: DAG main loop, context.run for nested flows.
  */
 export async function executeFlow(
   flow: FlowDefinition,
@@ -191,7 +195,6 @@ export async function executeFlow(
   const run: StepContext['run'] = async (
     childFlow: FlowDefinition,
     params: Record<string, unknown>,
-    runOptions?: { scopeStepIds?: string[] },
   ): Promise<RunResult> => {
     if (flowCallDepth >= maxFlowCallDepth)
       return { success: false, steps: [], error: 'max flow-call depth exceeded' }
@@ -201,36 +204,7 @@ export async function executeFlow(
       flowCallDepth: flowCallDepth + 1,
       maxFlowCallDepth,
       registry,
-      scopeStepIds: runOptions?.scopeStepIds,
     })
-  }
-
-  if (options.dryRun) {
-    // Dry run: validate each step (substitute, handler lookup, validate) without executing run().
-    let drySuccess = true
-    for (const stepId of dagOrder) {
-      const step = stepByIdMap.get(stepId)
-      if (!step) {
-        steps.push(stepResult(stepId, false, { error: `Step not found: ${stepId}` }))
-        drySuccess = false
-        continue
-      }
-      const sub = substituteStep(step, { ...initialParams, params: initialParams })
-      const ent = registry[step.type]
-      if (!ent) {
-        steps.push(stepResult(stepId, false, { error: `Unknown step type: ${step.type}` }))
-        drySuccess = false
-        continue
-      }
-      const valid = ent.validate?.(sub)
-      if (valid !== undefined && valid !== true) {
-        steps.push(stepResult(stepId, false, { error: valid }))
-        drySuccess = false
-        continue
-      }
-      steps.push(stepResult(stepId, true))
-    }
-    return { success: drySuccess, steps }
   }
 
   let context: Record<string, unknown> = { ...initialParams }
@@ -245,18 +219,37 @@ export async function executeFlow(
     steps: flow.steps,
   }
 
+  const buildStepContext = (c: Record<string, unknown>): StepContext => ({
+    ...stepContext,
+    params: c,
+  })
+
+  if (options.dryRun) {
+    // Dry run: validate each step (substitute, handler lookup, validate) without executing run().
+    const runStepDeps: RunStepDeps = {
+      stepByIdMap,
+      registry,
+      stepResult,
+      runWithTimeout: runWithTimeoutBound,
+      buildStepContext,
+      dryRun: true,
+    }
+    let drySuccess = true
+    for (const stepId of dagOrder) {
+      const { result } = await runStep(stepId, initialParams, runStepDeps)
+      steps.push(result)
+      if (!result.success)
+        drySuccess = false
+    }
+    return { success: drySuccess, steps }
+  }
+
   let success = true
   const runOneStepInWave = async (
     stepId: string,
     ctx: Record<string, unknown>,
-  ): Promise<{ result: StepResult, outputs?: Record<string, unknown>, nextSteps?: string[] }> => {
-    const accumulatedLog: string[] = []
-    const buildStepContext = (c: Record<string, unknown>): StepContext => ({
-      ...stepContext,
-      params: c,
-      appendLog: (msg: string) => { accumulatedLog.push(msg) },
-    })
-    const onceDeps: ExecuteStepOnceDeps = {
+  ): Promise<{ result: StepResult, outputs?: Record<string, unknown>, nextSteps?: string[] | null, flowTerminated?: boolean }> => {
+    const runStepDeps: RunStepDeps = {
       stepByIdMap,
       registry,
       stepResult,
@@ -266,15 +259,20 @@ export async function executeFlow(
     const step = stepByIdMap.get(stepId)
     if (step)
       options.onStepStart?.(stepId, step)
-    const { result } = await executeStepOnce(stepId, ctx, onceDeps)
+    const { result } = await runStep(stepId, ctx, runStepDeps)
     options.onStepComplete?.(stepId, result)
-    const resultWithLog = accumulatedLog.length > 0
-      ? { ...result, log: [...accumulatedLog, result.log].filter(Boolean).join('\n') }
-      : result
+
+    if (result.nextSteps === null) {
+      return {
+        result,
+        flowTerminated: true,
+      }
+    }
+
     return {
-      result: resultWithLog,
-      outputs: resultWithLog.outputs && isPlainObject(resultWithLog.outputs) ? resultWithLog.outputs : undefined,
-      nextSteps: resultWithLog.nextSteps,
+      result,
+      outputs: result.outputs && isPlainObject(result.outputs) ? result.outputs : undefined,
+      nextSteps: result.nextSteps,
     }
   }
 
@@ -283,7 +281,17 @@ export async function executeFlow(
     if (runnable.length === 0)
       break
     const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
-    for (const { result, outputs, nextSteps } of batchResults) {
+    for (const { result, outputs, nextSteps, flowTerminated } of batchResults) {
+      if (flowTerminated) {
+        // A step returned nextSteps: null, so terminate the entire flow.
+        steps.push(result)
+        return {
+          success: result.success, // Use the last step's success for the flow result
+          steps,
+          finalParams: context,
+          error: result.error, // Propagate error if the terminating step had one
+        }
+      }
       steps.push(result)
       if (result.subSteps?.length) {
         for (const s of result.subSteps)
@@ -294,21 +302,8 @@ export async function executeFlow(
         for (const id of result.completedStepIds)
           completed.add(id)
       }
-      if (nextSteps !== undefined && Array.isArray(nextSteps))
+      if (nextSteps !== undefined && nextSteps !== null && Array.isArray(nextSteps)) {
         stepNextSteps[result.stepId] = nextSteps
-      const scopeStepIds = options.scopeStepIds
-      if (scopeStepIds?.length && nextSteps?.some(id => !scopeStepIds.includes(id))) {
-        const finalContext = mergeBatchResultsIntoContext(
-          batchResults.map(b => ({ result: b.result })),
-          stepByIdMap,
-          context,
-        )
-        return {
-          success,
-          steps,
-          earlyExit: { nextSteps: nextSteps! },
-          finalParams: finalContext,
-        }
       }
       const out = outputs && isPlainObject(outputs) ? outputs : {}
       const effectiveKey = getEffectiveOutputKey(stepByIdMap.get(result.stepId), result.stepId)
@@ -319,9 +314,11 @@ export async function executeFlow(
     stepContext.params = context
   }
 
-  return {
+  const runResult: RunResult = {
     success,
     steps,
     finalParams: context,
   }
+
+  return runResult
 }

@@ -110,12 +110,12 @@ describe('flowDefinitionToGraph', () => {
     expect(condNode?.shape).toBe('decision')
   })
 
-  it('loop step: done edge kind and loopBack from connect', () => {
+  it('loop step: done edge kind and loopBack from iterationCompleteSignals', () => {
     const flow: FlowDefinitionInput = {
       name: 'loop',
       steps: [
         { id: 'a', type: 'set', dependsOn: [] },
-        { id: 'loop', type: 'loop', dependsOn: ['a'], done: ['b'], connect: ['a'] },
+        { id: 'loop', type: 'loop', dependsOn: ['a'], done: ['b'], iterationCompleteSignals: ['a'] },
         { id: 'b', type: 'set', dependsOn: ['loop'] },
       ],
     }
@@ -126,7 +126,7 @@ describe('flowDefinitionToGraph', () => {
     expect(loopNode?.shape).toBe('loop')
   })
 
-  it('loop with end (fallback for connect): loopBack still added', () => {
+  it('loop with end (fallback for iterationCompleteSignals): loopBack still added', () => {
     const flow: FlowDefinitionInput = {
       name: 'loop-end',
       steps: [
@@ -151,7 +151,7 @@ describe('getNodeShape', () => {
     expect(shape).toBe('start')
   })
 
-  it('node with no outgoing edges and not in connectSourceIds → end', () => {
+  it('node with no outgoing edges and not in signalSourceIds → end', () => {
     const shape = getNodeShape({ id: 'c', type: 'set', label: 'c (set)' }, dagEdges)
     expect(shape).toBe('end')
   })
@@ -176,7 +176,7 @@ describe('getNodeShape', () => {
     expect(shape).toBe('loop')
   })
 
-  it('node with no outgoing but in connectSourceIds → process', () => {
+  it('node with no outgoing but in signalSourceIds → process', () => {
     // Node a has one incoming, zero outgoing in DAG; it is loop-back source so shown as process
     const dagEdgesWithIn = [{ source: 'x', target: 'a' }]
     const shape = getNodeShape(

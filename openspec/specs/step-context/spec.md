@@ -40,7 +40,7 @@ A step's result MAY include an optional `outputs` field of type `Record<string, 
 
 ### Requirement: Context SHALL accumulate with step outputs namespaced by effective output key
 
-The executor SHALL maintain a single context object. Initial flow params SHALL remain at the top level (e.g. `context.a`, `context.title`). After each step, if the step's result has `outputs`, the executor SHALL assign `context[effectiveKey] = outputs` (or empty object when outputs is absent), where **effectiveKey** is the step's `outputKey` when present and a non-empty string, otherwise the step's `id`. Step outputs SHALL NOT be merged flat into context; they SHALL be namespaced by this effective key so that downstream steps and templates reference them as `{{ effectiveKey.field }}` (e.g. `{{ init.count }}`, `{{ api.body }}`).
+The executor SHALL maintain a single context object where initial flow params remain at the top level. After each step, the executor SHALL assign `context[effectiveKey] = outputs` (or an empty object), where **effectiveKey** is the step's `outputKey` if present, otherwise its `id`. Step outputs SHALL NOT be merged flat; they MUST be namespaced by this effective key for downstream reference (e.g., `{{ s1.field }}`).
 
 #### Scenario: First step sees initial params only
 
@@ -87,9 +87,9 @@ A js step MUST be executed with the current context available in the vm as a rea
 
 ### Requirement: context.run (RunFlowFn) and scopeStepIds; handler SHALL validate body step ids when building sub-flow
 
-The executor SHALL provide optional `run?: RunFlowFn` on the step context, where `RunFlowFn(flow, params, runOptions?)` runs the given flow with initial params and returns `Promise<RunResult>`. When `runOptions.scopeStepIds` is set, if any step in that run returns `nextSteps` containing an id **not** in scopeStepIds, the run SHALL stop immediately and return `RunResult` with `earlyExit: { nextSteps }` and `finalParams` (current context). Handlers that run a sub-graph (e.g. loop) SHALL build a sub-flow from the flow steps (e.g. from `context.steps`) restricted to body step ids, and call `context.run(subFlow, params, { scopeStepIds: bodyStepIds })`. When any requested body step id is not present in the flow steps, the handler SHALL return a StepResult with success: false and an error (e.g. "Step(s) not found: &lt;ids&gt;") so the flow run fails with a clear message.
+The executor SHALL provide `run?: RunFlowFn` on the step context. When `runOptions.scopeStepIds` is set, the run SHALL stop and return `earlyExit` if any step returns `nextSteps` outside that scope. Handlers running a sub-graph (e.g., loops) SHALL build a sub-flow from `context.steps` restricted to body ids and call `run` with `scopeStepIds`. If a body step id is missing from the flow, the handler SHALL return `success: false` with a "Step(s) not found" error to ensure clear failure.
 
-#### Scenario: Handler validates body step ids before calling run
+#### Scenario: run with non-existent body id — handler validates before calling run
 
 - **WHEN** a handler builds a sub-flow for body ids that include `nonexistent` and that id is not in `context.steps`
 - **THEN** the handler SHALL return a StepResult with success: false and an error indicating the missing step id(s)
@@ -105,22 +105,26 @@ StepContext SHALL include an optional `appendLog?: (message: string) => void`. W
 - **THEN** the StepResult for that step SHALL have log equal to the concatenation of accumulated lines and the returned log (e.g. "start\niteration 1/3\niteration 2/3\niteration 3/3\ncomplete\niterations: 3" or equivalent)
 - **AND** the formatter SHALL display that log so that lifecycle and final summary are both visible
 
-### Requirement: Sub-flow run result and subSteps; executor SHALL flatten subSteps with parent prefix
+### Requirement: Sub-flow run result and subSteps; executor flattens subSteps with parent prefix
 
-When a handler invokes `context.run(subFlow, params, { scopeStepIds })`, the run returns a `RunResult` with `steps`, `finalParams`, and optionally `earlyExit`. The handler MAY return `subSteps` on its own StepResult (e.g. iteration markers and prefixed body step results). The executor SHALL flatten each step's `subSteps` into the main RunResult.steps with stepId prefix `{parentStepId}.{childStepId}` so that the execution timeline is preserved. The caller step's own result SHALL appear after its subSteps in the flattened order when the handler returns.
+When a handler calls `run`, it returns a `RunResult`. The handler MAY return `subSteps` on its own `StepResult`. The executor SHALL flatten these `subSteps` into the main `RunResult.steps` using a `{parentStepId}.{childStepId}` prefix to preserve timeline order. The caller step's own result SHALL appear in the flattened list immediately after its `subSteps`.
 
 #### Scenario: Loop step returns subSteps; executor flattens with prefix
-- **WHEN** A loop step runs and returns `StepResult` with `subSteps`: e.g., `['loop.iteration_1', 'loop.iteration_1.body']`, then `['loop.iteration_2', 'loop.iteration_2.body']`, and finally the loop step's own result.
-- **THEN** The main `RunResult.steps` SHALL contain these entries in that order (flattened with parent prefix as given).
-- **AND** The loop step MAY set `result.log` to indicate completion (e.g., "done, N iteration(s)" or "early exit after N iteration(s)").
 
-### Requirement: StepContext SHALL provide run (RunFlowFn) for nested flows; no pushMarkerStep
+- **WHEN** a loop step runs and returns StepResult with `subSteps`: e.g. marker `l1.iteration_1`, then `l1.iteration_1.body`, then marker `l1.iteration_2`, then `l1.iteration_2.body`, then the loop step's own result
+- **THEN** the main RunResult.steps SHALL contain those entries in that order (flattened with parent prefix as given)
+- **AND** the loop step MAY set result.log to indicate completion (e.g. "done, N iteration(s)" or "early exit after N iteration(s)")
 
-#### Scenario: Handler uses context.run and scopeStepIds
-- **WHEN** A handler calls `context.run(subFlow, params, { scopeStepIds: ['bodyStep1', 'bodyStep2'] })` and the sub-flow executes. If a step in the sub-flow returns `nextSteps` including an ID not in `scopeStepIds` (e.g., `['bodyStep1', 'externalStep']`), the run SHALL stop immediately.
-- **THEN** The `context.run` call SHALL return `earlyExit: { nextSteps: ['bodyStep1', 'externalStep'] }` and `finalParams`.
-- **AND** If a handler attempts to `context.run` with `scopeStepIds` for a `subFlow` where a step ID in `scopeStepIds` is missing from the `context.steps` available to the handler, the handler SHALL return a `StepResult` with `success: false` and an appropriate error message (e.g., "Step(s) not found: nonexistentId").
-- **AND** The `pushMarkerStep` functionality is deprecated and SHALL NOT be used; timeline order is managed via `subSteps`.
+### Requirement: StepContext provides run (RunFlowFn) for nested flows; no pushMarkerStep
+
+StepContext SHALL include optional `run?: RunFlowFn` so handlers can run another flow. The loop handler SHALL use `run` and return `subSteps` on its `StepResult` for execution order; the executor flattens these into `RunResult.steps`. The previous `pushMarkerStep` is no longer part of the contract; timeline order is expressed via `subSteps`.
+
+#### Scenario: Loop handler uses subSteps instead of pushMarkerStep
+
+- **WHEN** a loop handler executes and wants to record sub-flow progress
+- **THEN** it SHALL call `context.run` and collect results into `subSteps`
+- **AND** it SHALL return those `subSteps` in its final `StepResult`
+- **AND** it SHALL NOT rely on a `pushMarkerStep` function to record iteration boundaries
 
 ### Requirement: Command steps and outputs (reserved)
 

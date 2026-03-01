@@ -18,7 +18,7 @@ export interface FlowDefinitionInput {
     description?: string
     type?: string
     dependsOn?: string[]
-    connect?: string | string[]
+    iterationCompleteSignals?: string | string[]
     end?: string | string[]
     done?: string | string[]
     then?: string | string[]
@@ -33,7 +33,7 @@ export interface FlowDefinitionInput {
 export function getNodeShape(
   node: { id: string, type?: string, label?: string },
   dagEdges: FlowGraphEdge[],
-  connectSourceIds?: Set<string>,
+  signalSourceIds?: Set<string>,
 ): FlowGraphNodeShape {
   const isCondition = node.type === 'condition'
     || (typeof node.label === 'string' && node.label.includes('(condition)'))
@@ -46,7 +46,7 @@ export function getNodeShape(
   if (inDegree === 0)
     return 'start'
   if (outDegree === 0) {
-    if (connectSourceIds?.has(node.id))
+    if (signalSourceIds?.has(node.id))
       return 'process'
     return 'end'
   }
@@ -93,21 +93,21 @@ export function flowDefinitionToGraph(flow: FlowDefinitionInput): FlowGraph {
     }
   }
   const nodeIdSet = new Set(nodes.map(n => n.id))
-  const connectSourceIds = new Set<string>()
+  const signalSourceIds = new Set<string>()
   for (const step of flow.steps) {
     if (step.type !== 'loop')
       continue
-    const connectIds = normalizeStepIds(step.connect ?? step.end)
-    for (const fromId of connectIds) {
+    const signalIds = normalizeStepIds(step.iterationCompleteSignals ?? step.end)
+    for (const fromId of signalIds) {
       if (nodeIdSet.has(fromId) && nodeIdSet.has(step.id)) {
-        connectSourceIds.add(fromId)
+        signalSourceIds.add(fromId)
         edges.push({ source: fromId, target: step.id, kind: 'loopBack' })
       }
     }
   }
   const nodesWithShape = nodes.map(n => ({
     ...n,
-    shape: getNodeShape(n, edges.filter(e => e.kind !== 'loopBack'), connectSourceIds),
+    shape: getNodeShape(n, edges.filter(e => e.kind !== 'loopBack'), signalSourceIds),
   }))
   return {
     nodes: nodesWithShape,
