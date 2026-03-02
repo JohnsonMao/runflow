@@ -282,20 +282,20 @@ export async function executeFlow(
       break
     const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
     for (const { result, outputs, nextSteps, flowTerminated } of batchResults) {
+      steps.push(result)
+      if (result.subSteps?.length) {
+        for (const s of result.subSteps)
+          steps.push({ ...s, stepId: `${result.stepId}.${s.stepId}` })
+      }
+
       if (flowTerminated) {
         // A step returned nextSteps: null, so terminate the entire flow.
-        steps.push(result)
         return {
           success: result.success, // Use the last step's success for the flow result
           steps,
           finalParams: context,
           error: result.error, // Propagate error if the terminating step had one
         }
-      }
-      steps.push(result)
-      if (result.subSteps?.length) {
-        for (const s of result.subSteps)
-          steps.push({ ...s, stepId: `${result.stepId}.${s.stepId}` })
       }
       completed.add(result.stepId)
       if (result.completedStepIds && Array.isArray(result.completedStepIds)) {

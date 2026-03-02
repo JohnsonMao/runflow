@@ -52,7 +52,7 @@ export interface FlowStep {
 export type RunFlowFn = (
   flow: FlowDefinition,
   params: Record<string, unknown>,
-  runOptions?: object,
+  runOptions?: RunOptions,
 ) => Promise<RunResult>
 
 /** Context passed to each step handler (params + previous outputs). */

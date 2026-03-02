@@ -1,4 +1,5 @@
 schema: spec-driven
+locale: tw
 
 context: |
   Project: Runflow – YAML-defined reusable execution flows. Monorepo with pnpm + Turborepo.
