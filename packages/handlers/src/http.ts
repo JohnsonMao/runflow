@@ -1,7 +1,6 @@
 // @env node
-import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
+import type { FactoryContext } from '@runflow/core'
 import { Buffer } from 'node:buffer'
-import { isPlainObject } from '@runflow/core'
 
 function buildRequestUrl(baseUrlStr: string, path?: string, query?: Record<string, string> | string): string {
   const url = new URL(baseUrlStr)
@@ -25,115 +24,137 @@ function serializeCookie(cookie: Record<string, string> | string): string {
     .join('; ')
 }
 
-export class HttpHandler implements IStepHandler {
-  private abortController: AbortController | null = null
+function httpHandler({ defineHandler, z, utils }: FactoryContext) {
+  return defineHandler({
+    schema: z.object({
+      // Allow template strings ({{ ... }}) or relative paths, not just full URLs
+      // Actual URL validation happens at runtime after template substitution
+      url: z.string().min(1),
+      method: z.string().optional(),
+      path: z.string().optional(),
+      query: z.union([z.string(), z.record(z.string())]).optional(),
+      headers: z.record(z.string()).optional(),
+      cookie: z.union([z.string(), z.record(z.string())]).optional(),
+      body: z.string().optional(),
+      allowedHttpHosts: z.array(z.string()).optional(),
+    }),
+    run: async (context) => {
+      const { step, signal } = context
+      const urlRaw = step.url as string
 
-  validate(step: FlowStep): true | string {
-    return typeof step.url === 'string' ? true : 'http step requires url (string)'
-  }
-
-  kill(): void {
-    if (this.abortController) {
-      this.abortController.abort()
-      this.abortController = null
-    }
-  }
-
-  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
-    const valid = this.validate(step)
-    if (valid !== true)
-      return context.stepResult(step.id, false, { error: valid })
-    const urlRaw = step.url as string
-    let url: URL
-    try {
-      url = new URL(urlRaw)
-    }
-    catch {
-      return context.stepResult(step.id, false, { error: 'http step url is invalid' })
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:')
-      return context.stepResult(step.id, false, { error: 'http step only allows http and https' })
-    const allowedHosts = (step as FlowStep & { allowedHttpHosts?: string[] }).allowedHttpHosts
-    if (allowedHosts !== undefined && Array.isArray(allowedHosts) && allowedHosts.length > 0) {
-      const hostLower = url.hostname.toLowerCase()
-      const allowed = allowedHosts.some(h => String(h).toLowerCase() === hostLower)
-      if (!allowed)
-        return context.stepResult(step.id, false, { error: `http step host not allowed: ${url.hostname}. Allowed: ${allowedHosts.join(', ')}` })
-    }
-    const pathOpt = typeof step.path === 'string' ? step.path : undefined
-    const queryOpt = step.query !== undefined && (typeof step.query === 'string' || isPlainObject(step.query)) ? step.query as Record<string, string> | string : undefined
-    const finalUrl = buildRequestUrl(urlRaw, pathOpt, queryOpt)
-    return this.doRequest(step, context, finalUrl)
-  }
-
-  private async doRequest(step: FlowStep, context: StepContext, url: string): Promise<StepResult> {
-    const method = (typeof step.method === 'string' ? step.method : 'GET')
-    const headers: Record<string, string> = {}
-    if (step.headers !== undefined && isPlainObject(step.headers)) {
-      for (const [k, v] of Object.entries(step.headers)) {
-        if (typeof v === 'string')
-          headers[k] = v
+      let url: URL
+      try {
+        url = new URL(urlRaw)
       }
-    }
-    if (step.cookie !== undefined) {
-      let cookieVal = ''
-      if (typeof step.cookie === 'string') {
-        cookieVal = step.cookie
-      }
-      else if (isPlainObject(step.cookie)) {
-        cookieVal = serializeCookie(Object.fromEntries(
-          Object.entries(step.cookie).map(([k, v]) => [k, String(v)]),
-        ))
-      }
-      if (cookieVal) {
-        headers.Cookie = cookieVal
-      }
-    }
-    const body = typeof step.body === 'string' ? step.body : undefined
-    this.abortController = new AbortController()
-    const signal = this.abortController.signal
-    try {
-      const init: RequestInit = {
-        method: method || 'GET',
-        headers: Object.keys(headers).length ? headers : undefined,
-        body: body !== undefined && body !== '' ? body : undefined,
-        signal,
-      }
-      const response = await fetch(url, init)
-      this.abortController = null
-      const statusCode = response.status
-      const headersObj: Record<string, string> = {}
-      response.headers.forEach((value, key) => {
-        headersObj[key] = value
-      })
-      const contentType = response.headers.get('content-type') ?? ''
-      let bodyValue: unknown
-      if (/^image\//.test(contentType) || contentType.includes('application/octet-stream')) {
-        const buf = await response.arrayBuffer()
-        bodyValue = Buffer.from(buf).toString('base64')
-      }
-      else if (contentType.includes('application/json')) {
-        const text = await response.text()
-        try {
-          bodyValue = text ? JSON.parse(text) : null
-        }
-        catch {
-          bodyValue = text
+      catch {
+        return {
+          success: false,
+          error: 'http step url is invalid',
         }
       }
-      else {
-        bodyValue = await response.text()
+
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return {
+          success: false,
+          error: 'http step only allows http and https',
+        }
       }
-      const responseObject = { statusCode, headers: headersObj, body: bodyValue }
-      const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
-      const log = `${methodStr} ${url} → ${statusCode}`
-      return context.stepResult(step.id, true, { outputs: responseObject, log })
-    }
-    catch (e) {
-      this.abortController = null
-      const message = e instanceof Error ? e.message : String(e)
-      const isAbort = e instanceof Error && e.name === 'AbortError'
-      return context.stepResult(step.id, false, { error: isAbort ? 'request aborted' : message })
-    }
-  }
+
+      const allowedHosts = step.allowedHttpHosts as string[] | undefined
+      if (allowedHosts !== undefined && Array.isArray(allowedHosts) && allowedHosts.length > 0) {
+        const hostLower = url.hostname.toLowerCase()
+        const allowed = allowedHosts.some(h => String(h).toLowerCase() === hostLower)
+        if (!allowed) {
+          return {
+            success: false,
+            error: `http step host not allowed: ${url.hostname}. Allowed: ${allowedHosts.join(', ')}`,
+          }
+        }
+      }
+
+      const pathOpt = typeof step.path === 'string' ? step.path : undefined
+      const queryOpt = step.query !== undefined && (typeof step.query === 'string' || utils.isPlainObject(step.query))
+        ? step.query as Record<string, string> | string
+        : undefined
+      const finalUrl = buildRequestUrl(urlRaw, pathOpt, queryOpt)
+
+      const method = (typeof step.method === 'string' ? step.method : 'GET')
+      const headers: Record<string, string> = {}
+
+      if (step.headers !== undefined && utils.isPlainObject(step.headers) && step.headers !== null) {
+        for (const [k, v] of Object.entries(step.headers)) {
+          if (typeof v === 'string')
+            headers[k] = v
+        }
+      }
+
+      if (step.cookie !== undefined) {
+        let cookieVal = ''
+        if (typeof step.cookie === 'string') {
+          cookieVal = step.cookie
+        }
+        else if (utils.isPlainObject(step.cookie) && step.cookie !== null) {
+          cookieVal = serializeCookie(Object.fromEntries(
+            Object.entries(step.cookie).map(([k, v]) => [k, String(v)]),
+          ))
+        }
+        if (cookieVal) {
+          headers.Cookie = cookieVal
+        }
+      }
+
+      const body = typeof step.body === 'string' ? step.body : undefined
+
+      try {
+        const init: RequestInit = {
+          method: method || 'GET',
+          headers: Object.keys(headers).length ? headers : undefined,
+          body: body !== undefined && body !== '' ? body : undefined,
+          signal,
+        }
+        const response = await fetch(finalUrl, init)
+        const statusCode = response.status
+        const headersObj: Record<string, string> = {}
+        response.headers.forEach((value, key) => {
+          headersObj[key] = value
+        })
+        const contentType = response.headers.get('content-type') ?? ''
+        let bodyValue: unknown
+        if (/^image\//.test(contentType) || contentType.includes('application/octet-stream')) {
+          const buf = await response.arrayBuffer()
+          bodyValue = Buffer.from(buf).toString('base64')
+        }
+        else if (contentType.includes('application/json')) {
+          const text = await response.text()
+          try {
+            bodyValue = text ? JSON.parse(text) : null
+          }
+          catch {
+            bodyValue = text
+          }
+        }
+        else {
+          bodyValue = await response.text()
+        }
+        const responseObject = { statusCode, headers: headersObj, body: bodyValue }
+        const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
+        const log = `${methodStr} ${finalUrl} → ${statusCode}`
+        return {
+          success: true,
+          outputs: responseObject,
+          log,
+        }
+      }
+      catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        const isAbort = e instanceof Error && e.name === 'AbortError'
+        return {
+          success: false,
+          error: isAbort ? 'request aborted' : message,
+        }
+      }
+    },
+  })
 }
+
+export default httpHandler

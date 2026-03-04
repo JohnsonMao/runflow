@@ -27,6 +27,7 @@
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:*",
+    "tsx": "catalog:dev",
     "yaml": "catalog:prod"
   },
   "devDependencies": {

@@ -1,52 +1,19 @@
-# step-context Specification
+# chainable-handler-utils Specification
 
 ## Purpose
 
-定義步驟間傳參：每一步執行時可讀取「執行時參數 + 前面所有步驟的輸出」作為當前 context；步驟產出的 outputs 以 **effective output key（step.outputKey 若存在則用，否則 step id）** 寫入 context（不攤平），方便對應節點。本 spec 涵蓋 StepResult.outputs、executor 累積 context、js 步驟讀取 params 與回傳 outputs、以及 **context.run**（RunFlowFn）與 **scopeStepIds**：handler（如 loop）以 sub-flow 呼叫 `run(subFlow, params, { scopeStepIds })` 時，若某步回傳 nextSteps 含 scope 外 id，run 立即回傳 earlyExit + finalParams；handler 可驗證 body step id 存在於 context.steps 再呼叫 run，避免靜默成功。
+TBD - created by archiving change 'refactor-handler-factory-pattern'. Update Purpose after archive.
 
 ## Requirements
 
-### Requirement: FlowStep MAY declare optional outputKey (engine-reserved)
+### Requirement: utils SHALL provide chainable string processing
 
-A step in the flow definition MAY include an optional engine-reserved field: `outputKey` (string). The executor SHALL use it only for context keying. When present, `outputKey` SHALL be the key under which the step's outputs are written to context; when absent, the step's `id` SHALL be used as the key.
+The `utils` object SHALL provide a `str(input: string)` method that returns a chainable wrapper for string operations. This wrapper SHALL include at least: `.substitute(params: Record<string, unknown>)` for template replacement and `.lowercase()` for case transformation. It SHALL have a `.value()` method to retrieve the final string.
 
-#### Scenario: Step with outputKey writes to that key
-
-- **WHEN** a step has `id: 's1'` and `outputKey: 'api'` and produces `outputs: { x: 1 }`
-- **THEN** the executor SHALL set `context['api'] = outputs` (i.e. `context.api.x === 1`)
-- **AND** downstream steps reference `params.api.x`, not `params.s1.x`
-
-#### Scenario: Step without outputKey uses id as key
-
-- **WHEN** a step has `id: 's1'` and no `outputKey` and produces `outputs: { x: 1 }`
-- **THEN** the executor SHALL set `context['s1'] = outputs` as before
-- **AND** downstream steps reference `params.s1.x`
-
----
-### Requirement: StepResult MAY include outputs
-
-A step's result MAY include an optional `outputs` field of type `Record<string, unknown>`. When a step produces structured output (e.g. a js step returns an object), that output SHALL be recorded on `StepResult.outputs` and written into context under the **effective output key** for that step (the step's `outputKey` when present, otherwise the step's `id`) for subsequent steps.
-
-#### Scenario: Step with outputs
-
-- **WHEN** a step with `id: 's1'` produces output (e.g. returns `{ x: 1 }`)
-- **THEN** the corresponding `StepResult` has `outputs` set (e.g. `{ x: 1 }`)
-- **AND** the executor SHALL set `context[effectiveKey] = outputs` where effectiveKey is `step.outputKey ?? step.id`, so the next step's context includes the output under that key (e.g. `context.s1.x === 1` when outputKey is absent)
-
-#### Scenario: Step without outputs
-
-- **WHEN** a step does not produce output (e.g. no return value or return is not a plain object)
-- **THEN** the `StepResult` may omit `outputs` or have it undefined
-- **AND** the executor SHALL set `context[effectiveKey] = {}` for that step so the effective key exists; the context for the next step is otherwise unchanged
-
----
-### Requirement: Context SHALL accumulate with step outputs namespaced by effective output key
-
-The executor SHALL maintain a single context object where initial flow params remain at the top level. After each step, the executor SHALL assign `context[effectiveKey] = outputs` (or an empty object), where **effectiveKey** is the step's `outputKey` if present, otherwise its `id`. Step outputs SHALL NOT be merged flat; they MUST be namespaced by this effective key for downstream reference.
-
-#### Scenario: Second step sees params and first step outputs under effective key
-- **WHEN** the first step has `id: 'step1'` and produced `outputs: { x: 'step1' }`, and the second step is executed
-- **THEN** the second step receives context `{ a: '1', step1: { x: 'step1' } }`
+#### Scenario: Chainable string substitution and transformation
+- **WHEN** a handler calls `utils.str('{{ base }}/API').substitute({ base: 'HTTP' }).lowercase().value()`
+- **THEN** the result SHALL be `"http/api"`
+- **AND** the handler SHALL NOT require manual `substitute` calls from `@runflow/core`
 
 
 <!-- @trace
@@ -154,161 +121,14 @@ tests:
 -->
 
 ---
-### Requirement: JS steps SHALL receive params and MAY return outputs
+### Requirement: utils SHALL provide chainable data manipulation
 
-A js step MUST be executed with the current context available in the vm as a read-only object (e.g. `params`). The step's return value, if a plain object (and not null), SHALL be used as that step's `outputs` and merged into the context for the next step.
+The `utils` object SHALL provide a `data(input: any)` method that returns a chainable wrapper for data object manipulation. This wrapper SHALL include at least: `.pick(keys: string[])` for picking properties and `.merge(other: object)` for merging objects. It SHALL have a `.toJSON()` method to return a JSON string and a `.value()` method for the final object.
 
-#### Scenario: JS step reads params
-- **WHEN** a js step's code reads `params.a` and the initial context (or accumulated context) has `a: '1'`
-- **THEN** the code sees `params.a === '1'`
-
-
-<!-- @trace
-source: refactor-handler-factory-pattern
-updated: 2026-03-04
-code:
-  - workspace/openapi/admin-location-point.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
-  - workspace/custom-handler/test.mjs
-  - workspace/flows/location-pickup/location-pickup-shipping.yaml
-  - workspace/config/runflow.config.json
-  - workspace/openapi/admin-payments.yaml
-  - workspace/openapi/admin-invoice.yaml
-  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
-  - packages/core/src/engine.ts
-  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
-  - workspace/flows/logistics/91app-ship-confirm.yaml
-  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
-  - workspace/flows/logistics/delivery-shipment.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
-  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
-  - workspace/openapi/admin-delivery.yaml
-  - packages/core/src/index.ts
-  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
-  - workspace/flows/promotion/promotion-rule-activate.yaml
-  - workspace/src/scm.ts
-  - workspace/openapi/admin-location.yaml
-  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
-  - workspace/flows/convenience-store/store-shipping.yaml
-  - workspace/openapi/admin-promotion-rules.yaml
-  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
-  - workspace/openapi/store-front-outer-member-login.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
-  - workspace/openapi/admin-order.yaml
-  - workspace/flows/tt/post-users.yaml
-  - workspace/openapi/store-to-store-shipping.yaml
-  - workspace/flows/tt2/sub.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
-  - packages/handlers/src/sleep.ts
-  - workspace/flows/tt/test.yaml
-  - workspace/openapi/logistics-center.yaml
-  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
-  - workspace/flows/promotion/create-special-price-promotion.yaml
-  - workspace/flows/salepage/update-sale-page-images-flow.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
-  - packages/core/src/handler-factory.ts
-  - workspace/flows/payment/payment-txntoken-flow.yaml
-  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
-  - packages/handlers/src/loopClosure.ts
-  - workspace/openapi/admin-salepage.yaml
-  - workspace/config/auth.json
-  - workspace/flows/salepage/create-sale-page-flow.yaml
-  - packages/core/src/handler-adapter.ts
-  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
-  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
-  - workspace/flows/payment/payment-cardtoken-flow.yaml
-  - packages/core/src/types.ts
-  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
-  - packages/handlers/src/flow.ts
-  - workspace/flows/logistics/logistics-smart-master-flow.yaml
-  - workspace/flows/convenience-store/store-shipping-confirm.yaml
-  - workspace/flows/order/batch-order-confirm.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
-  - workspace/flows/tt/get-users.yaml
-  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
-  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
-  - workspace/openapi/simple.yaml
-  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
-  - workspace/custom-handler/scm-handler.mjs
-  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
-  - packages/workspace/package.json
-  - workspace/flows/tt/example-loop-two-branches.yaml
-  - packages/handlers/src/condition.ts
-  - packages/handlers/src/set.ts
-  - packages/workspace/src/config.ts
-  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
-  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
-  - workspace/flows/tt/get-users-userId.yaml
-  - workspace/openapi/admin-promotion.yaml
-  - packages/handlers/src/http.ts
-  - workspace/src/payments.ts
-  - packages/handlers/src/index.ts
-  - workspace/openapi/admin-location-member.yaml
-  - workspace/flows/payment/payments-transaction-query.yaml
-  - packages/handlers/src/loop.ts
-  - workspace/flows/tt/params-count2.json
-  - workspace/openapi/admin-pos.yaml
-  - workspace/flows/logistics/91app-shipping.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping.yaml
-  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
-tests:
-  - packages/handlers/src/condition.test.ts
-  - packages/handlers/src/loop.test.ts
-  - packages/handlers/src/loopClosure.test.ts
-  - packages/handlers/src/flow.test.ts
-  - packages/handlers/src/sleep.test.ts
-  - packages/handlers/src/set.test.ts
-  - apps/cli/src/cli.run.test.ts
-  - packages/handlers/src/http.test.ts
--->
-
----
-### Requirement: context.run (RunFlowFn) and scopeStepIds; handler SHALL validate body step ids when building sub-flow
-
-The executor SHALL provide `run?: RunFlowFn` on the step context. When `runOptions.scopeStepIds` is set, the run SHALL stop and return `earlyExit` if any step returns `nextSteps` outside that scope. Handlers running a sub-graph (e.g., loops) SHALL build a sub-flow from `context.steps` restricted to body ids and call `run` with `scopeStepIds`. If a body step id is missing from the flow, the handler SHALL return `success: false` with a "Step(s) not found" error to ensure clear failure.
-
-#### Scenario: run with non-existent body id — handler validates before calling run
-
-- **WHEN** a handler builds a sub-flow for body ids that include `nonexistent` and that id is not in `context.steps`
-- **THEN** the handler SHALL return a StepResult with success: false and an error indicating the missing step id(s)
-- **AND** the handler SHALL NOT call `context.run` with that id in scopeStepIds when the step is missing from the flow, so that users get a clear error instead of a silent empty run
-
----
-### Requirement: StepContext SHALL provide optional appendLog for lifecycle log lines
-
-StepContext SHALL include an optional `appendLog?: (message: string) => void`. When the executor invokes a handler's run(), it SHALL provide an appendLog that appends the given string to a buffer for the current step. When the handler returns, the executor SHALL merge that buffer with the returned result.log (e.g. accumulated lines first, then result.log if present) and set the final result.log so that MCP/CLI display shows the full lifecycle (e.g. loop start, iteration 1/N, ..., loop complete).
-
-#### Scenario: Handler appends log during execution
-
-- **WHEN** a handler calls `context.appendLog?.('start')` at the beginning, `context.appendLog?.('iteration 1/3')` and similar during execution, and `context.appendLog?.('complete')` before returning with `result.log = 'iterations: 3'`
-- **THEN** the StepResult for that step SHALL have log equal to the concatenation of accumulated lines and the returned log (e.g. "start\niteration 1/3\niteration 2/3\niteration 3/3\ncomplete\niterations: 3" or equivalent)
-- **AND** the formatter SHALL display that log so that lifecycle and final summary are both visible
-
----
-### Requirement: Sub-flow run result and subSteps; executor flattens subSteps with parent prefix
-
-When a handler calls `run`, it returns a `RunResult`. The handler MAY return `subSteps` on its own `StepResult`. The executor SHALL flatten these `subSteps` into the main `RunResult.steps` using a `{parentStepId}.{childStepId}` prefix to preserve timeline order. The caller step's own result SHALL appear in the flattened list immediately after its `subSteps`.
-
-#### Scenario: Loop step returns subSteps; executor flattens with prefix
-
-- **WHEN** a loop step runs and returns StepResult with `subSteps`: e.g. marker `l1.iteration_1`, then `l1.iteration_1.body`, then marker `l1.iteration_2`, then `l1.iteration_2.body`, then the loop step's own result
-- **THEN** the main RunResult.steps SHALL contain those entries in that order (flattened with parent prefix as given)
-- **AND** the loop step MAY set result.log to indicate completion (e.g. "done, N iteration(s)" or "early exit after N iteration(s)")
-
----
-### Requirement: StepContext provides run (RunFlowFn) for nested flows; no pushMarkerStep
-
-The handler execution context SHALL include optional `run?: RunFlowFn` so handlers can run another flow. The loop handler SHALL use `run` and return `subSteps` on its result for execution order; the executor flattens these into `RunResult.steps`.
-
-#### Scenario: Loop handler uses subSteps instead of pushMarkerStep
-- **WHEN** a loop handler executes and wants to record sub-flow progress
-- **THEN** it SHALL call `run` and collect results into `subSteps`
-- **AND** it SHALL return those `subSteps` in its final result
+#### Scenario: Chainable data picking and merging
+- **WHEN** a handler calls `utils.data({ a: 1, b: 2 }).pick(['a']).merge({ c: 3 }).value()`
+- **THEN** the result SHALL be `{ a: 1, c: 3 }`
+- **AND** the original object SHALL NOT be modified
 
 
 <!-- @trace
@@ -416,12 +236,230 @@ tests:
 -->
 
 ---
-### Requirement: Command steps and outputs (reserved)
+### Requirement: utils SHALL provide optional chainable HTTP client
 
-Command steps need not produce `outputs` in this change. The executor SHALL merge only `StepResult.outputs` when present; command steps may leave `outputs` undefined. Future extensions may define how command steps produce outputs (e.g. parsing stdout).
+The `utils` object SHALL provide a simplified, chainable HTTP client (e.g., `utils.http.get(url).json().send()`). This client SHALL automatically integrate with the injected `AbortSignal` if provided by the engine.
 
-#### Scenario: Command step has no outputs
+#### Scenario: Chainable HTTP request
+- **WHEN** a handler calls `await utils.http.post(url).json({ id: 1 }).send()`
+- **THEN** it SHALL perform a POST request with the given JSON body
+- **AND** the request SHALL be automatically aborted on step timeout via the injected `signal`
 
-- **WHEN** a step is of type `command`
-- **THEN** the executor does not set `outputs` on its `StepResult` for that step
-- **AND** the context is not updated from that step's result (only js step outputs are merged in this spec)
+
+<!-- @trace
+source: refactor-handler-factory-pattern
+updated: 2026-03-04
+code:
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/config/runflow.config.json
+  - workspace/openapi/admin-payments.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/src/scm.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt/test.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - packages/handlers/src/loopClosure.ts
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/config/auth.json
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - packages/core/src/types.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - packages/handlers/src/flow.ts
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - packages/workspace/package.json
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - packages/handlers/src/condition.ts
+  - packages/handlers/src/set.ts
+  - packages/workspace/src/config.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/http.ts
+  - workspace/src/payments.ts
+  - packages/handlers/src/index.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - packages/handlers/src/loop.ts
+  - workspace/flows/tt/params-count2.json
+  - workspace/openapi/admin-pos.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+tests:
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/handlers/src/loopClosure.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/handlers/src/set.test.ts
+  - apps/cli/src/cli.run.test.ts
+  - packages/handlers/src/http.test.ts
+-->
+
+---
+### Requirement: Chainable utils SHALL be discoverable via IDE autocomplete
+
+The `utils` object and its chainable methods SHALL be defined such that IDEs (e.g., VS Code) can provide full IntelliSense when used within the injected factory function. This MUST be achieved via ambient type declarations (e.g., `.d.ts` files) without requiring the user to `import` types explicitly.
+
+#### Scenario: Developer receives autocomplete for chainable utils
+- **WHEN** a developer types `utils.str('...').`
+- **THEN** the IDE SHALL suggest `substitute`, `lowercase`, `value`, etc.
+- **AND** no `import` or `/// <reference />` SHALL be required if the workspace is correctly configured
+
+<!-- @trace
+source: refactor-handler-factory-pattern
+updated: 2026-03-04
+code:
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/config/runflow.config.json
+  - workspace/openapi/admin-payments.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/src/scm.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt/test.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - packages/handlers/src/loopClosure.ts
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/config/auth.json
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - packages/core/src/types.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - packages/handlers/src/flow.ts
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - packages/workspace/package.json
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - packages/handlers/src/condition.ts
+  - packages/handlers/src/set.ts
+  - packages/workspace/src/config.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/http.ts
+  - workspace/src/payments.ts
+  - packages/handlers/src/index.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - packages/handlers/src/loop.ts
+  - workspace/flows/tt/params-count2.json
+  - workspace/openapi/admin-pos.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+tests:
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/handlers/src/loopClosure.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/handlers/src/set.test.ts
+  - apps/cli/src/cli.run.test.ts
+  - packages/handlers/src/http.test.ts
+-->

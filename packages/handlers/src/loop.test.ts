@@ -1,10 +1,10 @@
 import type { FlowDefinition, FlowStep, RunResult, StepContext } from '@runflow/core'
+import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
 import { describe, expect, it, vi } from 'vitest'
-import {
+import loopHandlerFactory, {
   closureIdsThatDependOnDone,
   computeBackwardClosure,
   computeLoopClosure,
-  LoopHandler,
 } from './loop'
 import { stepResult } from './test-helpers'
 
@@ -121,7 +121,9 @@ describe('closureIdsThatDependOnDone', () => {
 })
 
 describe('loop handler', () => {
-  const handler = new LoopHandler()
+  const factoryContext = createFactoryContext()
+  const handlerConfig = loopHandlerFactory(factoryContext)
+  const handler = handlerConfigToStepHandler(handlerConfig)
 
   describe('validate', () => {
     it('returns true when step has items, entry, and no iterationCompleteSignals (optional)', () => {
@@ -132,7 +134,7 @@ describe('loop handler', () => {
         entry: ['body'],
         dependsOn: [],
       }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns true when step has items, entry, and empty iterationCompleteSignals', () => {
@@ -144,18 +146,18 @@ describe('loop handler', () => {
         iterationCompleteSignals: [],
         dependsOn: [],
       }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns error when step has no driver (items or count)', () => {
       const step: FlowStep = { id: 'l1', type: 'loop', entry: ['b'], iterationCompleteSignals: [], dependsOn: [] }
-      expect(handler.validate(step)).toContain('exactly one of')
-      expect(handler.validate(step)).toMatch(/items|count/)
+      expect(handler.validate?.(step)).toContain('exactly one of')
+      expect(handler.validate?.(step)).toMatch(/items|count/)
     })
 
     it('returns error when step has empty entry', () => {
       const step: FlowStep = { id: 'l1', type: 'loop', items: [1], entry: [], iterationCompleteSignals: [], dependsOn: [] }
-      expect(handler.validate(step)).toContain('entry')
+      expect(handler.validate?.(step)).toContain('entry')
     })
 
     it('returns error when step has both drivers (items and count)', () => {
@@ -168,7 +170,7 @@ describe('loop handler', () => {
         iterationCompleteSignals: [],
         dependsOn: [],
       }
-      expect(handler.validate(step)).toContain('exactly one')
+      expect(handler.validate?.(step)).toContain('exactly one')
     })
 
     it('returns error when step.iterationCompleteSignals is not an array', () => {
@@ -180,7 +182,7 @@ describe('loop handler', () => {
         iterationCompleteSignals: 'not an array' as any,
         dependsOn: [],
       }
-      expect(handler.validate(step)).toContain('iterationCompleteSignals')
+      expect(handler.validate?.(step)).toContain('iterationCompleteSignals')
     })
 
     it('returns true when step has count, entry, and iterationCompleteSignals', () => {
@@ -192,7 +194,7 @@ describe('loop handler', () => {
         iterationCompleteSignals: ['b'],
         dependsOn: [],
       }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
   })
 

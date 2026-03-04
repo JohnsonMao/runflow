@@ -52,7 +52,6 @@ export interface FlowStep {
 export type RunFlowFn = (
   flow: FlowDefinition,
   params: Record<string, unknown>,
-  runOptions?: RunOptions,
 ) => Promise<RunResult>
 
 /** Context passed to each step handler (params + previous outputs). */
@@ -66,6 +65,8 @@ export interface StepContext {
   flowMap?: Record<string, FlowDefinition>
   /** Flow steps (provided by engine). Handlers that need the full DAG (e.g. loop for closure) can use this. */
   steps?: FlowStep[]
+  /** AbortSignal for lifecycle management (timeout, abort). Provided by engine for factory-based handlers. */
+  signal?: AbortSignal
 }
 
 export interface FlowDefinition {
@@ -133,7 +134,6 @@ export type StepRegistry = Record<string, IStepHandler>
 export interface RunOptions {
   dryRun?: boolean
   params?: Record<string, unknown>
-  flowFilePath?: string
   registry?: StepRegistry
   /**
    * When set, used for params validation and default application instead of flow.params.

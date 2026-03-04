@@ -8,20 +8,119 @@
 
 ### Requirement: StepHandler interface SHALL be the single execution contract
 
-The system SHALL define a single handler type `StepHandler` with signature `(step: FlowStep, context: StepContext) => Promise<StepResult>`. Every step type (including built-in and custom) MUST be executed by invoking the handler registered for that step's `type`. The engine SHALL NOT branch on step type with built-in logic; it SHALL only look up the handler in the registry and call it.
+The system SHALL define a new handler contract via `defineHandler({ schema?, flowControl?, run: (context: HandlerContext) => Promise<SimpleResult | void> })`. Every step type (including built-in and custom) MUST be executed by invoking the `run` function provided by the handler's factory. The engine SHALL NOT branch on step type with built-in logic; it SHALL only look up the handler configuration and invoke its `run` method.
 
 #### Scenario: Execution dispatches via registry
-
 - **WHEN** a flow step has `type: 'http'` and the caller-provided registry is used
-- **THEN** the executor looks up the handler for `'http'` in the registry and calls it with the step and context
-- **AND** the returned `StepResult` is appended to the run result and outputs (if any) are written into context under the step id for the next step (see step-context: namespaced by step id)
+- **THEN** the executor looks up the handler configuration for `'http'` in the registry and calls its `run` function with the step context
+- **AND** the handler MAY report results via `context.report()` or `return`
 
-#### Scenario: Custom type is executed when registered
 
-- **WHEN** the caller provides a registry that includes a handler for type `'myStep'` and a flow contains a step with `type: 'myStep'`
-- **THEN** the executor calls that handler with the step and context
-- **AND** the handler's returned `StepResult` is used the same way as built-in steps (outputs namespaced by step id in context, success affects flow success)
+<!-- @trace
+source: refactor-handler-factory-pattern
+updated: 2026-03-04
+code:
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/config/runflow.config.json
+  - workspace/openapi/admin-payments.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/src/scm.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt/test.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - packages/handlers/src/loopClosure.ts
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/config/auth.json
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - packages/core/src/types.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - packages/handlers/src/flow.ts
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - packages/workspace/package.json
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - packages/handlers/src/condition.ts
+  - packages/handlers/src/set.ts
+  - packages/workspace/src/config.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/http.ts
+  - workspace/src/payments.ts
+  - packages/handlers/src/index.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - packages/handlers/src/loop.ts
+  - workspace/flows/tt/params-count2.json
+  - workspace/openapi/admin-pos.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+tests:
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/handlers/src/loopClosure.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/handlers/src/set.test.ts
+  - apps/cli/src/cli.run.test.ts
+  - packages/handlers/src/http.test.ts
+-->
 
+---
 ### Requirement: StepContext SHALL provide params, previous outputs, and flowFilePath
 
 `StepContext` MUST include at least: `params` (or equivalent merged view of initial params and previous step outputs), and `flowFilePath` (optional, for handlers that need to resolve file paths). The engine SHALL pass the same context shape to every handler so that built-in and custom handlers behave consistently.
@@ -32,6 +131,7 @@ The system SHALL define a single handler type `StepHandler` with signature `(ste
 - **THEN** the context passed to step B's handler SHALL include `params.a.x === 1` (A's outputs under `params.a`; initial params remain at top level)
 - **AND** template substitution SHALL have been applied to the step by the executor before invoking the handler (so the handler receives a substituted snapshot)
 
+---
 ### Requirement: StepResult contract SHALL be unchanged
 
 Handlers MUST return a value that conforms to the existing `StepResult` shape: `stepId`, `success`, `stdout`, `stderr`, and optionally `error`, `outputs`. The engine SHALL assign `context[stepId] = outputs` (or `{}` when absent) for the next step when the result is used; flow-level success SHALL be false if any step's `success` is false. See step-context for namespaced accumulation.
@@ -42,6 +142,7 @@ Handlers MUST return a value that conforms to the existing `StepResult` shape: `
 - **THEN** the engine sets `context.s1 = { key: 'value' }` for subsequent steps (outputs namespaced by step id)
 - **AND** the next step's handler receives context that includes `params.s1.key === 'value'`
 
+---
 ### Requirement: Engine SHALL NOT provide a default registry; registry SHALL be required when flow has steps
 
 The system SHALL define a registry type (e.g. `StepRegistry`) and SHALL export `registerStepHandler(registry, type, handler)` so that callers can build a registry. The engine SHALL NOT provide a default registry or `createDefaultRegistry`. When the flow has steps to execute, `run(flow, options)` SHALL require a valid `registry` in `RunOptions`; if `registry` is missing, the engine SHALL fail fast (e.g. throw or return a failed result with a clear message such as "registry is required"). Callers that need built-in step types SHALL depend on `@runflow/handlers` and use a helper (e.g. `createBuiltinRegistry()` or `registerBuiltinHandlers(registry)`), then pass that registry to `run()`.
@@ -64,6 +165,7 @@ The system SHALL define a registry type (e.g. `StepRegistry`) and SHALL export `
 - **THEN** the engine SHALL use that registry for dispatch
 - **AND** custom step types in the flow SHALL be executed if registered; unregistered types SHALL produce an error result per requirement below
 
+---
 ### Requirement: Unregistered step type SHALL produce an error result
 
 When a step's `type` is not present in the registry used for the run, the engine SHALL NOT throw. It SHALL produce a `StepResult` for that step with `success: false` and `error` set to a string that identifies the unknown type (e.g. "Unknown step type: xxx"). The flow's overall success SHALL be false.
@@ -75,6 +177,7 @@ When a step's `type` is not present in the registry used for the run, the engine
 - **AND** the run continues to the next step (no exception thrown)
 - **AND** the flow result has `success: false`
 
+---
 ### Requirement: Handler exceptions SHALL be caught and converted to StepResult
 
 If a registered handler throws (or rejects), the engine SHALL catch the exception and SHALL produce a `StepResult` for that step with `success: false` and `error` set to a string representation of the error. The flow SHALL NOT abort with an unhandled exception.
@@ -86,6 +189,7 @@ If a registered handler throws (or rejects), the engine SHALL catch the exceptio
 - **AND** no outputs from that step are written into context (that step id is not updated)
 - **AND** the flow result has `success: false`
 
+---
 ### Requirement: FlowStep SHALL be a generic shape
 
 `FlowStep` SHALL be defined as a generic object with at least `id: string` and `type: string`, and any additional keys (e.g. `[key: string]: unknown`) preserved for the handler. The parser SHALL produce this shape for every step; it SHALL NOT validate type-specific fields for built-in types (validation responsibility moves to handlers or optional schema).
@@ -101,6 +205,7 @@ If a registered handler throws (or rejects), the engine SHALL catch the exceptio
 - **WHEN** a step in YAML is missing `id` or `type`, or `type` is not a string
 - **THEN** the parser SHALL return null (invalid flow) or otherwise reject the step
 
+---
 ### Requirement: Substitution SHALL be applied by the executor before calling handler
 
 Before invoking a step's handler, the executor SHALL apply template substitution to the step's string-valued fields using the current context (params and previous outputs). The handler SHALL receive the step object with substitution already applied so that handlers do not need to perform substitution themselves.
@@ -111,24 +216,117 @@ Before invoking a step's handler, the executor SHALL apply template substitution
 - **THEN** the executor substitutes and passes to the handler a step with `url: 'https://api.example.com/users'`
 - **AND** the handler may use the step as-is without calling substitute
 
+---
 ### Requirement: CLI SHALL build registry using @runflow/handlers plus config and --registry
 
-The CLI SHALL build its registry by using the built-in handlers from `@runflow/handlers` (e.g. start with `createBuiltinRegistry()` or equivalent), then merge config `handlers` and `--registry` modules with `registerStepHandler`. The engine SHALL NOT provide that default; the CLI SHALL do so. (1) **Config file**: when `--config` is given or a file `runflow.config.mjs`, `runflow.config.js`, or `runflow.config.json` is found in cwd (in that discovery order), the config's `handlers` property SHALL be a record mapping step type names to module paths (relative to the config file directory); the CLI SHALL load each module's default export (an `IStepHandler`) and merge it into the registry with `registerStepHandler`. (2) **--registry &lt;path&gt;**: the CLI SHALL load the given ESM module's default export (a `StepRegistry`) and merge each type→handler into the current registry. The final registry SHALL be the merge of built-ins (from `@runflow/handlers`) + config handlers (if any) + --registry module (if any).
+The CLI SHALL build its registry by using the built-in handlers from `@runflow/handlers`, then merge config `handlers` and `--registry` modules. The engine SHALL NOT provide that default. (1) **Config file**: the config's `handlers` property SHALL be a record mapping step type names to module paths (relative to the config file directory). (2) **--registry <path>**: the CLI SHALL load the given module's default export. The CLI SHALL support direct loading of `.ts` handler files using a runtime loader (e.g., `tsx` or `jiti`) so that users can define handlers without a separate build step.
 
-#### Scenario: CLI runs flow with built-ins and custom handler
+#### Scenario: CLI runs flow with .ts custom handler
+- **WHEN** the user runs the CLI with a config file that has `handlers: { echo: './echo-handler.ts' }`
+- **THEN** the CLI SHALL use a dynamic loader to import the factory from the TS file
+- **AND** the CLI SHALL initialize the factory with the tool context and register the resulting handler
+- **AND** the flow step with `type: 'echo'` SHALL be executed correctly
 
-- **WHEN** the user runs the CLI with a config file that has `handlers: { echo: './echo-handler.mjs' }` and the flow contains steps with built-in types and type `'echo'`
-- **THEN** the CLI builds a registry from `@runflow/handlers` built-ins plus the loaded echo handler
-- **AND** all steps are executed via that registry
-
-#### Scenario: Custom handler from config is used in flow
-
-- **WHEN** the user runs the CLI with a config file that has `handlers: { echo: './echo-handler.mjs' }` and the flow contains a step with `type: 'echo'`
-- **THEN** the CLI builds a registry from built-ins + loaded echo handler
-- **AND** the step is executed by the echo handler and produces a StepResult like any built-in step
-
-#### Scenario: Custom handler usage is documented
-
-- **WHEN** the user consults the repository
-- **THEN** documentation SHALL describe how to implement and register a custom handler (e.g. via `handlers: { type: path }` in runflow config or `--registry`) and how to run a flow that uses the custom step type
-- **AND** the handler contract (IStepHandler: run, optional validate) SHALL be documented
+<!-- @trace
+source: refactor-handler-factory-pattern
+updated: 2026-03-04
+code:
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/config/runflow.config.json
+  - workspace/openapi/admin-payments.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/src/scm.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt/test.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - packages/handlers/src/loopClosure.ts
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/config/auth.json
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - packages/core/src/types.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - packages/handlers/src/flow.ts
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - packages/workspace/package.json
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - packages/handlers/src/condition.ts
+  - packages/handlers/src/set.ts
+  - packages/workspace/src/config.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/http.ts
+  - workspace/src/payments.ts
+  - packages/handlers/src/index.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - packages/handlers/src/loop.ts
+  - workspace/flows/tt/params-count2.json
+  - workspace/openapi/admin-pos.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+tests:
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/handlers/src/loopClosure.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/handlers/src/set.test.ts
+  - apps/cli/src/cli.run.test.ts
+  - packages/handlers/src/http.test.ts
+-->

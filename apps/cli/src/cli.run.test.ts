@@ -246,7 +246,7 @@ describe('flow run', () => {
     unlinkSync(configPath)
     unlinkSync(handlerPath)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('must export default (IStepHandler)')
+    expect(result.stderr).toContain('must export default (HandlerFactory or IStepHandler)')
   })
 
   it('skips handler entries with non-string modulePath and runs flow with valid handler', async () => {

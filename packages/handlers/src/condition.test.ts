@@ -1,38 +1,41 @@
 import type { FlowStep, StepContext } from '@runflow/core'
+import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
-import { ConditionHandler } from './condition'
+import conditionHandlerFactory from './condition'
 import { stepResult } from './test-helpers'
 
 const ctx = (params: Record<string, unknown> = {}): StepContext => ({ params, stepResult })
 
 describe('condition handler', () => {
-  const handler = new ConditionHandler()
+  const factoryContext = createFactoryContext()
+  const handlerConfig = conditionHandlerFactory(factoryContext)
+  const handler = handlerConfigToStepHandler(handlerConfig)
 
   it('implements getAllowedDependentIds (then + else)', () => {
     const step = { id: 'c', type: 'condition' as const, when: 'true', then: ['a', 'b'], else: ['d'], dependsOn: [] as string[] }
-    expect(handler.getAllowedDependentIds(step)).toEqual(['a', 'b', 'd'])
+    expect(handler.getAllowedDependentIds?.(step)).toEqual(['a', 'b', 'd'])
   })
 
   describe('validate', () => {
     it('returns true when step has when and then', () => {
       const step: FlowStep = { id: 'c', type: 'condition', when: 'true', then: 'a', dependsOn: [] }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns true when step has when and else', () => {
       const step: FlowStep = { id: 'c', type: 'condition', when: 'true', else: 'b', dependsOn: [] }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns error when step has no when', () => {
       const step: FlowStep = { id: 'c', type: 'condition', dependsOn: [] }
-      expect(handler.validate(step)).toContain('when')
+      expect(handler.validate?.(step)).toContain('when')
     })
 
     it('returns error when step has when but neither then nor else', () => {
       const step: FlowStep = { id: 'c', type: 'condition', when: 'true', dependsOn: [] }
-      expect(handler.validate(step)).toContain('then')
-      expect(handler.validate(step)).toContain('else')
+      expect(handler.validate?.(step)).toContain('then')
+      expect(handler.validate?.(step)).toContain('else')
     })
   })
 

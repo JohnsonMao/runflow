@@ -1,27 +1,30 @@
 import type { FlowStep, StepContext } from '@runflow/core'
+import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
 import { describe, expect, it } from 'vitest'
-import { SleepHandler } from './sleep'
+import sleepHandlerFactory from './sleep'
 import { stepResult } from './test-helpers'
 
 const emptyContext: StepContext = { params: {}, stepResult }
 
 describe('sleep handler', () => {
-  const handler = new SleepHandler()
+  const factoryContext = createFactoryContext()
+  const handlerConfig = sleepHandlerFactory(factoryContext)
+  const handler = handlerConfigToStepHandler(handlerConfig)
 
   describe('validate', () => {
     it('returns true when step has seconds', () => {
       const step: FlowStep = { id: 'w', type: 'sleep', seconds: 1, dependsOn: [] }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns true when step has ms', () => {
       const step: FlowStep = { id: 'w', type: 'sleep', ms: 100, dependsOn: [] }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns error when step has neither seconds nor ms', () => {
       const step: FlowStep = { id: 'w', type: 'sleep', dependsOn: [] }
-      expect(handler.validate(step)).toBe('sleep step requires seconds or ms (non-negative number)')
+      expect(handler.validate?.(step)).toContain('seconds or ms')
     })
   })
 

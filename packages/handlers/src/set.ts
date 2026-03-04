@@ -1,20 +1,28 @@
 // @env node
-import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
-import { isPlainObject } from '@runflow/core'
+import type { FactoryContext } from '@runflow/core'
 
-export class SetHandler implements IStepHandler {
-  validate(step: FlowStep): true | string {
-    if (isPlainObject(step.set))
-      return true
-    return 'set step requires set (object)'
-  }
+function setHandler({ defineHandler, z, utils }: FactoryContext) {
+  return defineHandler({
+    schema: z.object({
+      set: z.record(z.unknown()),
+    }),
+    run: async (context) => {
+      const { step } = context
+      const set = step.set
 
-  kill(): void {}
+      if (!utils.isPlainObject(set)) {
+        return {
+          success: false,
+          error: 'set step requires set (object)',
+        }
+      }
 
-  async run(step: FlowStep, context: StepContext): Promise<StepResult> {
-    const set = step.set
-    if (!isPlainObject(set))
-      return context.stepResult(step.id, false, { error: 'set step requires set (object)' })
-    return context.stepResult(step.id, true, { outputs: { ...set } })
-  }
+      return {
+        success: true,
+        outputs: { ...set as Record<string, unknown> },
+      }
+    },
+  })
 }
+
+export default setHandler

@@ -1,6 +1,6 @@
 /**
  * Execution engine: DAG execution only. run(flow, options) runs one flow; context.run runs nested flows.
- * Optional scopeStepIds for early exit when nextSteps leaves scope (e.g. loop body). No file I/O.
+ * No file I/O.
  */
 import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, StepContext, StepRegistry, StepResult, StepResultFn, StepResultOptions } from './types'
 import { topologicalSort } from './dag'
@@ -55,7 +55,28 @@ async function runWithTimeout(
   handler: IStepHandler,
   runFn: () => Promise<StepResult>,
   defaultTimeoutSec: number = DEFAULT_STEP_TIMEOUT_SEC,
+  signal?: AbortSignal,
 ): Promise<StepResult> {
+  // If signal is provided, use it (timeout is already set by caller)
+  // Otherwise, create our own timeout
+  if (signal) {
+    // Listen for abort and call kill
+    signal.addEventListener('abort', () => {
+      handler.kill?.()
+    }, { once: true })
+
+    try {
+      return await runFn()
+    }
+    catch (e) {
+      if (signal.aborted && e instanceof Error && e.name === 'AbortError') {
+        throw new Error(`step timeout after ${typeof step.timeout === 'number' && step.timeout > 0 ? step.timeout : defaultTimeoutSec}s`)
+      }
+      throw e
+    }
+  }
+
+  // Legacy path: create timeout ourselves
   const timeoutSec = typeof step.timeout === 'number' && step.timeout > 0
     ? step.timeout
     : defaultTimeoutSec
@@ -67,6 +88,7 @@ async function runWithTimeout(
       reject(new Error(`step timeout after ${timeoutSec}s`))
     }, timeoutMs)
   })
+
   try {
     return await Promise.race([runFn(), timeoutPromise])
   }
@@ -126,8 +148,9 @@ interface RunStepDeps {
   stepByIdMap: Map<string, FlowStep>
   registry: StepRegistry
   stepResult: StepResultFn
-  runWithTimeout: (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>) => Promise<StepResult>
+  runWithTimeout: (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>, defaultTimeoutSec?: number, signal?: AbortSignal) => Promise<StepResult>
   buildStepContext: (ctx: Record<string, unknown>) => StepContext
+  defaultStepTimeoutSec: number
   dryRun?: boolean
 }
 
@@ -136,7 +159,7 @@ async function runStep(
   ctx: Record<string, unknown>,
   deps: RunStepDeps,
 ): Promise<{ result: StepResult }> {
-  const { stepByIdMap, registry, stepResult, runWithTimeout, buildStepContext, dryRun } = deps
+  const { stepByIdMap, registry, stepResult, runWithTimeout, buildStepContext, dryRun, defaultStepTimeoutSec } = deps
   const step = stepByIdMap.get(stepId)
   if (!step) {
     return { result: stepResult(stepId, false, { error: `Step not found: ${stepId}`, nextSteps: null }) }
@@ -156,14 +179,33 @@ async function runStep(
   if (evaluateSkip(sub, ctx)) {
     return { result: stepResult(stepId, true) }
   }
+
+  // Create AbortController for this step execution
+  const abortController = new AbortController()
+  const signal = abortController.signal
+
+  // Set timeout to abort signal
+  const timeoutSec = typeof sub.timeout === 'number' && sub.timeout > 0
+    ? sub.timeout
+    : defaultStepTimeoutSec
+  const timeoutMs = timeoutSec * 1000
+  const timeoutId = setTimeout(() => {
+    abortController.abort()
+  }, timeoutMs)
+
   const stepCtx = buildStepContext(ctx)
+  stepCtx.signal = signal
+
   try {
-    const res = await runWithTimeout(sub, ent, () => ent.run(sub, stepCtx))
+    const res = await runWithTimeout(sub, ent, () => ent.run(sub, stepCtx), defaultStepTimeoutSec, signal)
     return { result: res ?? stepResult(stepId, false, { error: 'Handler returned no result' }) }
   }
   catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     return { result: stepResult(stepId, false, { error: message }) }
+  }
+  finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -232,6 +274,7 @@ export async function executeFlow(
       stepResult,
       runWithTimeout: runWithTimeoutBound,
       buildStepContext,
+      defaultStepTimeoutSec,
       dryRun: true,
     }
     let drySuccess = true
@@ -255,6 +298,7 @@ export async function executeFlow(
       stepResult,
       runWithTimeout: runWithTimeoutBound,
       buildStepContext,
+      defaultStepTimeoutSec,
     }
     const step = stepByIdMap.get(stepId)
     if (step)

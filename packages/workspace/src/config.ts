@@ -1,9 +1,10 @@
 import type { OpenApiDocument, OpenApiToFlowsOptions, ParamExposeConfig } from '@runflow/convention-openapi'
-import type { FlowDefinition, IStepHandler, ParamDeclaration, StepRegistry } from '@runflow/core'
+import type { FlowDefinition, HandlerFactory, IStepHandler, ParamDeclaration, StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadOpenApiDocument, openApiToFlows } from '@runflow/convention-openapi'
+import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
 import { createBuiltinRegistry } from '@runflow/handlers'
 import { loadFromFile } from './loadFlow'
 
@@ -336,17 +337,78 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         throw new Error(`Handler module not found for type "${type}": ${resolved}`)
       }
       try {
-        const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
-        const mod = await import(url) as { default?: IStepHandler }
-        const handler = mod.default
-        if (!handler || typeof handler.run !== 'function') {
-          throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
+        let mod: { default?: IStepHandler | HandlerFactory }
+        const ext = path.extname(resolved).toLowerCase()
+
+        if (ext === '.ts') {
+          // Use tsx to load TypeScript files dynamically
+          // Dynamic import of tsx/esm/api to avoid requiring it as a dependency if not needed
+          const { tsImport } = await import('tsx/esm/api')
+          mod = await tsImport(resolved, import.meta.url) as { default?: HandlerFactory }
+
+          // If it's a factory function, initialize it with factory context
+          const factory = mod.default
+          if (factory && typeof factory === 'function') {
+            const factoryContext = createFactoryContext()
+            const handlerConfig = factory(factoryContext)
+            registry[type] = handlerConfigToStepHandler(handlerConfig)
+          }
+          else if (factory && typeof (factory as IStepHandler).run === 'function') {
+            // Legacy IStepHandler format
+            registry[type] = factory as IStepHandler
+          }
+          else {
+            throw new Error(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+          }
         }
-        registry[type] = handler
+        else {
+          // Use standard import for .js/.mjs files
+          const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
+          mod = await import(url) as { default?: IStepHandler | HandlerFactory }
+          const handler = mod.default
+
+          if (handler && typeof handler === 'function') {
+            // Check if it's a factory function (HandlerFactory)
+            const factoryContext = createFactoryContext()
+            try {
+              const handlerConfig = handler(factoryContext)
+              if (handlerConfig && typeof handlerConfig.run === 'function') {
+                // It's a factory function
+                registry[type] = handlerConfigToStepHandler(handlerConfig)
+              }
+              else {
+                // It's not a factory, treat as legacy IStepHandler
+                const legacyHandler = handler as unknown as IStepHandler
+                if (typeof legacyHandler.run === 'function') {
+                  registry[type] = legacyHandler
+                }
+                else {
+                  throw new TypeError(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+                }
+              }
+            }
+            catch {
+              // If calling as factory fails, treat as legacy IStepHandler
+              const legacyHandler = handler as unknown as IStepHandler
+              if (typeof legacyHandler.run === 'function') {
+                registry[type] = legacyHandler
+              }
+              else {
+                throw new TypeError(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+              }
+            }
+          }
+          else if (handler && typeof (handler as unknown as IStepHandler).run === 'function') {
+            registry[type] = handler as IStepHandler
+          }
+          else {
+            throw new Error(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+          }
+        }
       }
       catch (e) {
         const msg = e instanceof Error ? e.message : ''
-        if (msg.includes('must export default'))
+        if (msg.includes('must export default') || msg.includes('must export'))
           throw e
         continue
       }
@@ -362,17 +424,72 @@ export async function buildRegistryFromConfig(config: RunflowConfig | null, conf
         throw new Error(`OpenAPI handler module not found for type "${type}": ${resolved}`)
       }
       try {
-        const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
-        const mod = await import(url) as { default?: IStepHandler }
-        const handler = mod.default
-        if (!handler || typeof handler.run !== 'function') {
-          throw new Error(`Handler module for "${type}" must export default (IStepHandler).`)
+        let mod: { default?: IStepHandler | HandlerFactory }
+        const ext = path.extname(resolved).toLowerCase()
+
+        if (ext === '.ts') {
+          // Use tsx to load TypeScript files dynamically
+          const { tsImport } = await import('tsx/esm/api')
+          mod = await tsImport(resolved, import.meta.url) as { default?: HandlerFactory }
+
+          // If it's a factory function, initialize it with factory context
+          const factory = mod.default
+          if (factory && typeof factory === 'function') {
+            const factoryContext = createFactoryContext()
+            const handlerConfig = factory(factoryContext)
+            registry[type] = handlerConfigToStepHandler(handlerConfig)
+          }
+          else if (factory && typeof (factory as IStepHandler).run === 'function') {
+            registry[type] = factory as IStepHandler
+          }
+          else {
+            throw new Error(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+          }
         }
-        registry[type] = handler
+        else {
+          // Use standard import for .js/.mjs files
+          const url = isDevelopment() ? `${pathToFileURL(resolved).href}?t=${statSync(resolved).mtimeMs}` : pathToFileURL(resolved).href
+          mod = await import(url) as { default?: IStepHandler | HandlerFactory }
+          const handler = mod.default
+
+          if (handler && typeof handler === 'function') {
+            const factoryContext = createFactoryContext()
+            try {
+              const handlerConfig = handler(factoryContext)
+              if (handlerConfig && typeof handlerConfig.run === 'function') {
+                registry[type] = handlerConfigToStepHandler(handlerConfig)
+              }
+              else {
+                const legacyHandler = handler as unknown as IStepHandler
+                if (typeof legacyHandler.run === 'function') {
+                  registry[type] = legacyHandler
+                }
+                else {
+                  throw new TypeError(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+                }
+              }
+            }
+            catch {
+              const legacyHandler = handler as unknown as IStepHandler
+              if (typeof legacyHandler.run === 'function') {
+                registry[type] = legacyHandler
+              }
+              else {
+                throw new TypeError(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+              }
+            }
+          }
+          else if (handler && typeof (handler as unknown as IStepHandler).run === 'function') {
+            registry[type] = handler as IStepHandler
+          }
+          else {
+            throw new Error(`Handler module for "${type}" must export default (HandlerFactory or IStepHandler).`)
+          }
+        }
       }
       catch (e) {
         const msg = e instanceof Error ? e.message : ''
-        if (msg.includes('must export default'))
+        if (msg.includes('must export default') || msg.includes('must export'))
           throw e
         continue
       }

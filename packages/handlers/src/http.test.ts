@@ -1,12 +1,15 @@
 import type { FlowStep, StepContext } from '@runflow/core'
+import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { HttpHandler } from './http'
+import httpHandlerFactory from './http'
 import { stepResult } from './test-helpers'
 
 const emptyContext: StepContext = { params: {}, stepResult }
 
 describe('http handler', () => {
-  const handler = new HttpHandler()
+  const factoryContext = createFactoryContext()
+  const handlerConfig = httpHandlerFactory(factoryContext)
+  const handler = handlerConfigToStepHandler(handlerConfig)
 
   let originalFetch: typeof globalThis.fetch
 
@@ -21,12 +24,12 @@ describe('http handler', () => {
   describe('validate', () => {
     it('returns true when step has url', () => {
       const step: FlowStep = { id: 'h1', type: 'http', url: 'https://example.com', dependsOn: [] }
-      expect(handler.validate(step)).toBe(true)
+      expect(handler.validate?.(step)).toBe(true)
     })
 
     it('returns error when step has no url', () => {
       const step: FlowStep = { id: 'h1', type: 'http', dependsOn: [] }
-      expect(handler.validate(step)).toBe('http step requires url (string)')
+      expect(handler.validate?.(step)).toBe('url: Required')
     })
   })
 
