@@ -19,4 +19,5 @@ lib-cov
 logs
 node_modules
 temp
-/workspace
+.spectra/
+openspec/.vector-search.db*
