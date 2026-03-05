@@ -226,7 +226,7 @@ describe('flow run', () => {
     expect(result.stderr).toContain('custom')
   })
 
-  it('exits with error when config handler does not export default IStepHandler', async () => {
+  it('exits with error when config handler does not export default HandlerFactory', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flow-cli-'))
     const flowPath = join(dir, 'flow.yaml')
     const configPath = join(dir, 'runflow.config.mjs')
@@ -240,13 +240,13 @@ describe('flow run', () => {
     ].join('\n')
     writeFileSync(flowPath, yaml)
     writeFileSync(configPath, 'export default { handlers: { bad: "./bad-handler.mjs" } }\n')
-    writeFileSync(handlerPath, 'export default { validate: () => true };')
+    writeFileSync(handlerPath, 'export default { notAFactory: true };')
     const result = await runWithParse(['run', flowPath, '--config', configPath], dir)
     unlinkSync(flowPath)
     unlinkSync(configPath)
     unlinkSync(handlerPath)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('must export default (HandlerFactory or IStepHandler)')
+    expect(result.stderr).toContain('must export default a HandlerFactory function')
   })
 
   it('skips handler entries with non-string modulePath and runs flow with valid handler', async () => {
@@ -265,11 +265,10 @@ describe('flow run', () => {
     writeFileSync(flowPath, yaml)
     writeFileSync(configPath, 'export default { handlers: { skipMe: 123, echo: "./echo-handler.mjs" } }\n')
     writeFileSync(handlerPath, [
-      'export default {',
-      '  validate() { return true },',
-      '  kill() {},',
-      '  async run(step) { const m = step.message != null ? String(step.message) : step.id; return { stepId: step.id, success: true, log: m }; }',
-      '}',
+      'export default ({ defineHandler }) => defineHandler({',
+      '  type: "echo",',
+      '  async run(ctx) { const m = ctx.step.message != null ? String(ctx.step.message) : ctx.step.id; return { success: true, log: m }; }',
+      '})',
     ].join('\n'))
     const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)
     unlinkSync(flowPath)
@@ -545,14 +544,13 @@ describe('flow run', () => {
     writeFileSync(flowPath, yaml)
     writeFileSync(configPath, 'export default { handlers: { echo: \'./echo-handler.mjs\' } }\n')
     const handler = [
-      'export default {',
-      '  validate() { return true },',
-      '  kill() {},',
-      '  async run(step) {',
-      '    const msg = step.message != null ? String(step.message) : step.id;',
-      '    return { stepId: step.id, success: true, log: msg };',
+      'export default ({ defineHandler }) => defineHandler({',
+      '  type: "echo",',
+      '  async run(ctx) {',
+      '    const msg = ctx.step.message != null ? String(ctx.step.message) : ctx.step.id;',
+      '    return { success: true, log: msg };',
       '  }',
-      '}',
+      '})',
     ].join('\n')
     writeFileSync(handlerPath, handler)
     const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)

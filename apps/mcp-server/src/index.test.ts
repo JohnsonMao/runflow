@@ -20,16 +20,15 @@ describe('loadConfigOnce', () => {
     const handlerPath = join(dir, 'echo.mjs')
     writeFileSync(configPath, 'export default { handlers: { echo: "./echo.mjs" } }\n')
     writeFileSync(handlerPath, [
-      'export default {',
-      '  validate() { return true },',
-      '  kill() {},',
-      '  async run(step) { return { stepId: step.id, success: true }; }',
-      '}',
+      'export default ({ defineHandler }) => defineHandler({',
+      '  type: "echo",',
+      '  async run(ctx) { return { success: true }; }',
+      '})',
     ].join('\n'))
     process.chdir(dir)
     const result = await loadConfigOnce()
     expect(result.config).not.toBeNull()
-    expect(result.config?.handlers?.echo).toBe('./echo.mjs')
+    expect((result.config?.handlers as any)?.echo).toBe('./echo.mjs')
     expect(result.registry.echo).toBeDefined()
     expect(typeof result.registry.echo?.run).toBe('function')
     unlinkSync(configPath)

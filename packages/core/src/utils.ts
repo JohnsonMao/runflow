@@ -1,5 +1,14 @@
+import type { HandlerConfig } from './handler-factory'
 /** Normalize step id or array of step ids to string[]. Single string -> [s], array -> filter to strings, else []. */
-import type { FlowDefinition, FlowStep, StepResult } from './types'
+import type { FlowDefinition, FlowStep, StepRegistry, StepResult } from './types'
+
+export function buildRegistry(handlers: HandlerConfig[]): StepRegistry {
+  const registry: StepRegistry = {}
+  for (const handler of handlers) {
+    registry[handler.type] = handler
+  }
+  return registry
+}
 
 export function normalizeStepIds(v: unknown): string[] {
   if (typeof v === 'string')

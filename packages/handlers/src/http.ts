@@ -26,6 +26,7 @@ function serializeCookie(cookie: Record<string, string> | string): string {
 
 function httpHandler({ defineHandler, z, utils }: FactoryContext) {
   return defineHandler({
+    type: 'http',
     schema: z.object({
       // Allow template strings ({{ ... }}) or relative paths, not just full URLs
       // Actual URL validation happens at runtime after template substitution
@@ -40,7 +41,7 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
     }),
     run: async (context) => {
       const { step, signal } = context
-      const urlRaw = step.url as string
+      const urlRaw = step.url
 
       let url: URL
       try {
@@ -60,7 +61,7 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
         }
       }
 
-      const allowedHosts = step.allowedHttpHosts as string[] | undefined
+      const allowedHosts = step.allowedHttpHosts
       if (allowedHosts !== undefined && Array.isArray(allowedHosts) && allowedHosts.length > 0) {
         const hostLower = url.hostname.toLowerCase()
         const allowed = allowedHosts.some(h => String(h).toLowerCase() === hostLower)
@@ -74,7 +75,7 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
 
       const pathOpt = typeof step.path === 'string' ? step.path : undefined
       const queryOpt = step.query !== undefined && (typeof step.query === 'string' || utils.isPlainObject(step.query))
-        ? step.query as Record<string, string> | string
+        ? step.query
         : undefined
       const finalUrl = buildRequestUrl(urlRaw, pathOpt, queryOpt)
 

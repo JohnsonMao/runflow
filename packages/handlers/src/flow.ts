@@ -3,6 +3,7 @@ import type { FactoryContext } from '@runflow/core'
 
 function flowHandler({ defineHandler, z, utils }: FactoryContext) {
   return defineHandler({
+    type: 'flow',
     schema: z.object({
       flow: z.string().min(1),
       params: z.record(z.unknown()).optional(),
@@ -17,7 +18,7 @@ function flowHandler({ defineHandler, z, utils }: FactoryContext) {
         }
       }
 
-      const flowId = step.flow as string
+      const flowId = step.flow
       const flow = flowMap?.[flowId]
       if (flow === undefined) {
         return {
@@ -26,7 +27,7 @@ function flowHandler({ defineHandler, z, utils }: FactoryContext) {
         }
       }
 
-      const params = utils.isPlainObject(step.params) ? (step.params as Record<string, unknown>) : {}
+      const params = utils.isPlainObject(step.params) ? step.params : {}
 
       try {
         const result = await runFn(flow, params)

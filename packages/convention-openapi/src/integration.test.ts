@@ -1,20 +1,20 @@
-import type { FlowStep, IStepHandler, StepContext, StepResult } from '@runflow/core'
+import type { HandlerConfig } from '@runflow/core'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { run } from '@runflow/core'
-import { createBuiltinRegistry } from '@runflow/handlers'
+import { buildRegistry, createFactoryContext, run } from '@runflow/core'
+import { builtinHandlers } from '@runflow/handlers'
 import { describe, expect, it } from 'vitest'
 import { openApiToFlows } from './index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(__dirname, 'fixtures')
 
-const mockHttpHandler: IStepHandler = {
-  validate: () => true,
-  kill: () => {},
-  run: async (step: FlowStep, context: StepContext): Promise<StepResult> => {
-    return context.stepResult(step.id, true, {
-      outputs: { [step.id]: { statusCode: 200, body: {} } },
+const mockHttpHandler: HandlerConfig = {
+  type: 'http',
+  run: async (ctx) => {
+    ctx.report({
+      success: true,
+      outputs: { [ctx.step.id]: { statusCode: 200, body: {} } },
     })
   },
 }
@@ -26,8 +26,12 @@ describe('integration: openApiToFlows + run', () => {
     expect(flow).toBeDefined()
     expect(flow!.steps.some(s => s.type === 'http')).toBe(true)
 
-    const registry = createBuiltinRegistry()
-    registry.http = mockHttpHandler
+    const factoryContext = createFactoryContext()
+    const handlers = [
+      ...builtinHandlers.map(f => f(factoryContext)).filter(h => h.type !== 'http'),
+      mockHttpHandler,
+    ]
+    const registry = buildRegistry(handlers)
 
     const runResult = await run(flow!, {
       params: { id: '1' },

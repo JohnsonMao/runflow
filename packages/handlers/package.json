@@ -20,11 +20,10 @@
     "test": "vitest run --reporter=dot",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@runflow/core": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
+    "@runflow/core": "workspace:*",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",

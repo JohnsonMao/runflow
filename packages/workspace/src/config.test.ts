@@ -34,7 +34,7 @@ describe('loadConfig', () => {
     const loaded = await loadConfig(configPath)
     expect(loaded).not.toBeNull()
     expect(loaded?.flowsDir).toBe('flows')
-    expect(loaded?.handlers?.echo).toBe('./echo.mjs')
+    expect((loaded?.handlers as Record<string, any>)?.echo).toBe('./echo.mjs')
   })
 
   it('returns null when module has no default export', async () => {
@@ -62,7 +62,7 @@ describe('loadConfig', () => {
     const loaded = await loadConfig(configPath)
     expect(loaded).not.toBeNull()
     expect(loaded?.flowsDir).toBe('flows')
-    expect(loaded?.handlers?.echo).toBe('./echo.mjs')
+    expect((loaded?.handlers as Record<string, any>)?.echo).toBe('./echo.mjs')
   })
 
   it('returns null when .json is invalid', async () => {

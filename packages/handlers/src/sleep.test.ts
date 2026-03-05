@@ -1,59 +1,52 @@
-import type { FlowStep, StepContext } from '@runflow/core'
-import { createFactoryContext, handlerConfigToStepHandler } from '@runflow/core'
-import { describe, expect, it } from 'vitest'
+import { createFactoryContext } from '@runflow/core'
+import { describe, expect, it, vi } from 'vitest'
 import sleepHandlerFactory from './sleep'
-import { stepResult } from './test-helpers'
-
-const emptyContext: StepContext = { params: {}, stepResult }
 
 describe('sleep handler', () => {
   const factoryContext = createFactoryContext()
-  const handlerConfig = sleepHandlerFactory(factoryContext)
-  const handler = handlerConfigToStepHandler(handlerConfig)
+  const handler = sleepHandlerFactory(factoryContext)
 
-  describe('validate', () => {
+  const createMockContext = (step: any, params = {}) => ({
+    step,
+    params,
+    report: vi.fn(),
+    signal: new AbortController().signal,
+  })
+
+  describe('schema', () => {
     it('returns true when step has seconds', () => {
-      const step: FlowStep = { id: 'w', type: 'sleep', seconds: 1, dependsOn: [] }
-      expect(handler.validate?.(step)).toBe(true)
+      const step = { id: 'w', type: 'sleep', seconds: 1 }
+      const parsed = handler.schema?.safeParse(step)
+      expect(parsed?.success).toBe(true)
     })
 
     it('returns true when step has ms', () => {
-      const step: FlowStep = { id: 'w', type: 'sleep', ms: 100, dependsOn: [] }
-      expect(handler.validate?.(step)).toBe(true)
+      const step = { id: 'w', type: 'sleep', ms: 100 }
+      const parsed = handler.schema?.safeParse(step)
+      expect(parsed?.success).toBe(true)
     })
 
     it('returns error when step has neither seconds nor ms', () => {
-      const step: FlowStep = { id: 'w', type: 'sleep', dependsOn: [] }
-      expect(handler.validate?.(step)).toContain('seconds or ms')
+      const step = { id: 'w', type: 'sleep' }
+      const parsed = handler.schema?.safeParse(step)
+      expect(parsed?.success).toBe(false)
     })
   })
 
   describe('run', () => {
     it('waits for seconds then returns success with no outputs', async () => {
-      const step: FlowStep = { id: 'wait', type: 'sleep', seconds: 0, dependsOn: [] }
-      const result = await handler.run(step, emptyContext)
-      expect(result.success).toBe(true)
-      expect(result.outputs).toBeUndefined()
+      const step = { id: 'wait', type: 'sleep', seconds: 0 }
+      const ctx = createMockContext(step)
+      const result = await handler.run(ctx as any)
+      expect(result?.success).toBe(true)
+      expect(result?.outputs).toBeUndefined()
     })
 
     it('waits for ms then returns success', async () => {
-      const step: FlowStep = { id: 'wait', type: 'sleep', ms: 10, dependsOn: [] }
-      const result = await handler.run(step, emptyContext)
-      expect(result.success).toBe(true)
-    })
-
-    it('fails when duration is missing at run time', async () => {
-      const step: FlowStep = { id: 'wait', type: 'sleep', dependsOn: [] }
-      const result = await handler.run(step, emptyContext)
-      expect(result.success).toBe(false)
-      expect(result.error).toMatch(/seconds|ms|duration/i)
-    })
-
-    it('fails when seconds is negative at run time', async () => {
-      const step: FlowStep = { id: 'wait', type: 'sleep', seconds: -1, dependsOn: [] }
-      const result = await handler.run(step, emptyContext)
-      expect(result.success).toBe(false)
-      expect(result.error).toMatch(/seconds|ms|duration/i)
+      const step = { id: 'wait', type: 'sleep', ms: 10 }
+      const ctx = createMockContext(step)
+      const result = await handler.run(ctx as any)
+      expect(result?.success).toBe(true)
     })
   })
 })

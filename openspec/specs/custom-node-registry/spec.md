@@ -8,116 +8,129 @@
 
 ### Requirement: StepHandler interface SHALL be the single execution contract
 
-The system SHALL define a new handler contract via `defineHandler({ schema?, flowControl?, run: (context: HandlerContext) => Promise<SimpleResult | void> })`. Every step type (including built-in and custom) MUST be executed by invoking the `run` function provided by the handler's factory. The engine SHALL NOT branch on step type with built-in logic; it SHALL only look up the handler configuration and invoke its `run` method.
+The system SHALL define a new handler contract via `defineHandler({ type: string, schema?, flowControl?, run: (context: HandlerContext) => Promise<SimpleResult | void> })`. Every step type MUST be executed by invoking the `run` function provided by a `HandlerConfig`. The engine SHALL NOT branch on step type with built-in logic; it SHALL ONLY look up the handler in the registry and invoke its `run` method. The `IStepHandler` class-based interface and its corresponding `HandlerAdapter` are REMOVED.
 
-#### Scenario: Execution dispatches via registry
-- **WHEN** a flow step has `type: 'http'` and the caller-provided registry is used
-- **THEN** the executor looks up the handler configuration for `'http'` in the registry and calls its `run` function with the step context
-- **AND** the handler MAY report results via `context.report()` or `return`
+#### Scenario: Execution dispatches via config in registry
+- **WHEN** a flow step has `type: 'http'` and a registry containing an http handler config is used
+- **THEN** the executor looks up the config for `'http'` and calls its `run` function
+- **AND** if no config is found for the type, it SHALL produce an error result as before
 
 
 <!-- @trace
-source: refactor-handler-factory-pattern
-updated: 2026-03-04
+source: standardize-handler-factory
+updated: 2026-03-05
 code:
-  - workspace/openapi/admin-location-point.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
-  - workspace/custom-handler/test.mjs
-  - workspace/flows/location-pickup/location-pickup-shipping.yaml
-  - workspace/config/runflow.config.json
-  - workspace/openapi/admin-payments.yaml
-  - workspace/openapi/admin-invoice.yaml
-  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
-  - packages/core/src/engine.ts
-  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
-  - workspace/flows/logistics/91app-ship-confirm.yaml
-  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
-  - workspace/flows/logistics/delivery-shipment.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
-  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
-  - workspace/openapi/admin-delivery.yaml
-  - packages/core/src/index.ts
-  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
-  - workspace/flows/promotion/promotion-rule-activate.yaml
-  - workspace/src/scm.ts
-  - workspace/openapi/admin-location.yaml
-  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
-  - workspace/flows/convenience-store/store-shipping.yaml
-  - workspace/openapi/admin-promotion-rules.yaml
-  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
-  - workspace/openapi/store-front-outer-member-login.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
-  - workspace/openapi/admin-order.yaml
-  - workspace/flows/tt/post-users.yaml
-  - workspace/openapi/store-to-store-shipping.yaml
-  - workspace/flows/tt2/sub.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
-  - packages/handlers/src/sleep.ts
-  - workspace/flows/tt/test.yaml
-  - workspace/openapi/logistics-center.yaml
-  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
-  - workspace/flows/promotion/create-special-price-promotion.yaml
-  - workspace/flows/salepage/update-sale-page-images-flow.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
-  - packages/core/src/handler-factory.ts
-  - workspace/flows/payment/payment-txntoken-flow.yaml
-  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
-  - packages/handlers/src/loopClosure.ts
-  - workspace/openapi/admin-salepage.yaml
-  - workspace/config/auth.json
-  - workspace/flows/salepage/create-sale-page-flow.yaml
-  - packages/core/src/handler-adapter.ts
-  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
-  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
-  - workspace/flows/payment/payment-cardtoken-flow.yaml
-  - packages/core/src/types.ts
   - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
-  - packages/handlers/src/flow.ts
-  - workspace/flows/logistics/logistics-smart-master-flow.yaml
-  - workspace/flows/convenience-store/store-shipping-confirm.yaml
-  - workspace/flows/order/batch-order-confirm.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
-  - workspace/flows/tt/get-users.yaml
-  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
-  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
-  - workspace/openapi/simple.yaml
   - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
-  - workspace/custom-handler/scm-handler.mjs
-  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
-  - packages/workspace/package.json
-  - workspace/flows/tt/example-loop-two-branches.yaml
-  - packages/handlers/src/condition.ts
-  - packages/handlers/src/set.ts
-  - packages/workspace/src/config.ts
-  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
-  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
-  - workspace/flows/tt/get-users-userId.yaml
-  - workspace/openapi/admin-promotion.yaml
-  - packages/handlers/src/http.ts
-  - workspace/src/payments.ts
-  - packages/handlers/src/index.ts
-  - workspace/openapi/admin-location-member.yaml
-  - workspace/flows/payment/payments-transaction-query.yaml
-  - packages/handlers/src/loop.ts
-  - workspace/flows/tt/params-count2.json
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
   - workspace/openapi/admin-pos.yaml
-  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - packages/handlers/src/set.ts
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/tt/test.yaml
+  - workspace/config/auth.json
+  - packages/workspace/src/config.ts
+  - packages/core/src/validateCanBeDependedOn.ts
+  - packages/handlers/src/message.ts
+  - workspace/config/runflow.config.json
+  - packages/handlers/src/condition.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - packages/handlers/src/loop.ts
   - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - packages/handlers/src/index.ts
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/openapi/admin-payments.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - packages/handlers/package.json
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - apps/cli/src/cli.ts
+  - packages/core/src/engine.ts
   - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+  - workspace/src/payments.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - packages/core/src/utils.ts
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/flow.ts
+  - packages/core/src/types.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/openapi/admin-location-point.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - apps/flow-viewer/server/workspace-api.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/src/scm.ts
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/openapi/admin-location-member.yaml
+  - apps/mcp-server/src/index.ts
+  - packages/handlers/src/http.ts
+  - packages/handlers/src/test-helpers.ts
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/tt/params-count2.json
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
 tests:
-  - packages/handlers/src/condition.test.ts
-  - packages/handlers/src/loop.test.ts
-  - packages/handlers/src/loopClosure.test.ts
-  - packages/handlers/src/flow.test.ts
-  - packages/handlers/src/sleep.test.ts
-  - packages/handlers/src/set.test.ts
+  - packages/convention-openapi/src/integration.test.ts
   - apps/cli/src/cli.run.test.ts
+  - apps/mcp-server/src/index.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/workspace/src/config.test.ts
+  - packages/core/src/validateCanBeDependedOn.test.ts
   - packages/handlers/src/http.test.ts
+  - packages/core/src/engine.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/core/src/run.test.ts
+  - packages/core/src/handler-factory.test.ts
+  - packages/handlers/src/message.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/set.test.ts
 -->
 
 ---
@@ -145,25 +158,130 @@ Handlers MUST return a value that conforms to the existing `StepResult` shape: `
 ---
 ### Requirement: Engine SHALL NOT provide a default registry; registry SHALL be required when flow has steps
 
-The system SHALL define a registry type (e.g. `StepRegistry`) and SHALL export `registerStepHandler(registry, type, handler)` so that callers can build a registry. The engine SHALL NOT provide a default registry or `createDefaultRegistry`. When the flow has steps to execute, `run(flow, options)` SHALL require a valid `registry` in `RunOptions`; if `registry` is missing, the engine SHALL fail fast (e.g. throw or return a failed result with a clear message such as "registry is required"). Callers that need built-in step types SHALL depend on `@runflow/handlers` and use a helper (e.g. `createBuiltinRegistry()` or `registerBuiltinHandlers(registry)`), then pass that registry to `run()`.
+The system SHALL define a registry type (e.g. `StepRegistry`) and SHALL export a `buildRegistry(handlers: HandlerConfig[])` helper. This helper SHALL take an array of `HandlerConfig` (produced by handler factories) and SHALL automatically build a registry where each handler is mapped to its internal `type`. This REPLACES the previous key-based object registration. The engine SHALL NOT provide a default registry or `createDefaultRegistry`. When the flow has steps to execute, `run(flow, options)` SHALL require a valid `registry` in `RunOptions`; if `registry` is missing, the engine SHALL fail fast.
 
-#### Scenario: Run without registry fails or is invalid
+#### Scenario: Building registry from array
+- **WHEN** `buildRegistry([echoHandlerConfig, httpHandlerConfig])` is called
+- **THEN** it SHALL return a registry where `echoHandlerConfig.type` maps to `echoHandlerConfig` and `httpHandlerConfig.type` maps to `httpHandlerConfig`
+- **AND** the caller SHALL NOT need to manually specify the string key for each handler
 
-- **WHEN** the caller invokes `run(flow, {})` with no `registry` and the flow has at least one step
-- **THEN** the engine SHALL require `registry` (e.g. throw or return a failed result with a message like "registry is required")
-- **AND** there SHALL be no implicit default registry from core
 
-#### Scenario: Caller builds registry from handlers package and runs
-
-- **WHEN** the caller does `const registry = createBuiltinRegistry()` from `@runflow/handlers`, then `run(flow, { registry })`
-- **THEN** the executor uses that registry for dispatch
-- **AND** built-in step types behave as before
-
-#### Scenario: Caller can override or extend registry
-
-- **WHEN** the caller passes `registry` in `RunOptions` (e.g. by using createBuiltinRegistry and adding a handler, or by providing a full custom registry)
-- **THEN** the engine SHALL use that registry for dispatch
-- **AND** custom step types in the flow SHALL be executed if registered; unregistered types SHALL produce an error result per requirement below
+<!-- @trace
+source: standardize-handler-factory
+updated: 2026-03-05
+code:
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/openapi/admin-pos.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - packages/handlers/src/set.ts
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/tt/test.yaml
+  - workspace/config/auth.json
+  - packages/workspace/src/config.ts
+  - packages/core/src/validateCanBeDependedOn.ts
+  - packages/handlers/src/message.ts
+  - workspace/config/runflow.config.json
+  - packages/handlers/src/condition.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - packages/handlers/src/loop.ts
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - packages/handlers/src/index.ts
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/openapi/admin-payments.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - packages/handlers/package.json
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - apps/cli/src/cli.ts
+  - packages/core/src/engine.ts
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+  - workspace/src/payments.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - packages/core/src/utils.ts
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/flow.ts
+  - packages/core/src/types.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/openapi/admin-location-point.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - apps/flow-viewer/server/workspace-api.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/src/scm.ts
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/openapi/admin-location-member.yaml
+  - apps/mcp-server/src/index.ts
+  - packages/handlers/src/http.ts
+  - packages/handlers/src/test-helpers.ts
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/tt/params-count2.json
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+tests:
+  - packages/convention-openapi/src/integration.test.ts
+  - apps/cli/src/cli.run.test.ts
+  - apps/mcp-server/src/index.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/workspace/src/config.test.ts
+  - packages/core/src/validateCanBeDependedOn.test.ts
+  - packages/handlers/src/http.test.ts
+  - packages/core/src/engine.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/core/src/run.test.ts
+  - packages/core/src/handler-factory.test.ts
+  - packages/handlers/src/message.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/set.test.ts
+-->
 
 ---
 ### Requirement: Unregistered step type SHALL produce an error result
@@ -219,114 +337,126 @@ Before invoking a step's handler, the executor SHALL apply template substitution
 ---
 ### Requirement: CLI SHALL build registry using @runflow/handlers plus config and --registry
 
-The CLI SHALL build its registry by using the built-in handlers from `@runflow/handlers`, then merge config `handlers` and `--registry` modules. The engine SHALL NOT provide that default. (1) **Config file**: the config's `handlers` property SHALL be a record mapping step type names to module paths (relative to the config file directory). (2) **--registry <path>**: the CLI SHALL load the given module's default export. The CLI SHALL support direct loading of `.ts` handler files using a runtime loader (e.g., `tsx` or `jiti`) so that users can define handlers without a separate build step.
+The CLI SHALL build its registry by collecting `HandlerConfig` objects from `@runflow/handlers` and any custom handlers defined in the workspace config. The CLI SHALL support loading multiple handlers from a single module if the module exports an array of factories. The registration process MUST be array-based to ensure consistent handling of built-in and custom handlers.
 
-#### Scenario: CLI runs flow with .ts custom handler
-- **WHEN** the user runs the CLI with a config file that has `handlers: { echo: './echo-handler.ts' }`
-- **THEN** the CLI SHALL use a dynamic loader to import the factory from the TS file
-- **AND** the CLI SHALL initialize the factory with the tool context and register the resulting handler
-- **AND** the flow step with `type: 'echo'` SHALL be executed correctly
+#### Scenario: CLI loads custom handler from config array
+- **WHEN** a config defines `handlers: ['./my-echo.ts', './my-log.ts']` (array format)
+- **THEN** the CLI SHALL load both factories and register them in the registry using their internal `type` property
+- **AND** both step types SHALL be available for flow execution
 
 <!-- @trace
-source: refactor-handler-factory-pattern
-updated: 2026-03-04
+source: standardize-handler-factory
+updated: 2026-03-05
 code:
-  - workspace/openapi/admin-location-point.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
-  - workspace/custom-handler/test.mjs
-  - workspace/flows/location-pickup/location-pickup-shipping.yaml
-  - workspace/config/runflow.config.json
-  - workspace/openapi/admin-payments.yaml
-  - workspace/openapi/admin-invoice.yaml
-  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
-  - packages/core/src/engine.ts
-  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
-  - workspace/flows/logistics/91app-ship-confirm.yaml
-  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
-  - workspace/flows/logistics/delivery-shipment.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
-  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
-  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
-  - workspace/openapi/admin-delivery.yaml
-  - packages/core/src/index.ts
-  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
-  - workspace/flows/promotion/promotion-rule-activate.yaml
-  - workspace/src/scm.ts
-  - workspace/openapi/admin-location.yaml
-  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
-  - workspace/flows/convenience-store/store-shipping.yaml
-  - workspace/openapi/admin-promotion-rules.yaml
-  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
-  - workspace/openapi/store-front-outer-member-login.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
-  - workspace/openapi/admin-order.yaml
-  - workspace/flows/tt/post-users.yaml
-  - workspace/openapi/store-to-store-shipping.yaml
-  - workspace/flows/tt2/sub.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
-  - packages/handlers/src/sleep.ts
-  - workspace/flows/tt/test.yaml
-  - workspace/openapi/logistics-center.yaml
-  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
-  - workspace/flows/promotion/create-special-price-promotion.yaml
-  - workspace/flows/salepage/update-sale-page-images-flow.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
-  - packages/core/src/handler-factory.ts
-  - workspace/flows/payment/payment-txntoken-flow.yaml
-  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
-  - packages/handlers/src/loopClosure.ts
-  - workspace/openapi/admin-salepage.yaml
-  - workspace/config/auth.json
-  - workspace/flows/salepage/create-sale-page-flow.yaml
-  - packages/core/src/handler-adapter.ts
-  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
-  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
-  - workspace/flows/payment/payment-cardtoken-flow.yaml
-  - packages/core/src/types.ts
   - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
-  - packages/handlers/src/flow.ts
-  - workspace/flows/logistics/logistics-smart-master-flow.yaml
-  - workspace/flows/convenience-store/store-shipping-confirm.yaml
-  - workspace/flows/order/batch-order-confirm.yaml
-  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
-  - workspace/flows/tt/get-users.yaml
-  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
-  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
-  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
-  - workspace/openapi/simple.yaml
   - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
-  - workspace/custom-handler/scm-handler.mjs
-  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
-  - packages/workspace/package.json
-  - workspace/flows/tt/example-loop-two-branches.yaml
-  - packages/handlers/src/condition.ts
-  - packages/handlers/src/set.ts
-  - packages/workspace/src/config.ts
-  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
-  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
-  - workspace/flows/tt/get-users-userId.yaml
-  - workspace/openapi/admin-promotion.yaml
-  - packages/handlers/src/http.ts
-  - workspace/src/payments.ts
-  - packages/handlers/src/index.ts
-  - workspace/openapi/admin-location-member.yaml
-  - workspace/flows/payment/payments-transaction-query.yaml
-  - packages/handlers/src/loop.ts
-  - workspace/flows/tt/params-count2.json
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
   - workspace/openapi/admin-pos.yaml
-  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/openapi/simple.yaml
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - packages/handlers/src/set.ts
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/flows/tt/test.yaml
+  - workspace/config/auth.json
+  - packages/workspace/src/config.ts
+  - packages/core/src/validateCanBeDependedOn.ts
+  - packages/handlers/src/message.ts
+  - workspace/config/runflow.config.json
+  - packages/handlers/src/condition.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - workspace/flows/tt/post-users.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - packages/handlers/src/loop.ts
   - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - packages/handlers/src/index.ts
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/openapi/admin-payments.yaml
+  - packages/core/src/handler-factory.ts
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - packages/handlers/package.json
+  - workspace/flows/order/batch-order-confirm.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - apps/cli/src/cli.ts
+  - packages/core/src/engine.ts
   - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+  - workspace/src/payments.ts
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - packages/core/src/utils.ts
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - packages/core/src/handler-adapter.ts
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - packages/handlers/src/flow.ts
+  - packages/core/src/types.ts
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - workspace/flows/tt/get-users.yaml
+  - workspace/custom-handler/test.mjs
+  - workspace/openapi/admin-location-point.yaml
+  - packages/core/src/index.ts
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/tt2/sub.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - apps/flow-viewer/server/workspace-api.ts
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/src/scm.ts
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - workspace/openapi/admin-location.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/openapi/admin-location-member.yaml
+  - apps/mcp-server/src/index.ts
+  - packages/handlers/src/http.ts
+  - packages/handlers/src/test-helpers.ts
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/tt/params-count2.json
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
 tests:
-  - packages/handlers/src/condition.test.ts
-  - packages/handlers/src/loop.test.ts
-  - packages/handlers/src/loopClosure.test.ts
-  - packages/handlers/src/flow.test.ts
-  - packages/handlers/src/sleep.test.ts
-  - packages/handlers/src/set.test.ts
+  - packages/convention-openapi/src/integration.test.ts
   - apps/cli/src/cli.run.test.ts
+  - apps/mcp-server/src/index.test.ts
+  - packages/handlers/src/sleep.test.ts
+  - packages/workspace/src/config.test.ts
+  - packages/core/src/validateCanBeDependedOn.test.ts
   - packages/handlers/src/http.test.ts
+  - packages/core/src/engine.test.ts
+  - packages/handlers/src/loop.test.ts
+  - packages/core/src/run.test.ts
+  - packages/core/src/handler-factory.test.ts
+  - packages/handlers/src/message.test.ts
+  - packages/handlers/src/flow.test.ts
+  - packages/handlers/src/condition.test.ts
+  - packages/handlers/src/set.test.ts
 -->

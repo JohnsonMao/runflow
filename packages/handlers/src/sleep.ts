@@ -6,6 +6,7 @@ export const SLEEP_MAX_MS = 3600 * 1000
 
 function sleepHandler({ defineHandler, z }: FactoryContext) {
   return defineHandler({
+    type: 'sleep',
     schema: z.object({
       seconds: z.number().nonnegative().optional(),
       ms: z.number().nonnegative().optional(),

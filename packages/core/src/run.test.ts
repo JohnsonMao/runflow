@@ -1,16 +1,17 @@
-import type { FlowDefinition, FlowStep, IStepHandler, StepContext, StepResult } from './types'
+import type { HandlerConfig } from './handler-factory'
+import type { FlowDefinition, FlowStep } from './types'
 import { describe, expect, it } from 'vitest'
 import { run } from './run'
 import { normalizeStepIds } from './utils'
 
-function createStubRegistry(): Record<string, IStepHandler> {
-  const stubHandler: IStepHandler = {
-    validate: () => true,
-    kill: () => {},
-    run: async (step: FlowStep, context: StepContext): Promise<StepResult> =>
-      context.stepResult(step.id, true, { outputs: { [step.id]: { ...context.params } } }),
+function createStubRegistry(): Record<string, HandlerConfig> {
+  const stubHandler: HandlerConfig = {
+    type: 'step',
+    run: async (ctx) => {
+      ctx.report({ success: true, outputs: { [ctx.step.id]: { ...ctx.params } } })
+    },
   }
-  const reg: Record<string, IStepHandler> = {}
+  const reg: Record<string, HandlerConfig> = {}
   reg.step = stubHandler
   reg.flow = stubHandler
   return reg
@@ -26,12 +27,14 @@ describe('run', () => {
   })
 
   describe('allowed dependents (getAllowedDependentIds) validation', () => {
-    const conditionHandlerWithRestrict: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
-      validate: () => true,
-      kill: () => {},
-      run: async (step: FlowStep, ctx: StepContext): Promise<StepResult> =>
-        ctx.stepResult(step.id, true, { nextSteps: ['thenStep'] }),
+    const conditionHandlerWithRestrict: HandlerConfig = {
+      type: 'condition',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
+      },
+      run: async (ctx) => {
+        ctx.report({ success: true, nextSteps: ['thenStep'] })
+      },
     }
 
     it('fails before any step runs when a step not in then/else depends on condition', async () => {

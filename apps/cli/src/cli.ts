@@ -1,9 +1,10 @@
+import type { StepRegistry } from '@runflow/core'
 // @env node
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { run } from '@runflow/core'
-import { createBuiltinRegistry } from '@runflow/handlers'
+import { buildRegistry, createFactoryContext, run } from '@runflow/core'
+import { builtinHandlers } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   buildFlowMapForRun,
@@ -131,9 +132,16 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
     params = { ...params, ...cliParams }
   }
 
-  let registry: ReturnType<typeof createBuiltinRegistry>
+  let registry: StepRegistry
   try {
-    registry = config && configPath ? await buildRegistryFromConfig(config, configDir) : createBuiltinRegistry()
+    if (config && configPath) {
+      registry = await buildRegistryFromConfig(config, configDir)
+    }
+    else {
+      // Fallback to built-in handlers if no config
+      const factoryContext = createFactoryContext()
+      registry = buildRegistry(builtinHandlers.map(f => f(factoryContext)))
+    }
   }
   catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

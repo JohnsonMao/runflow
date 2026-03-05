@@ -3,6 +3,7 @@ import type { FactoryContext } from '@runflow/core'
 
 function setHandler({ defineHandler, z, utils }: FactoryContext) {
   return defineHandler({
+    type: 'set',
     schema: z.object({
       set: z.record(z.unknown()),
     }),
@@ -19,7 +20,7 @@ function setHandler({ defineHandler, z, utils }: FactoryContext) {
 
       return {
         success: true,
-        outputs: { ...set as Record<string, unknown> },
+        outputs: set,
       }
     },
   })

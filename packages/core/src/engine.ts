@@ -1,8 +1,9 @@
+import type { SimpleResult } from './handler-factory'
 /**
  * Execution engine: DAG execution only. run(flow, options) runs one flow; context.run runs nested flows.
  * No file I/O.
  */
-import type { FlowDefinition, FlowStep, IStepHandler, RunOptions, RunResult, StepContext, StepRegistry, StepResult, StepResultFn, StepResultOptions } from './types'
+import type { FlowDefinition, FlowStep, RunOptions, RunResult, StepContext, StepRegistry, StepResult, StepResultFn, StepResultOptions } from './types'
 import { topologicalSort } from './dag'
 import { evaluateToBoolean } from './safeExpression'
 import { substituteStep } from './substitute'
@@ -52,49 +53,18 @@ function evaluateSkip(step: FlowStep, context: Record<string, unknown>): boolean
 
 async function runWithTimeout(
   step: FlowStep,
-  handler: IStepHandler,
   runFn: () => Promise<StepResult>,
   defaultTimeoutSec: number = DEFAULT_STEP_TIMEOUT_SEC,
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ): Promise<StepResult> {
-  // If signal is provided, use it (timeout is already set by caller)
-  // Otherwise, create our own timeout
-  if (signal) {
-    // Listen for abort and call kill
-    signal.addEventListener('abort', () => {
-      handler.kill?.()
-    }, { once: true })
-
-    try {
-      return await runFn()
-    }
-    catch (e) {
-      if (signal.aborted && e instanceof Error && e.name === 'AbortError') {
-        throw new Error(`step timeout after ${typeof step.timeout === 'number' && step.timeout > 0 ? step.timeout : defaultTimeoutSec}s`)
-      }
-      throw e
-    }
-  }
-
-  // Legacy path: create timeout ourselves
-  const timeoutSec = typeof step.timeout === 'number' && step.timeout > 0
-    ? step.timeout
-    : defaultTimeoutSec
-  const timeoutMs = timeoutSec * 1000
-  let timeoutId: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<StepResult>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      handler.kill?.()
-      reject(new Error(`step timeout after ${timeoutSec}s`))
-    }, timeoutMs)
-  })
-
   try {
-    return await Promise.race([runFn(), timeoutPromise])
+    return await runFn()
   }
-  finally {
-    if (timeoutId !== undefined)
-      clearTimeout(timeoutId)
+  catch (e) {
+    if (signal.aborted && e instanceof Error && (e.name === 'AbortError' || e.message === 'step aborted')) {
+      throw new Error(`step timeout after ${typeof step.timeout === 'number' && step.timeout > 0 ? step.timeout : defaultTimeoutSec}s`)
+    }
+    throw e
   }
 }
 
@@ -148,7 +118,7 @@ interface RunStepDeps {
   stepByIdMap: Map<string, FlowStep>
   registry: StepRegistry
   stepResult: StepResultFn
-  runWithTimeout: (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>, defaultTimeoutSec?: number, signal?: AbortSignal) => Promise<StepResult>
+  runWithTimeout: (step: FlowStep, fn: () => Promise<StepResult>, defaultTimeoutSec?: number, signal?: AbortSignal) => Promise<StepResult>
   buildStepContext: (ctx: Record<string, unknown>) => StepContext
   defaultStepTimeoutSec: number
   dryRun?: boolean
@@ -165,14 +135,18 @@ async function runStep(
     return { result: stepResult(stepId, false, { error: `Step not found: ${stepId}`, nextSteps: null }) }
   }
   const sub = substituteStep(step, { ...ctx, params: ctx })
-  const ent = registry[step.type]
-  if (!ent) {
+  const config = registry[step.type]
+  if (!config) {
     return { result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}`, nextSteps: null }) }
   }
-  const valid = ent.validate?.(sub)
-  if (valid !== undefined && valid !== true) {
-    return { result: stepResult(stepId, false, { error: valid, nextSteps: null }) }
+
+  if (config.schema) {
+    const parsed = config.schema.safeParse(sub)
+    if (!parsed.success) {
+      return { result: stepResult(stepId, false, { error: parsed.error.message, nextSteps: null }) }
+    }
   }
+
   if (dryRun) {
     return { result: stepResult(stepId, true) }
   }
@@ -196,9 +170,34 @@ async function runStep(
   const stepCtx = buildStepContext(ctx)
   stepCtx.signal = signal
 
+  let lastResult: SimpleResult | undefined
+  const report = (res: SimpleResult) => {
+    lastResult = { ...lastResult, ...res }
+  }
+
+  const runHandler = async (): Promise<StepResult> => {
+    const handlerCtx = {
+      step: sub,
+      params: ctx,
+      report,
+      signal,
+      run: stepCtx.run,
+      steps: stepCtx.steps,
+      flowMap: stepCtx.flowMap,
+    }
+    const result = await config.run(handlerCtx)
+    if (result) {
+      report(result)
+    }
+    if (!lastResult) {
+      return stepResult(stepId, false, { error: 'Handler returned no result' })
+    }
+    return stepResult(stepId, lastResult.success, lastResult)
+  }
+
   try {
-    const res = await runWithTimeout(sub, ent, () => ent.run(sub, stepCtx), defaultStepTimeoutSec, signal)
-    return { result: res ?? stepResult(stepId, false, { error: 'Handler returned no result' }) }
+    const res = await runWithTimeout(sub, runHandler, defaultStepTimeoutSec, signal)
+    return { result: res }
   }
   catch (e) {
     const message = e instanceof Error ? e.message : String(e)
@@ -231,8 +230,8 @@ export async function executeFlow(
   const flowCallDepth = options.flowCallDepth ?? 0
   const maxFlowCallDepth = options.maxFlowCallDepth ?? DEFAULT_MAX_FLOW_CALL_DEPTH
   const defaultStepTimeoutSec = options.defaultStepTimeoutSec ?? DEFAULT_STEP_TIMEOUT_SEC
-  const runWithTimeoutBound = (step: FlowStep, handler: IStepHandler, fn: () => Promise<StepResult>) =>
-    runWithTimeout(step, handler, fn, defaultStepTimeoutSec)
+  const runWithTimeoutBound = (step: FlowStep, fn: () => Promise<StepResult>, defaultTimeout?: number, signal?: AbortSignal) =>
+    runWithTimeout(step, fn, defaultTimeout ?? defaultStepTimeoutSec, signal!)
 
   const run: StepContext['run'] = async (
     childFlow: FlowDefinition,
@@ -362,6 +361,9 @@ export async function executeFlow(
     success,
     steps,
     finalParams: context,
+  }
+  if (!success && !runResult.error) {
+    runResult.error = steps.find(s => !s.success)?.error
   }
 
   return runResult

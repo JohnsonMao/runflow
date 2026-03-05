@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { TreeNode } from '../src/types.js'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
-import { run } from '@runflow/core'
-import { createBuiltinRegistry } from '@runflow/handlers'
+import { buildRegistry, createFactoryContext, run } from '@runflow/core'
+import { builtinHandlers } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   buildFlowMapForRun,
@@ -298,7 +298,14 @@ async function handleRun(
     const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
     const flowMap = await buildFlowMapForRun(loaded.flow, resolveFlow)
     const effectiveParamsDeclaration = mergeParamDeclarations(ctx.config?.params, loaded.flow.params)
-    const registry = ctx.config ? await buildRegistryFromConfig(ctx.config, ctx.configDir) : createBuiltinRegistry()
+    let registry
+    if (ctx.config) {
+      registry = await buildRegistryFromConfig(ctx.config, ctx.configDir)
+    }
+    else {
+      const factoryContext = createFactoryContext()
+      registry = buildRegistry(builtinHandlers.map(f => f(factoryContext)))
+    }
     const result = await run(loaded.flow, {
       registry,
       params: params && Object.keys(params).length > 0 ? params : undefined,

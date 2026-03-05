@@ -16,7 +16,7 @@ export function validateCanBeDependedOn(
     if (!dagIds.has(step.id))
       continue
     const handler = registry[step.type]
-    const getIds = handler?.getAllowedDependentIds
+    const getIds = handler?.flowControl?.getAllowedDependentIds
     if (typeof getIds === 'function') {
       const allowedIds = new Set(getIds(step))
       const violating: string[] = []

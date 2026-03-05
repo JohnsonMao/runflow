@@ -1,3 +1,5 @@
+import type { HandlerConfig } from './handler-factory'
+
 export type ParamType = 'string' | 'number' | 'boolean' | 'object' | 'array'
 
 /** Param shape without `name`; used for nested schema values and array items. */
@@ -112,24 +114,8 @@ export interface StepResultOptions {
 /** Signature of the stepResult factory, provided by executor on context so handlers use a single format. */
 export type StepResultFn = (stepId: string, success: boolean, opts?: StepResultOptions) => StepResult
 
-/** Interface for step handlers. Implement via class. */
-export interface IStepHandler {
-  /** Execute the step. */
-  run: (step: FlowStep, context: StepContext) => Promise<StepResult>
-  /** Called by the engine on step timeout to force-abort (e.g. kill child process). Optional; implement no-op if nothing to clean up. */
-  kill?: () => void
-  /** Return true if step shape is valid, or a string error message. Optional; when omitted, step is treated as valid. */
-  validate?: (step: FlowStep) => true | string
-  /**
-   * When present, the engine calls this to get the set of step ids that may have dependsOn including this step.
-   * Only those steps are allowed to depend on this step; any other step with dependsOn including this step causes validation to fail.
-   * Omit to allow any step to depend on this one. Core does not interpret step shape; the handler owns this logic.
-   */
-  getAllowedDependentIds?: (step: FlowStep) => string[]
-}
-
-/** Registry: step type -> IStepHandler. Merged with default (default first, then options.registry). */
-export type StepRegistry = Record<string, IStepHandler>
+/** Registry: step type -> HandlerConfig. Merged with default (default first, then options.registry). */
+export type StepRegistry = Record<string, HandlerConfig>
 
 export interface RunOptions {
   dryRun?: boolean

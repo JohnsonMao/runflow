@@ -45,9 +45,9 @@ type ExtractZodObject<TSchema extends z.ZodTypeAny> = TSchema extends z.ZodObjec
  * Schema-inferred fields take precedence over FlowStep's index signature.
  * Supports ZodObject directly and ZodEffects (from refine, superRefine, etc.).
  */
-export type InferStepFromSchema<TSchema extends z.ZodTypeAny> = ExtractZodObject<TSchema> extends z.ZodObject<any>
-  ? z.infer<ExtractZodObject<TSchema>> & FlowStepBase
-  : FlowStep
+export type InferStepFromSchema<TSchema extends z.ZodTypeAny> = [ExtractZodObject<TSchema>] extends [never]
+  ? FlowStep
+  : z.infer<ExtractZodObject<TSchema>> & FlowStepBase
 
 /** Context passed to handler's run function. */
 export interface HandlerContext<TStep extends FlowStep = FlowStep> {
@@ -69,6 +69,8 @@ export interface HandlerContext<TStep extends FlowStep = FlowStep> {
 
 /** Handler configuration returned by defineHandler. */
 export interface HandlerConfig<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
+  /** Internal type identifier (e.g. 'http', 'loop'). */
+  type: string
   /** Optional Zod schema for step validation. */
   schema?: TSchema
   /** Handler's run function with inferred step type from schema. */
@@ -76,7 +78,7 @@ export interface HandlerConfig<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
   /** Flow control options. */
   flowControl?: {
     /** Return step ids that may have dependsOn including this step. */
-    getAllowedDependentIds?: (step: FlowStep) => string[]
+    getAllowedDependentIds?: (step: InferStepFromSchema<TSchema>) => string[]
   }
 }
 
@@ -85,22 +87,25 @@ export interface DefineHandler {
   /** Define handler with ZodObject schema - infers step type from schema. */
   <TSchema extends z.ZodObject<any>>(
     config: {
+      type: string
       schema: TSchema
       run: (context: HandlerContext<z.infer<TSchema> & FlowStepBase>) => Promise<SimpleResult | void>
-      flowControl?: HandlerConfig['flowControl']
+      flowControl?: HandlerConfig<TSchema>['flowControl']
     }
   ): HandlerConfig<TSchema>
   /** Define handler with ZodEffects schema (from refine, superRefine, etc.) - infers step type from base object. */
   <TSchema extends z.ZodEffects<z.ZodObject<any>>>(
     config: {
+      type: string
       schema: TSchema
       run: (context: HandlerContext<InferStepFromSchema<TSchema>>) => Promise<SimpleResult | void>
-      flowControl?: HandlerConfig['flowControl']
+      flowControl?: HandlerConfig<TSchema>['flowControl']
     }
   ): HandlerConfig<TSchema>
   /** Define handler without schema - uses default FlowStep type. */
   (
     config: {
+      type: string
       schema?: undefined
       run: (context: HandlerContext) => Promise<SimpleResult | void>
       flowControl?: HandlerConfig['flowControl']
@@ -187,6 +192,7 @@ export type HandlerFactory = (context: FactoryContext) => HandlerConfig
 export function createFactoryContext(): FactoryContext {
   const defineHandler: DefineHandler = (config: any): any => {
     return {
+      type: config.type,
       schema: config.schema,
       run: config.run,
       flowControl: config.flowControl,

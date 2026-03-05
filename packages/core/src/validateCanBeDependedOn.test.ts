@@ -1,16 +1,15 @@
-import type { FlowDefinition, FlowStep, IStepHandler, StepContext, StepResult } from './types'
+import type { HandlerConfig } from './handler-factory'
+import type { FlowDefinition, FlowStep } from './types'
 import { describe, expect, it } from 'vitest'
 import { getDAGStepIds } from './dag'
 import { normalizeStepIds } from './utils'
 import { validateCanBeDependedOn } from './validateCanBeDependedOn'
 
 describe('validateCanBeDependedOn', () => {
-  const noRestrictRegistry: Record<string, IStepHandler> = {
+  const noRestrictRegistry: Record<string, HandlerConfig> = {
     step: {
-      validate: () => true,
-      kill: () => {},
-      run: async (step: FlowStep, ctx: StepContext): Promise<StepResult> =>
-        ctx.stepResult(step.id, true),
+      type: 'step',
+      run: async (ctx) => { ctx.report({ success: true }) },
     },
   }
 
@@ -26,11 +25,12 @@ describe('validateCanBeDependedOn', () => {
   })
 
   it('returns null when condition then/else steps depend on condition', () => {
-    const conditionHandler: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
-      validate: () => true,
-      kill: () => {},
-      run: async () => ({ stepId: 'c', success: true }),
+    const conditionHandler: HandlerConfig = {
+      type: 'condition',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
+      },
+      run: async (ctx) => { ctx.report({ success: true }) },
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -46,11 +46,12 @@ describe('validateCanBeDependedOn', () => {
   })
 
   it('returns error when a step not in then/else depends on condition', () => {
-    const conditionHandler: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
-      validate: () => true,
-      kill: () => {},
-      run: async () => ({ stepId: 'c', success: true }),
+    const conditionHandler: HandlerConfig = {
+      type: 'condition',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
+      },
+      run: async (ctx) => { ctx.report({ success: true }) },
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -70,15 +71,16 @@ describe('validateCanBeDependedOn', () => {
   })
 
   it('returns null when loop entry and done steps depend on loop', () => {
-    const loopHandler: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [
-        ...normalizeStepIds(step.entry),
-        ...normalizeStepIds(step.done),
-        ...normalizeStepIds(step.end as string | string[] | undefined),
-      ],
-      validate: () => true,
-      kill: () => {},
-      run: async () => ({ stepId: 'l', success: true }),
+    const loopHandler: HandlerConfig = {
+      type: 'loop',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [
+          ...normalizeStepIds(step.entry),
+          ...normalizeStepIds(step.done),
+          ...normalizeStepIds(step.end as string | string[] | undefined),
+        ],
+      },
+      run: async (ctx) => { ctx.report({ success: true }) },
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -94,15 +96,16 @@ describe('validateCanBeDependedOn', () => {
   })
 
   it('returns error when a step not in entry/done depends on loop', () => {
-    const loopHandler: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [
-        ...normalizeStepIds(step.entry),
-        ...normalizeStepIds(step.done),
-        ...normalizeStepIds(step.end as string | string[] | undefined),
-      ],
-      validate: () => true,
-      kill: () => {},
-      run: async () => ({ stepId: 'l', success: true }),
+    const loopHandler: HandlerConfig = {
+      type: 'loop',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [
+          ...normalizeStepIds(step.entry),
+          ...normalizeStepIds(step.done),
+          ...normalizeStepIds(step.end as string | string[] | undefined),
+        ],
+      },
+      run: async (ctx) => { ctx.report({ success: true }) },
     }
     const flow: FlowDefinition = {
       name: 'f',
@@ -122,11 +125,12 @@ describe('validateCanBeDependedOn', () => {
   })
 
   it('includes steps with no dependsOn in DAG; canBeDependedOn still validates', () => {
-    const conditionHandler: IStepHandler = {
-      getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
-      validate: () => true,
-      kill: () => {},
-      run: async () => ({ stepId: 'c', success: true }),
+    const conditionHandler: HandlerConfig = {
+      type: 'condition',
+      flowControl: {
+        getAllowedDependentIds: (step: FlowStep) => [...normalizeStepIds(step.then), ...normalizeStepIds(step.else)],
+      },
+      run: async (ctx) => { ctx.report({ success: true }) },
     }
     const flow: FlowDefinition = {
       name: 'f',

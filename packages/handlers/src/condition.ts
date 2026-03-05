@@ -1,8 +1,9 @@
 // @env node
-import type { FactoryContext, FlowStep } from '@runflow/core'
+import type { FactoryContext } from '@runflow/core'
 
 function conditionHandler({ defineHandler, z, utils }: FactoryContext) {
   return defineHandler({
+    type: 'condition',
     schema: z.object({
       when: z.string().min(1),
       then: z.union([z.string(), z.array(z.string())]).optional(),
@@ -18,8 +19,10 @@ function conditionHandler({ defineHandler, z, utils }: FactoryContext) {
       },
     ),
     flowControl: {
-      getAllowedDependentIds: (step: FlowStep) => {
-        return [...utils.normalizeStepIds(step.then), ...utils.normalizeStepIds(step.else)]
+      getAllowedDependentIds: (step) => {
+        const thenIds = utils.normalizeStepIds(step.then)
+        const elseIds = utils.normalizeStepIds(step.else)
+        return [...thenIds, ...elseIds]
       },
     },
     run: async (context) => {

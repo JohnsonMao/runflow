@@ -4,7 +4,8 @@ import type { ConfigAndRegistry } from './tools.js'
 import path from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { createBuiltinRegistry } from '@runflow/handlers'
+import { buildRegistry, createFactoryContext } from '@runflow/core'
+import { builtinHandlers } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
   buildRegistryFromConfig,
@@ -36,7 +37,14 @@ export async function loadConfigOnce(): Promise<ConfigAndRegistry> {
     : findConfigFile(cwd)
   const config = configPath ? await loadConfig(configPath) : null
   const configDir = configPath ? path.dirname(configPath) : cwd
-  const registry = config && configPath ? await buildRegistryFromConfig(config, configDir) : createBuiltinRegistry()
+  let registry
+  if (config && configPath) {
+    registry = await buildRegistryFromConfig(config, configDir)
+  }
+  else {
+    const factoryContext = createFactoryContext()
+    registry = buildRegistry(builtinHandlers.map(f => f(factoryContext)))
+  }
   return { config, configDir, registry }
 }
 
