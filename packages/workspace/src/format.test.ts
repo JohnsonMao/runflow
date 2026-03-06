@@ -13,7 +13,7 @@ describe('formatRunResult', () => {
       ],
     }
     const output = formatRunResult(result, 'Test Flow')
-    expect(output).toContain('**Success** — Flow "Test Flow" (3 step(s)).')
+    expect(output).toContain('**Success** — Flow "Test Flow"')
     expect(output).not.toContain('Step 1')
     expect(output).toContain('✓ Step 2 — some log')
     expect(output).toContain('✗ Step 3 — some error')
@@ -58,7 +58,7 @@ describe('formatRunResult', () => {
   it('handles empty steps', () => {
     const result: RunResult = { success: true, steps: [] }
     const output = formatRunResult(result)
-    expect(output).toBe('**Success** — Flow "Flow" (0 step(s)).')
+    expect(output).toBe('**Success** — Flow "Flow"')
   })
 
   it('shows global error if no steps', () => {

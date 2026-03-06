@@ -2,7 +2,7 @@
 
 ## Purpose
 
-StepResult 具備可選的 **log** 欄位，供 MCP execute 與 CLI --verbose 顯示每步的簡短摘要；自 StepResult 移除 **stdout**、**stderr**，統一以 log 作為對外顯示來源。
+StepResult 具備可選的 **log** 欄位，用於顯示每步的簡短摘要；自 StepResult 移除 **stdout**、**stderr**，統一以 log 作為對外顯示來源。CLI 預設顯示帶有顏色的執行總結報告。
 
 ## Requirements
 
@@ -11,7 +11,7 @@ Steps SHALL return a `log` string as part of their result to provide execution c
 
 #### Scenario: Success with log
 - **WHEN** a step completes successfully and provides a non-empty `log`
-- **THEN** the system SHALL capture the log for display in the run summary
+- **THEN** the system SHALL capture the log for display in the default run summary
 
 #### Scenario: Success without log
 - **WHEN** a step completes successfully but provides an empty or null `log`
@@ -124,7 +124,7 @@ tests:
 
 - **WHEN** a handler returns `stepResult(step.id, true, { log: 'GET https://example.com → 200' })`
 - **THEN** the StepResult has `log` set to that string
-- **AND** display SHALL show that string as the step's display line (e.g. `- ✓ stepName — GET https://example.com → 200`)
+- **AND** display SHALL show that string as the step's display line (e.g. `- ✓ Step Name — GET https://example.com → 200`)
 
 #### Scenario: Step without log
 
@@ -133,35 +133,12 @@ tests:
 - **AND** the step SHALL be hidden from the default run summary if success is true.
 
 ---
-### Requirement: StepResultOptions SHALL support log and SHALL NOT support stdout/stderr
+### Requirement: CLI SHALL output run summary by default
 
-- StepResultOptions SHALL include optional `log?: string` and SHALL NOT include `stdout` or `stderr`.
-- The `stepResult(stepId, success, opts)` factory SHALL set `out.log = opts.log` when provided, and SHALL NOT set any stdout or stderr on the result.
+- The CLI `run` command SHALL output a formatted summary of the execution using `formatRunResult`.
+- It SHALL NOT require a `--verbose` flag to see step logs.
 
-#### Scenario: stepResult factory sets log when provided
-
-- **WHEN** caller invokes `stepResult('s1', true, { log: 'done' })`
-- **THEN** the returned StepResult has `log: 'done'` and SHALL NOT have `stdout` or `stderr` properties
-- **AND** the result is valid for executor and MCP/CLI display
-
----
-### Requirement: MCP execute tool result SHALL display step log only
-
-- When formatting RunResult for the execute tool, the formatter SHALL output per step: success badge, step id, and if present `error` and `log`. It SHALL NOT output stdout, stderr, or the full `outputs` object.
-
-#### Scenario: formatRunResult outputs log and not outputs
-
-- **WHEN** RunResult has a step with `stepId: 'req', success: true, log: 'GET /api → 200'` and no error
-- **THEN** the formatted text for that step SHALL include `log: GET /api → 200`
-- **AND** the formatted text SHALL NOT include `outputs:` or stdout/stderr for that step
-
----
-### Requirement: CLI --verbose SHALL output step.log
-
-- When the CLI runs with `--verbose`, it SHALL write each step's `log` (if present) to process.stdout. It SHALL NOT read or write step.stdout or step.stderr.
-
-#### Scenario: CLI verbose writes log to stdout
-
-- **WHEN** the CLI runs a flow with `--verbose` and a step returns `log: 'slept 1s'`
-- **THEN** the CLI SHALL write that string (e.g. with newline) to process.stdout for that step
-- **AND** the CLI SHALL NOT read or write any step.stdout or step.stderr
+#### Scenario: Running a flow
+- **WHEN** the CLI finishes executing a flow
+- **THEN** it SHALL print a summary of all failed steps and all successful steps that have logs
+- **AND** it SHALL NOT print raw output JSON objects by default (use `inspect` instead)

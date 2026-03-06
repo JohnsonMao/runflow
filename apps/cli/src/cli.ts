@@ -17,6 +17,7 @@ import {
   flowGraphToMermaid,
   formatDetailAsMarkdown,
   formatListAsMarkdown,
+  formatRunResult,
   getDiscoverEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
@@ -97,7 +98,6 @@ function parseParamsJson(jsonStr: string | undefined): Record<string, unknown> {
 
 interface RunCommandOptions {
   dryRun?: boolean
-  verbose?: boolean
   param?: string[]
   params?: string
   paramsFile?: string
@@ -162,22 +162,9 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
 
   saveRunResult(result, configDir)
 
-  if (options.verbose) {
-    for (const step of result.steps) {
-      if (step.log)
-        process.stdout.write(`${step.log}\n`)
-      if (step.outputs && Object.keys(step.outputs).length > 0)
-        process.stdout.write(`${JSON.stringify(step.outputs)}\n`)
-      if (step.error)
-        console.error(`Step ${step.stepId}: ${step.error}`)
-    }
-  }
+  console.log(formatRunResult(result, flow.flow.name))
 
   if (!result.success) {
-    if (result.error)
-      console.error(`Error: ${result.error}`)
-    const name = flow.flow.name ?? 'Flow'
-    console.error(`Flow "${name}" failed.`)
     process.exit(1)
   }
 }
@@ -186,7 +173,6 @@ program
   .command('run [flowId]')
   .description('Execute a flow by flowId: file path (relative to flowsDir or cwd) or handlerKey:operationKey (e.g. simple:get-users) from config handlers')
   .option('--dry-run', 'Parse and validate only, do not execute steps')
-  .option('--verbose', 'Print per-step output')
   .option('--param <key=value>', 'Pass a parameter (repeatable); value starting with { or [ is parsed as JSON', (v: string, acc: string[] = []) => (acc ?? []).concat([v]), [] as string[])
   .option('--params <json>', 'Pass all parameters as a single JSON object (e.g. \'{"body":{"Id":123}}\')', undefined)
   .option('--params-file <path>', 'Load params from a JSON file', undefined)

@@ -5,7 +5,7 @@ const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
 
 function formatStepIdDisplay(stepId: string, name?: string): string {
   if (name) {
-    const iterations = stepId.match(/\.iteration_(\d+)/g)
+    const iterations = stepId.match(/\.iteration_\d+/g)
     if (iterations) {
       const labels = iterations.map(m => `[Iteration ${m.match(/\d+/)![0]}]`).join(' ')
       return `${labels} ${name}`
@@ -33,7 +33,7 @@ function formatStepIdDisplay(stepId: string, name?: string): string {
 export function formatRunResult(result: RunResult, flowName?: string): string {
   const status = result.success ? '**Success**' : '**Failed**'
   const name = flowName ?? 'Flow'
-  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
+  const headline = `${status} — Flow "${name}"`
 
   const stepLines = result.steps
     .filter((s) => {
