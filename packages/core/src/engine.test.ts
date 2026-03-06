@@ -503,4 +503,211 @@ describe('executeFlow', () => {
     expect(result.steps[1].success).toBe(true)
     expect(result.steps[1].nextSteps).toBeNull()
   })
+
+  describe('dynamic branching via nextSteps', () => {
+    it('executes only the steps specified in nextSteps array', async () => {
+      const routerHandler: HandlerConfig = {
+        type: 'router',
+        run: async (ctx) => {
+          // Only allow 'b' to run
+          ctx.report({ success: true, nextSteps: ['b'] })
+        },
+      }
+      const reg = createStubRegistry()
+      reg.router = routerHandler
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 'a', type: 'router' },
+          { id: 'b', type: 'step', dependsOn: ['a'] },
+          { id: 'c', type: 'step', dependsOn: ['a'] },
+        ],
+      }
+      const result = await runEngine(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      const executedIds = result.steps.map(s => s.stepId)
+      expect(executedIds).toContain('b')
+      expect(executedIds).not.toContain('c')
+    })
+
+    it('propagates dead paths (downstream steps are skipped if their dependency is not in nextSteps)', async () => {
+      const routerHandler: HandlerConfig = {
+        type: 'router',
+        run: async (ctx) => {
+          ctx.report({ success: true, nextSteps: ['b'] })
+        },
+      }
+      const reg = createStubRegistry()
+      reg.router = routerHandler
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 'a', type: 'router' },
+          { id: 'b', type: 'step', dependsOn: ['a'] },
+          { id: 'c', type: 'step', dependsOn: ['a'] },
+          { id: 'd', type: 'step', dependsOn: ['c'] }, // d depends on c which is skipped
+        ],
+      }
+      const result = await runEngine(flow, { registry: reg })
+      expect(result.success).toBe(true)
+      const executedIds = result.steps.map(s => s.stepId)
+      expect(executedIds).toContain('a')
+      expect(executedIds).toContain('b')
+      expect(executedIds).not.toContain('c')
+      expect(executedIds).not.toContain('d')
+    })
+  })
+
+  it('runs independent steps in the same wave (concurrency)', async () => {
+    let activeSteps = 0
+    let maxActiveSteps = 0
+    const concurrentHandler: HandlerConfig = {
+      type: 'concurrent',
+      run: async (ctx) => {
+        activeSteps++
+        maxActiveSteps = Math.max(maxActiveSteps, activeSteps)
+        await new Promise(resolve => setTimeout(resolve, 50))
+        activeSteps--
+        ctx.report({ success: true })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.concurrent = concurrentHandler
+    const flow: FlowDefinition = {
+      steps: [
+        { id: 's1', type: 'concurrent' },
+        { id: 's2', type: 'concurrent' },
+        { id: 's3', type: 'concurrent' },
+      ],
+    }
+    await runEngine(flow, { registry: reg })
+    expect(maxActiveSteps).toBeGreaterThan(1)
+  })
+
+  it('aborts other steps in the wave when one step fails', async () => {
+    let s2Aborted = false
+    const failHandler: HandlerConfig = {
+      type: 'fail',
+      run: async (ctx) => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+        ctx.report({ success: false, error: 'failed' })
+      },
+    }
+    const longHandler: HandlerConfig = {
+      type: 'long',
+      run: async (ctx) => {
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            ctx.report({ success: true })
+            resolve()
+          }, 100)
+          ctx.signal.addEventListener('abort', () => {
+            s2Aborted = true
+            clearTimeout(timeout)
+            resolve()
+          })
+        })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.fail = failHandler
+    reg.long = longHandler
+    const flow: FlowDefinition = {
+      steps: [
+        { id: 's1', type: 'fail' },
+        { id: 's2', type: 'long' },
+      ],
+    }
+    const result = await runEngine(flow, { registry: reg })
+    expect(result.success).toBe(false)
+    expect(s2Aborted).toBe(true)
+  })
+
+  it('handles multiple report calls and keeps the merged result', async () => {
+    const multiReportHandler: HandlerConfig = {
+      type: 'multi',
+      run: async (ctx) => {
+        ctx.report({ success: true, outputs: { first: 1 } })
+        ctx.report({ success: true, outputs: { second: 2 } })
+      },
+    }
+    const reg = createStubRegistry()
+    reg.multi = multiReportHandler
+    const flow: FlowDefinition = {
+      steps: [{ id: 's1', type: 'multi' }],
+    }
+    const result = await runEngine(flow, { registry: reg })
+    expect(result.steps[0].outputs).toEqual({ first: 1, second: 2 })
+  })
+
+  it('detects circular dependencies and returns error', async () => {
+    const flow: FlowDefinition = {
+      steps: [
+        { id: 's1', type: 'step', dependsOn: ['s2'] },
+        { id: 's2', type: 'step', dependsOn: ['s1'] },
+      ],
+    }
+    const result = await runEngine(flow, { registry: createStubRegistry() })
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/cycle detected/i)
+  })
+
+  describe('continueOnError', () => {
+    const failHandler: HandlerConfig = {
+      type: 'fail',
+      run: async (ctx) => {
+        ctx.report({ success: false, error: 'failed' })
+      },
+    }
+
+    function createRegistry(): Record<string, HandlerConfig> {
+      return { fail: failHandler, step: stubHandler }
+    }
+
+    it('stops subsequent waves on failure by default', async () => {
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 's1', type: 'fail' },
+          { id: 's2', type: 'step', dependsOn: ['s1'] },
+        ],
+      }
+      const result = await runEngine(flow, { registry: createRegistry() })
+      expect(result.success).toBe(false)
+      expect(result.steps.map(s => s.stepId)).toEqual(['s1'])
+    })
+
+    it('continues to subsequent waves when step has continueOnError: true', async () => {
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 's1', type: 'fail', continueOnError: true },
+          { id: 's2', type: 'step', dependsOn: ['s1'] },
+        ],
+      }
+      const result = await runEngine(flow, { registry: createRegistry() })
+      expect(result.success).toBe(false)
+      expect(result.steps.map(s => s.stepId)).toEqual(['s1', 's2'])
+    })
+
+    it('continues to subsequent waves when global continueOnError: true is set', async () => {
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 's1', type: 'fail' },
+          { id: 's2', type: 'step', dependsOn: ['s1'] },
+        ],
+      }
+      const result = await runEngine(flow, { registry: createRegistry(), continueOnError: true })
+      expect(result.success).toBe(false)
+      expect(result.steps.map(s => s.stepId)).toEqual(['s1', 's2'])
+    })
+
+    it('stops when step has continueOnError: false even if global continueOnError: true', async () => {
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 's1', type: 'fail', continueOnError: false },
+          { id: 's2', type: 'step', dependsOn: ['s1'] },
+        ],
+      }
+      const result = await runEngine(flow, { registry: createRegistry(), continueOnError: true })
+      expect(result.success).toBe(false)
+      expect(result.steps.map(s => s.stepId)).toEqual(['s1'])
+    })
+  })
 })

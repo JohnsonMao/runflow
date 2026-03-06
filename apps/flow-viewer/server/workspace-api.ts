@@ -11,10 +11,12 @@ import {
   createResolveFlow,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
+  formatRunResult,
   getDiscoverEntry,
   loadConfig,
   mergeParamDeclarations,
   resolveAndLoadFlow,
+  saveRunResult,
 } from '@runflow/workspace'
 
 export interface WorkspaceContext {
@@ -257,32 +259,6 @@ async function handleDetail(
   }
 }
 
-function formatRunResult(result: Awaited<ReturnType<typeof run>>, flowName?: string): string {
-  const status = result.success ? '**Success**' : '**Failed**'
-  const name = flowName ?? 'Flow'
-  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
-  const stepLines = result.steps.map((s) => {
-    const badge = s.success ? '✓' : '✗'
-    const extra: string[] = []
-    if (!s.success && s.error)
-      extra.push(`error: ${s.error}`)
-    if (s.log?.trim())
-      extra.push(`log: ${s.log.trim()}`)
-    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
-    return `- ${badge} ${s.stepId}${suffix}`
-  })
-  const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
-  if (!result.success) {
-    const msg = result.error ?? 'Unknown error'
-    const stepErrors = result.steps
-      .filter(s => !s.success && s.error)
-      .map(s => `- Step "${s.stepId}": ${s.error}`)
-      .join('\n')
-    return `${headline}\n\n${msg}${stepErrors ? `\n\n${stepErrors}` : ''}${stepsBlock}`
-  }
-  return `${headline}${stepsBlock}`
-}
-
 async function handleRun(
   ctx: WorkspaceContext,
   body: { flowId: string, params?: Record<string, unknown> },
@@ -312,6 +288,7 @@ async function handleRun(
       effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
       flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
     })
+    saveRunResult(result, ctx.configDir)
     const text = formatRunResult(result, loaded.flow.name)
     sendJson(res, 200, { success: result.success, text })
   }

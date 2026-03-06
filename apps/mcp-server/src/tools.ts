@@ -2,17 +2,21 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { StepRegistry } from '@runflow/core'
 import type { DiscoverEntry, RunflowConfig } from '@runflow/workspace'
-import { run } from '@runflow/core'
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { evaluate, run } from '@runflow/core'
 import {
   buildFlowMapForRun,
   createResolveFlow,
   DEFAULT_DISCOVER_LIMIT,
   formatDetailAsMarkdown,
   formatListAsMarkdown,
+  formatRunResult,
   getDiscoverEntry,
   MAX_DISCOVER_LIMIT,
   mergeParamDeclarations,
   resolveAndLoadFlow,
+  saveRunResult,
 } from '@runflow/workspace'
 import { z } from 'zod'
 
@@ -40,42 +44,8 @@ const discoverFlowDetailInputSchema = {
   flowId: z.string().describe('Flow identifier to look up in the catalog (file path or handlerKey:operationKey).'),
 }
 
-const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
-
-function formatStepIdDisplay(stepId: string): string {
-  const m = stepId.match(/^(\w+)\.iteration_(\d+)$/)
-  if (!m)
-    return stepId
-  const [, parent, num] = m
-  return `${parent} [iteration ${num}]`
-}
-
-/** Format run result for MCP tool text content. Exported for tests. */
-export function formatRunResult(result: Awaited<ReturnType<typeof run>>, flowName?: string): string {
-  const status = result.success ? '**Success**' : '**Failed**'
-  const name = flowName ?? 'Flow'
-  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
-  const stepLines = result.steps.map((s) => {
-    const displayId = formatStepIdDisplay(s.stepId)
-    const isMarker = MARKER_STEP_ID_RE.test(s.stepId)
-    if (isMarker)
-      return `  ${displayId}`
-    const badge = s.success ? '✓' : '✗'
-    const extra: string[] = []
-    if (!s.success && s.error)
-      extra.push(`error: ${s.error}`)
-    if (s.log?.trim())
-      extra.push(`log: ${s.log.trim()}`)
-    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
-    return `- ${badge} ${displayId}${suffix}`
-  })
-  const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
-  if (!result.success) {
-    const msg = result.error ?? 'Unknown error'
-    const stepErrors = result.steps.filter(s => !s.success && s.error).map(s => `- Step "${s.stepId}": ${s.error}`).join('\n')
-    return `${headline}\n\n${msg}${stepErrors ? `\n\n${stepErrors}` : ''}${stepsBlock}`
-  }
-  return `${headline}${stepsBlock}`
+const inspectSnapshotInputSchema = {
+  expression: z.string().optional().describe('Expression to query the snapshot (e.g. "steps[0].outputs.items.map(id)"). If omitted, returns the full snapshot.'),
 }
 
 /** discover_flow_list tool handler: list flows as compact table (flowId, name) with pagination hint. */
@@ -124,6 +94,7 @@ export async function executeTool(
       effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
       flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
     })
+    saveRunResult(result, configDir)
     const text = formatRunResult(result, loaded.flow.name)
     return { content: [{ type: 'text' as const, text }], isError: !result.success }
   }
@@ -149,6 +120,40 @@ export async function discoverFlowDetailTool(
   }
   const text = formatDetailAsMarkdown(entry)
   return { content: [{ type: 'text' as const, text }] }
+}
+
+/** inspect_snapshot tool handler: query the latest execution snapshot. */
+export async function inspectSnapshotTool(
+  args: { expression?: string },
+  getConfig: GetConfigAndRegistry,
+): Promise<CallToolResult> {
+  const { expression } = args
+  const { configDir } = await getConfig()
+  const latestPath = path.join(configDir, '.runflow', 'runs', 'latest.json')
+
+  if (!existsSync(latestPath)) {
+    return {
+      content: [{ type: 'text' as const, text: `No execution snapshot found at ${latestPath}` }],
+      isError: true,
+    }
+  }
+
+  try {
+    const content = readFileSync(latestPath, 'utf-8')
+    const snapshot = JSON.parse(content)
+
+    if (expression) {
+      const result = evaluate(expression, snapshot as any)
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
+    }
+    else {
+      return { content: [{ type: 'text' as const, text: JSON.stringify(snapshot, null, 2) }] }
+    }
+  }
+  catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { content: [{ type: 'text' as const, text: `Failed to inspect snapshot: ${message}` }], isError: true }
+  }
 }
 
 export function registerTools(
@@ -179,5 +184,13 @@ export function registerTools(
       inputSchema: discoverFlowDetailInputSchema,
     },
     args => discoverFlowDetailTool(args, getDiscoverCatalog),
+  )
+  server.registerTool(
+    'inspect_snapshot',
+    {
+      description: 'Query the latest execution snapshot using an expression (e.g. "steps[0].outputs.items.map(id)"). If omitted, returns the full snapshot.',
+      inputSchema: inspectSnapshotInputSchema,
+    },
+    args => inspectSnapshotTool(args, getConfig),
   )
 }

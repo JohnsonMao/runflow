@@ -38,4 +38,5 @@ export {
   flowGraphToMermaid,
 } from './flowGraph'
 export type { FlowGraph, FlowGraphEdge, FlowGraphEdgeKind, FlowGraphJson, FlowGraphNode, FlowGraphNodeShape } from './flowGraph'
-export { formatDetailAsMarkdown, formatListAsMarkdown } from './format'
+export { formatDetailAsMarkdown, formatListAsMarkdown, formatRunResult } from './format'
+export { saveRunResult } from './snapshot'

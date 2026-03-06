@@ -1,27 +1,15 @@
 /**
  * Safe expression evaluator for condition/skip steps.
  * Only allows: params.x.y, literals (string, number, boolean, null), comparison and logical operators.
- * No function calls, no constructor/prototype access, no code execution.
+ * No function calls (except whitelisted array methods), no constructor/prototype access, no code execution.
  */
+
+import { isPlainObject } from './utils'
 
 const FORBIDDEN_KEYS = new Set(['constructor', 'prototype', '__proto__'])
 
 function isForbiddenKey(key: string): boolean {
   return FORBIDDEN_KEYS.has(key)
-}
-
-function getSafe(params: Record<string, unknown>, path: string[]): unknown {
-  let current: unknown = params
-  for (const part of path) {
-    if (isForbiddenKey(part))
-      return undefined
-    if (current === null || current === undefined)
-      return undefined
-    if (typeof current !== 'object')
-      return undefined
-    current = (current as Record<string, unknown>)[part]
-  }
-  return current
 }
 
 type Token
@@ -34,7 +22,10 @@ type Token
     | { type: 'null' }
     | { type: 'lp' }
     | { type: 'rp' }
+    | { type: 'lb' }
+    | { type: 'rb' }
     | { type: 'dot' }
+    | { type: 'comma' }
     | { type: 'eof' }
 
 function tokenize(input: string): Token[] {
@@ -62,9 +53,21 @@ function tokenize(input: string): Token[] {
       i += 2
       continue
     }
-    if ('()!.&|<>+-'.includes(rest[0]!)) {
+    if ('()[]!,!.&|<>+-'.includes(rest[0]!)) {
       if (rest[0] === '.') {
         tokens.push({ type: 'dot' })
+        i += 1
+      }
+      else if (rest[0] === '[') {
+        tokens.push({ type: 'lb' })
+        i += 1
+      }
+      else if (rest[0] === ']') {
+        tokens.push({ type: 'rb' })
+        i += 1
+      }
+      else if (rest[0] === ',') {
+        tokens.push({ type: 'comma' })
         i += 1
       }
       else if (rest[0] === '&' && rest[1] === '&') {
@@ -167,72 +170,57 @@ export interface SafeExpressionOptions {
   maxLength?: number
 }
 
-/**
- * Evaluate a safe expression to a boolean. Use for condition/skip.
- * Allowed: params, params.x, params.x.y, literals, ==, !=, ===, !==, <, >, <=, >=, &&, ||, !, ().
- */
-export function evaluateToBoolean(
-  expression: string,
-  params: Record<string, unknown>,
-  options?: SafeExpressionOptions,
-): boolean {
-  const val = evaluate(expression, params, options)
-  return Boolean(val)
-}
+/** Internal parser state/context to support nested evaluation (map/filter). */
+class ExpressionParser {
+  pos = 0
+  constructor(
+    private tokens: Token[],
+    private params: Record<string, unknown>,
+  ) {}
 
-/**
- * Evaluate a safe expression to a value.
- * Same grammar as evaluateToBoolean; returns the expression value (e.g. params.foo).
- */
-export function evaluate(
-  expression: string,
-  params: Record<string, unknown>,
-  options?: SafeExpressionOptions,
-): unknown {
-  const maxLen = options?.maxLength ?? 2000
-  if (expression.length > maxLen)
-    throw new SafeExpressionError(`Expression exceeds max length ${maxLen}`)
-  const tokens = tokenize(expression)
-  let pos = 0
-  function cur(): Token {
-    return tokens[pos] ?? { type: 'eof' }
+  cur(): Token {
+    return this.tokens[this.pos] ?? { type: 'eof' }
   }
-  function consume(t: Token['type'], value?: string): void {
-    const c = cur()
+
+  consume(t: Token['type'], value?: string): void {
+    const c = this.cur()
     if (c.type !== t || (value != null && 'value' in c && c.value !== value))
       throw new SafeExpressionError(`Expected ${t}${value != null ? ` "${value}"` : ''}, got ${c.type}`)
-    pos += 1
+    this.pos += 1
   }
-  function parseExpr(): unknown {
-    return parseLogicalOr()
+
+  parseExpr(): unknown {
+    return this.parseLogicalOr()
   }
-  function parseLogicalOr(): unknown {
-    let left = parseLogicalAnd()
-    while (cur().type === 'op' && (cur() as { value: string }).value === '||') {
-      consume('op', '||')
-      const right = parseLogicalAnd()
+
+  parseLogicalOr(): unknown {
+    let left = this.parseLogicalAnd()
+    while (this.cur().type === 'op' && (this.cur() as { value: string }).value === '||') {
+      this.consume('op', '||')
+      const right = this.parseLogicalAnd()
       left = Boolean(left) || Boolean(right)
     }
     return left
   }
-  function parseLogicalAnd(): unknown {
-    let left = parseEquality()
-    while (cur().type === 'op' && (cur() as { value: string }).value === '&&') {
-      consume('op', '&&')
-      const right = parseEquality()
+
+  parseLogicalAnd(): unknown {
+    let left = this.parseEquality()
+    while (this.cur().type === 'op' && (this.cur() as { value: string }).value === '&&') {
+      this.consume('op', '&&')
+      const right = this.parseEquality()
       left = Boolean(left) && Boolean(right)
     }
     return left
   }
-  function parseEquality(): unknown {
-    let left = parseComparison()
-    while (cur().type === 'op') {
-      const op = (cur() as { value: string }).value
+
+  parseEquality(): unknown {
+    let left = this.parseComparison()
+    while (this.cur().type === 'op') {
+      const op = (this.cur() as { value: string }).value
       if (op !== '==' && op !== '!=' && op !== '===' && op !== '!==')
         break
-      consume('op')
-      const right = parseComparison()
-      // Loose equality for == / != to match expression semantics (e.g. 1 == '1')
+      this.consume('op')
+      const right = this.parseComparison()
       if (op === '==')
         left = left == right // eslint-disable-line eqeqeq
       else if (op === '!=')
@@ -244,14 +232,15 @@ export function evaluate(
     }
     return left
   }
-  function parseComparison(): unknown {
-    let left = parseAdditive()
-    while (cur().type === 'op') {
-      const op = (cur() as { value: string }).value
+
+  parseComparison(): unknown {
+    let left = this.parseAdditive()
+    while (this.cur().type === 'op') {
+      const op = (this.cur() as { value: string }).value
       if (op !== '<' && op !== '>' && op !== '<=' && op !== '>=')
         break
-      consume('op')
-      let rightVal = parseAdditive()
+      this.consume('op')
+      let rightVal = this.parseAdditive()
       if (typeof left !== 'number' && typeof left !== 'string')
         left = Number(left)
       if (typeof rightVal !== 'number' && typeof rightVal !== 'string')
@@ -266,83 +255,215 @@ export function evaluate(
     }
     return left
   }
-  function parseAdditive(): unknown {
-    let left = parsePrimary()
-    while (cur().type === 'op') {
-      const op = (cur() as { value: string }).value
+
+  parseAdditive(): unknown {
+    let left = this.parsePrimary()
+    while (this.cur().type === 'op') {
+      const op = (this.cur() as { value: string }).value
       if (op !== '+' && op !== '-')
         break
-      consume('op')
-      const right = parsePrimary()
-      const l = Number(left)
-      const r = Number(right)
-      if (Number.isNaN(l) || Number.isNaN(r))
-        throw new SafeExpressionError('Arithmetic requires numbers')
-      left = op === '+' ? l + r : l - r
+      this.consume('op')
+      const right = this.parsePrimary()
+      if (op === '+') {
+        if (typeof left === 'string' || typeof right === 'string') {
+          left = String(left) + String(right)
+        }
+        else {
+          const l = Number(left)
+          const r = Number(right)
+          if (Number.isNaN(l) || Number.isNaN(r))
+            throw new SafeExpressionError('Arithmetic requires numbers')
+          left = l + r
+        }
+      }
+      else {
+        const l = Number(left)
+        const r = Number(right)
+        if (Number.isNaN(l) || Number.isNaN(r))
+          throw new SafeExpressionError('Arithmetic requires numbers')
+        left = l - r
+      }
     }
     return left
   }
-  function parsePrimary(): unknown {
-    if (cur().type === 'lp') {
-      consume('lp')
-      const v = parseExpr()
-      consume('rp')
-      return v
+
+  parsePrimary(): unknown {
+    let val: unknown
+    if (this.cur().type === 'lp') {
+      this.consume('lp')
+      val = this.parseExpr()
+      this.consume('rp')
     }
-    if (cur().type === 'op' && (cur() as { value: string }).value === '!') {
-      consume('op', '!')
-      return !parsePrimary()
+    else if (this.cur().type === 'op' && (this.cur() as { value: string }).value === '!') {
+      this.consume('op', '!')
+      val = !this.parsePrimary()
     }
-    if (cur().type === 'op' && ((cur() as { value: string }).value === '-' || (cur() as { value: string }).value === '+')) {
-      const isMinus = (cur() as { value: string }).value === '-'
-      consume('op')
-      const v = parsePrimary()
+    else if (this.cur().type === 'op' && ((this.cur() as { value: string }).value === '-' || (this.cur() as { value: string }).value === '+')) {
+      const isMinus = (this.cur() as { value: string }).value === '-'
+      this.consume('op')
+      const v = this.parsePrimary()
       const n = Number(v)
       if (Number.isNaN(n))
         throw new SafeExpressionError('Unary +/- requires a number')
-      return isMinus ? -n : n
+      val = isMinus ? -n : n
     }
-    if (cur().type === 'true') {
-      consume('true')
-      return true
+    else if (this.cur().type === 'true') {
+      this.consume('true')
+      val = true
     }
-    if (cur().type === 'false') {
-      consume('false')
-      return false
+    else if (this.cur().type === 'false') {
+      this.consume('false')
+      val = false
     }
-    if (cur().type === 'null') {
-      consume('null')
-      return null
+    else if (this.cur().type === 'null') {
+      this.consume('null')
+      val = null
     }
-    if (cur().type === 'num') {
-      const v = (cur() as { value: number }).value
-      consume('num')
-      return v
+    else if (this.cur().type === 'num') {
+      val = (this.cur() as { value: number }).value
+      this.consume('num')
     }
-    if (cur().type === 'str') {
-      const v = (cur() as { value: string }).value
-      consume('str')
-      return v
+    else if (this.cur().type === 'str') {
+      val = (this.cur() as { value: string }).value
+      this.consume('str')
     }
-    if (cur().type === 'id' && (cur() as { value: string }).value === 'params') {
-      consume('id', 'params')
-      const path: string[] = []
-      while (cur().type === 'dot') {
-        consume('dot')
-        const t = cur()
+    else if (this.cur().type === 'id') {
+      const name = (this.cur() as { value: string }).value
+      this.consume('id')
+      if (name === 'params') {
+        val = this.params
+      }
+      else {
+        // Handle identifier as property access on current context (for filter/map items)
+        val = this.params[name]
+      }
+    }
+    else {
+      throw new SafeExpressionError(`Unexpected token: ${this.cur().type}`)
+    }
+
+    // Member access chain: .prop, .method(), [index]
+    while (true) {
+      if (this.cur().type === 'dot') {
+        this.consume('dot')
+        const t = this.cur()
         if (t.type !== 'id')
           throw new SafeExpressionError('Expected identifier after .')
-        if (isForbiddenKey(t.value))
+        const member = t.value
+        if (isForbiddenKey(member))
           throw new SafeExpressionError('Forbidden property access')
-        path.push(t.value)
-        consume('id')
+        this.consume('id')
+
+        if (this.cur().type === 'lp') {
+          // Method call
+          this.consume('lp')
+          if (member === 'map') {
+            const argT = this.cur()
+            let prop: string | undefined
+            if (argT.type === 'id') {
+              prop = argT.value
+              this.consume('id')
+            }
+            this.consume('rp')
+            if (Array.isArray(val) && prop)
+              val = val.map(item => (isPlainObject(item) ? (item as any)[prop!] : undefined))
+            else
+              val = []
+          }
+          else if (member === 'filter') {
+            const start = this.pos
+            let depth = 1
+            while (depth > 0 && this.cur().type !== 'eof') {
+              if (this.cur().type === 'lp')
+                depth++
+              else if (this.cur().type === 'rp')
+                depth--
+              if (depth > 0)
+                this.pos++
+            }
+            const predicateTokens = this.tokens.slice(start, this.pos)
+            this.consume('rp')
+            if (Array.isArray(val)) {
+              val = val.filter((item) => {
+                const itemCtx = isPlainObject(item) ? { ...this.params, ...item, val: item } : { ...this.params, val: item }
+                const parser = new ExpressionParser(predicateTokens, itemCtx)
+                return Boolean(parser.parseExpr())
+              })
+            }
+            else {
+              val = []
+            }
+          }
+          else if (member === 'slice') {
+            const s = Number(this.parseExpr())
+            let e: number | undefined
+            if (this.cur().type === 'comma') {
+              this.consume('comma')
+              e = Number(this.parseExpr())
+            }
+            this.consume('rp')
+            if (Array.isArray(val))
+              val = val.slice(s, e)
+            else
+              val = []
+          }
+          else {
+            throw new SafeExpressionError(`Unknown method: ${member}`)
+          }
+        }
+        else {
+          if (val != null && typeof val === 'object')
+            val = (val as Record<string, unknown>)[member]
+          else
+            val = undefined
+        }
       }
-      return getSafe(params, path)
+      else if (this.cur().type === 'lb') {
+        this.consume('lb')
+        const idx = this.parseExpr()
+        this.consume('rb')
+        if (Array.isArray(val))
+          val = val[Number(idx)]
+        else if (val != null && typeof val === 'object')
+          val = (val as Record<string, unknown>)[String(idx)]
+        else
+          val = undefined
+      }
+      else {
+        break
+      }
     }
-    throw new SafeExpressionError(`Unexpected token: ${cur().type}`)
+    return val
   }
-  const result = parseExpr()
-  if (cur().type !== 'eof')
+}
+
+/**
+ * Evaluate a safe expression to a boolean. Use for condition/skip.
+ */
+export function evaluateToBoolean(
+  expression: string,
+  params: Record<string, unknown>,
+  options?: SafeExpressionOptions,
+): boolean {
+  const val = evaluate(expression, params, options)
+  return Boolean(val)
+}
+
+/**
+ * Evaluate a safe expression to a value.
+ */
+export function evaluate(
+  expression: string,
+  params: Record<string, unknown>,
+  options?: SafeExpressionOptions,
+): unknown {
+  const maxLen = options?.maxLength ?? 2000
+  if (expression.length > maxLen)
+    throw new SafeExpressionError(`Expression exceeds max length ${maxLen}`)
+  const tokens = tokenize(expression)
+  const parser = new ExpressionParser(tokens, params)
+  const result = parser.parseExpr()
+  if (parser.cur().type !== 'eof')
     throw new SafeExpressionError('Unexpected token at end')
   return result
 }

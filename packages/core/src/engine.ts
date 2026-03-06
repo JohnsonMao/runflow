@@ -128,6 +128,7 @@ async function runStep(
   stepId: string,
   ctx: Record<string, unknown>,
   deps: RunStepDeps,
+  parentSignal?: AbortSignal,
 ): Promise<{ result: StepResult }> {
   const { stepByIdMap, registry, stepResult, runWithTimeout, buildStepContext, dryRun, defaultStepTimeoutSec } = deps
   const step = stepByIdMap.get(stepId)
@@ -158,6 +159,16 @@ async function runStep(
   const abortController = new AbortController()
   const signal = abortController.signal
 
+  // Abort if parent signal aborts
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abortController.abort()
+    }
+    else {
+      parentSignal.addEventListener('abort', () => abortController.abort(), { once: true })
+    }
+  }
+
   // Set timeout to abort signal
   const timeoutSec = typeof sub.timeout === 'number' && sub.timeout > 0
     ? sub.timeout
@@ -172,7 +183,21 @@ async function runStep(
 
   let lastResult: SimpleResult | undefined
   const report = (res: SimpleResult) => {
-    lastResult = { ...lastResult, ...res }
+    if (!lastResult) {
+      lastResult = { ...res }
+    }
+    else {
+      lastResult = {
+        ...lastResult,
+        ...res,
+        outputs: (lastResult.outputs || res.outputs)
+          ? { ...(lastResult.outputs || {}), ...(res.outputs || {}) }
+          : undefined,
+        subSteps: (lastResult.subSteps || res.subSteps)
+          ? [...(lastResult.subSteps || []), ...(res.subSteps || [])]
+          : undefined,
+      }
+    }
   }
 
   const runHandler = async (): Promise<StepResult> => {
@@ -287,6 +312,8 @@ export async function executeFlow(
   }
 
   let success = true
+  const flowAbortController = new AbortController()
+
   const runOneStepInWave = async (
     stepId: string,
     ctx: Record<string, unknown>,
@@ -302,7 +329,7 @@ export async function executeFlow(
     const step = stepByIdMap.get(stepId)
     if (step)
       options.onStepStart?.(stepId, step)
-    const { result } = await runStep(stepId, ctx, runStepDeps)
+    const { result } = await runStep(stepId, ctx, runStepDeps, flowAbortController.signal)
     options.onStepComplete?.(stepId, result)
 
     if (result.nextSteps === null) {
@@ -324,6 +351,7 @@ export async function executeFlow(
     if (runnable.length === 0)
       break
     const batchResults = await Promise.all(runnable.map(stepId => runOneStepInWave(stepId, context)))
+    let shouldAbort = false
     for (const { result, outputs, nextSteps, flowTerminated } of batchResults) {
       steps.push(result)
       if (result.subSteps?.length) {
@@ -333,6 +361,7 @@ export async function executeFlow(
 
       if (flowTerminated) {
         // A step returned nextSteps: null, so terminate the entire flow.
+        flowAbortController.abort()
         return {
           success: result.success, // Use the last step's success for the flow result
           steps,
@@ -351,8 +380,19 @@ export async function executeFlow(
       const out = outputs && isPlainObject(outputs) ? outputs : {}
       const effectiveKey = getEffectiveOutputKey(stepByIdMap.get(result.stepId), result.stepId)
       context = { ...context, [effectiveKey]: out }
-      if (!result.success)
+      if (!result.success) {
         success = false
+        const step = stepByIdMap.get(result.stepId)
+        const stepContinue = step?.continueOnError
+        const globalContinue = options.continueOnError ?? false
+        const shouldContinue = stepContinue !== undefined ? stepContinue : globalContinue
+        if (!shouldContinue)
+          shouldAbort = true
+      }
+    }
+    if (shouldAbort) {
+      flowAbortController.abort()
+      break
     }
     stepContext.params = context
   }

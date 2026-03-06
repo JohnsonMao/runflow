@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPlainObject, normalizeStepIds } from './utils'
+import { isPlainObject, normalizeStepIds, redact, truncate } from './utils'
 
 describe('normalizeStepIds', () => {
   it('returns [s] when given a single string', () => {
@@ -35,5 +35,51 @@ describe('isPlainObject', () => {
     expect(isPlainObject(1)).toBe(false)
     expect(isPlainObject('x')).toBe(false)
     expect(isPlainObject(true)).toBe(false)
+  })
+})
+
+describe('redact', () => {
+  it('redacts sensitive keys in objects', () => {
+    const input = {
+      id: 1,
+      token: 'secret-token',
+      password: 'pass',
+      nested: {
+        apiKey: 'key',
+        safe: 'value',
+      },
+      arr: [
+        { secret: 's1' },
+        { safe: 's2' },
+      ],
+    }
+    const expected = {
+      id: 1,
+      token: '[REDACTED]',
+      password: '[REDACTED]',
+      nested: {
+        apiKey: '[REDACTED]',
+        safe: 'value',
+      },
+      arr: [
+        { secret: '[REDACTED]' },
+        { safe: 's2' },
+      ],
+    }
+    expect(redact(input)).toEqual(expected)
+  })
+})
+
+describe('truncate', () => {
+  it('truncates long strings', () => {
+    const long = 'a'.repeat(3000)
+    const res = truncate(long, 2048)
+    expect(res.length).toBeLessThan(3000)
+    expect(res).toContain('... (truncated, use \'inspect\' to view full)')
+  })
+
+  it('does not truncate short strings', () => {
+    const short = 'hello'
+    expect(truncate(short)).toBe('hello')
   })
 })

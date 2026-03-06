@@ -48,3 +48,55 @@ export function mergeBatchResultsIntoContext(
     return { ...acc, [key]: out }
   }, { ...baseContext })
 }
+
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'token',
+  'secret',
+  'authorization',
+  'cookie',
+  'access_token',
+  'refresh_token',
+  'api_key',
+  'apikey',
+  'client_secret',
+  'client_id',
+])
+
+const MAX_BODY_LENGTH = 2048
+
+export function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEYS.has(key.toLowerCase())
+}
+
+export function redact(data: unknown): unknown {
+  if (typeof data === 'string') {
+    // Basic heuristic: if it looks like a bearer token or long secret?
+    // For now, we only redact based on keys in objects.
+    // If the data itself is a string and we don't know the context, we return as is.
+    return data
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => redact(item))
+  }
+  if (isPlainObject(data)) {
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(data)) {
+      if (isSensitiveKey(key)) {
+        out[key] = '[REDACTED]'
+      }
+      else {
+        out[key] = redact(value)
+      }
+    }
+    return out
+  }
+  return data
+}
+
+export function truncate(text: string, maxLength: number = MAX_BODY_LENGTH): string {
+  if (text.length <= maxLength)
+    return text
+  return `${text.slice(0, maxLength)}
+... (truncated, use 'inspect' to view full)`
+}

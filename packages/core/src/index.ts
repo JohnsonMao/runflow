@@ -1,6 +1,6 @@
 export { createFactoryContext } from './handler-factory'
 export type { ChainableData, ChainableHttp, ChainableHttpRequest, ChainableString, ChainableUtils, FactoryContext, HandlerConfig, HandlerContext, HandlerFactory, SimpleResult } from './handler-factory'
 export { run } from './run'
-export { evaluateToBoolean } from './safeExpression'
+export { evaluate, evaluateToBoolean } from './safeExpression'
 export type { FlowDefinition, FlowStep, ParamDeclaration, ParamType, RunFlowFn, RunOptions, RunResult, StepContext, StepRegistry, StepResult, StepResultFn, StepResultOptions } from './types'
-export { buildRegistry, isPlainObject, normalizeStepIds } from './utils'
+export { buildRegistry, isPlainObject, normalizeStepIds, redact, truncate } from './utils'

@@ -5,7 +5,7 @@
 import type { FlowDefinition, FlowStep, RunFlowFn, StepResult } from './types'
 import { z } from 'zod'
 import { evaluateToBoolean } from './safeExpression'
-import { isPlainObject, normalizeStepIds } from './utils'
+import { isPlainObject, normalizeStepIds, redact, truncate } from './utils'
 
 /** Simple result that handlers can return or report via context. */
 export interface SimpleResult {
@@ -183,6 +183,10 @@ export interface ChainableUtils {
   normalizeStepIds: (v: unknown) => string[]
   /** Evaluate a safe expression to a boolean. Use for condition/skip. */
   evaluateToBoolean: (expression: string, params: Record<string, unknown>, options?: { maxLength?: number }) => boolean
+  /** Redact sensitive keys from an object. */
+  redact: (data: unknown) => unknown
+  /** Truncate long strings for logging. */
+  truncate: (text: string, maxLength?: number) => string
 }
 
 /** Handler factory function signature. Type inference happens inside defineHandler, not at factory level. */
@@ -284,6 +288,8 @@ export function createFactoryContext(): FactoryContext {
       isPlainObject,
       normalizeStepIds,
       evaluateToBoolean,
+      redact,
+      truncate,
     },
   }
 }

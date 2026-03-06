@@ -41,6 +41,8 @@ export interface FlowStep {
   retry?: number
   /** Key under which the step's outputs are written to context. When absent, the executor uses step id. */
   outputKey?: string
+  /** When true, engine continues to next steps even if this step fails. Default false. */
+  continueOnError?: boolean
   /** Display/documentation only: short label for UI (e.g. node title, lists). Not used by engine. */
   name?: string
   /** Display/documentation only: longer description for tooltips, detail views. Not used by engine. */
@@ -134,6 +136,8 @@ export interface RunOptions {
   flowMap?: Record<string, FlowDefinition>
   /** Default step timeout in seconds when step.timeout is not set. Falls back to engine default (60) when omitted. */
   defaultStepTimeoutSec?: number
+  /** When true, engine continues execution even if a step fails (unless that step overrides with continueOnError: false). Default false. */
+  continueOnError?: boolean
   /** Called just before a step runs (after substitute, validate, skip). */
   onStepStart?: (stepId: string, step: FlowStep) => void
   /** Called when a step completes (success or failure). */

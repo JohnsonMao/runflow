@@ -1,9 +1,9 @@
 import type { StepRegistry } from '@runflow/core'
 // @env node
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { buildRegistry, createFactoryContext, run } from '@runflow/core'
+import { buildRegistry, createFactoryContext, evaluate, run } from '@runflow/core'
 import { builtinHandlers } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
@@ -22,6 +22,7 @@ import {
   MAX_DISCOVER_LIMIT,
   mergeParamDeclarations,
   resolveAndLoadFlow,
+  saveRunResult,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
 
@@ -159,6 +160,8 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
     flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
   })
 
+  saveRunResult(result, configDir)
+
   if (options.verbose) {
     for (const step of result.steps) {
       if (step.log)
@@ -280,6 +283,40 @@ program
     }
     else {
       console.log(flowGraphToMermaid(graph))
+    }
+  })
+
+program
+  .command('inspect [expression]')
+  .description('Query the latest execution snapshot using an expression (e.g. "steps[0].outputs")')
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .action(async (expression: string | undefined, options: { config?: string }) => {
+    const cwd = process.cwd()
+    const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    const latestPath = path.join(configDir, '.runflow', 'runs', 'latest.json')
+
+    if (!existsSync(latestPath)) {
+      console.error(`Error: No execution snapshot found at ${path.relative(cwd, latestPath)}`)
+      process.exit(1)
+    }
+
+    try {
+      const content = readFileSync(latestPath, 'utf-8')
+      const snapshot = JSON.parse(content)
+
+      if (expression) {
+        const result = evaluate(expression, snapshot as any)
+        console.log(JSON.stringify(result, null, 2))
+      }
+      else {
+        console.log(JSON.stringify(snapshot, null, 2))
+      }
+    }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`Error: Failed to inspect snapshot: ${msg}`)
+      process.exit(1)
     }
   })
 

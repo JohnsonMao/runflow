@@ -138,8 +138,19 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
           bodyValue = await response.text()
         }
         const responseObject = { statusCode, headers: headersObj, body: bodyValue }
+
         const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
-        const log = `${methodStr} ${finalUrl} → ${statusCode}`
+
+        let logBody = ''
+        if (utils.isPlainObject(bodyValue) || Array.isArray(bodyValue)) {
+          logBody = JSON.stringify(utils.redact(bodyValue), null, 2)
+        }
+        else {
+          logBody = String(bodyValue)
+        }
+
+        const log = `${methodStr} ${finalUrl} → ${statusCode}\nBody: ${utils.truncate(logBody)}`
+
         return {
           success: true,
           outputs: responseObject,

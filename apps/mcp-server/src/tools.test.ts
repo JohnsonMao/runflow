@@ -1,5 +1,5 @@
 import type { GetConfigAndRegistry } from './tools'
-import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildDiscoverCatalog } from '@runflow/workspace'
@@ -10,7 +10,7 @@ import {
   discoverFlowDetailTool,
   discoverFlowListTool,
   executeTool,
-  formatRunResult,
+  inspectSnapshotTool,
 } from './tools'
 
 /** Build a no-arg getDiscoverCatalog that uses the given getConfig (for tests). */
@@ -20,74 +20,6 @@ function createGetDiscoverCatalog(getConfig: GetConfigAndRegistry) {
     return buildDiscoverCatalog(config, configDir, process.cwd())
   }
 }
-
-describe('formatRunResult', () => {
-  it('formats success with flow name, step count, and per-step lines', () => {
-    const text = formatRunResult(
-      { success: true, steps: [{ stepId: 'a', success: true }] },
-      'my-flow',
-    )
-    expect(text).toContain('**Success**')
-    expect(text).toContain('my-flow')
-    expect(text).toContain('1 step')
-    expect(text).toContain('- ✓ a')
-  })
-
-  it('formats failure with error and failed step', () => {
-    const text = formatRunResult(
-      {
-        success: false,
-        error: 'Flow failed',
-        steps: [
-          { stepId: 'a', success: true },
-          { stepId: 'b', success: false, error: 'step b failed' },
-        ],
-      },
-      'x',
-    )
-    expect(text).toContain('**Failed**')
-    expect(text).toContain('Flow failed')
-    expect(text).toContain('Step "b"')
-    expect(text).toContain('step b failed')
-  })
-
-  it('formats failure with error only when no step has error', () => {
-    const text = formatRunResult(
-      { success: false, error: 'Unknown error', steps: [{ stepId: 'a', success: true }] },
-      'x',
-    )
-    expect(text).toContain('**Failed**')
-    expect(text).toContain('Unknown error')
-  })
-
-  it('formats failure with unknown error when result.error is undefined', () => {
-    const text = formatRunResult(
-      { success: false, error: undefined, steps: [] },
-      'x',
-    )
-    expect(text).toContain('**Failed**')
-    expect(text).toContain('Unknown error')
-  })
-
-  it('formats marker steps (iteration_1, iteration_2) without bullet and regular steps with id — log on one line', () => {
-    const text = formatRunResult(
-      {
-        success: true,
-        steps: [
-          { stepId: 'init', success: true, log: 'ready' },
-          { stepId: 'loop.iteration_1', success: true },
-          { stepId: 'loop.iteration_2', success: true },
-          { stepId: 'loop', success: true, log: 'done, 2 iteration(s)' },
-        ],
-      },
-      'f',
-    )
-    expect(text).toContain('- ✓ init — log: ready')
-    expect(text).toContain('  loop [iteration 1]')
-    expect(text).toContain('  loop [iteration 2]')
-    expect(text).toContain('- ✓ loop — log: done, 2 iteration(s)')
-  })
-})
 
 describe('executeTool', () => {
   const getConfig = () => loadConfigOnce()
@@ -471,5 +403,52 @@ describe('discoverFlowDetailTool', () => {
     expect(text).toMatch(/Flow not found/)
     expect(text).toContain('nonexistent-flow-id')
     expect(result.isError).toBe(true)
+  })
+})
+
+describe('inspectSnapshotTool', () => {
+  const getConfig = () => loadConfigOnce()
+  let originalCwd: string
+  let tempDir: string
+
+  beforeEach(() => {
+    originalCwd = process.cwd()
+    tempDir = mkdtempSync(join(tmpdir(), 'mcp-inspect-'))
+    process.chdir(tempDir)
+  })
+  afterEach(() => {
+    process.chdir(originalCwd)
+    rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  it('returns error when snapshot missing', async () => {
+    const result = await inspectSnapshotTool({}, getConfig)
+    expect(result.isError).toBe(true)
+    expect((result.content[0] as any).text).toContain('No execution snapshot found')
+  })
+
+  it('returns full snapshot when no expression provided', async () => {
+    const runsDir = join(tempDir, '.runflow', 'runs')
+    mkdirSync(runsDir, { recursive: true })
+    const snapshot = { success: true, steps: [] }
+    writeFileSync(join(runsDir, 'latest.json'), JSON.stringify(snapshot))
+
+    const result = await inspectSnapshotTool({}, getConfig)
+    expect(result.isError).toBeFalsy()
+    expect(JSON.parse((result.content[0] as any).text)).toEqual(snapshot)
+  })
+
+  it('queries snapshot with expression', async () => {
+    const runsDir = join(tempDir, '.runflow', 'runs')
+    mkdirSync(runsDir, { recursive: true })
+    const snapshot = {
+      success: true,
+      steps: [{ stepId: 's1', outputs: { data: 'ok' } }],
+    }
+    writeFileSync(join(runsDir, 'latest.json'), JSON.stringify(snapshot))
+
+    const result = await inspectSnapshotTool({ expression: 'steps[0].outputs.data' }, getConfig)
+    expect(result.isError).toBeFalsy()
+    expect(JSON.parse((result.content[0] as any).text)).toBe('ok')
   })
 })

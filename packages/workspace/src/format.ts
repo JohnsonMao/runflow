@@ -1,5 +1,47 @@
-import type { ParamDeclaration } from '@runflow/core'
+import type { ParamDeclaration, RunResult } from '@runflow/core'
 import type { DiscoverEntry } from './discover'
+
+const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
+
+function formatStepIdDisplay(stepId: string): string {
+  const m = stepId.match(/^(\w+)\.iteration_(\d+)$/)
+  if (!m)
+    return stepId
+  const [, parent, num] = m
+  return `${parent} [iteration ${num}]`
+}
+
+/** Format execution result for display (CLI, MCP, Web). */
+export function formatRunResult(result: RunResult, flowName?: string): string {
+  const status = result.success ? '**Success**' : '**Failed**'
+  const name = flowName ?? 'Flow'
+  const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
+  const stepLines = result.steps.map((s) => {
+    const displayId = formatStepIdDisplay(s.stepId)
+    const isMarker = MARKER_STEP_ID_RE.test(s.stepId)
+    if (isMarker)
+      return `  ${displayId}`
+    const badge = s.success ? '✓' : '✗'
+    const extra: string[] = []
+    if (!s.success && s.error)
+      extra.push(`error: ${s.error}`)
+    if (s.log?.trim())
+      extra.push(`log: ${s.log.trim()}`)
+    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
+    return `- ${badge} ${displayId}${suffix}`
+  })
+  const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
+  if (!result.success) {
+    // If we have steps, the error is already shown in the step details.
+    // We only show the global error line if there are no steps (e.g. pre-run validation failure).
+    if (result.steps.length > 0) {
+      return `${headline}${stepsBlock}`
+    }
+    const msg = result.error ?? 'Unknown error'
+    return `${headline}\n\nError: ${msg}`
+  }
+  return `${headline}${stepsBlock}`
+}
 
 function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
   const lines: string[] = []
