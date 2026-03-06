@@ -36,6 +36,7 @@ A flow step MUST be allowed to have `type: 'http'` with a required `url` (string
 - **AND** http step outputs are merged into context with the same later-overwrites semantics as js step outputs
 - **AND** the run result contains one StepResult per step in the same order
 
+---
 ### Requirement: Http step input fields SHALL support template substitution
 
 Before the http handler is invoked, the executor SHALL substitute `{{ path }}` placeholders in the step's url, method, header values, and body using the current context (per custom-node-registry: substitution is applied by executor before calling handler). The substitution semantics SHALL match the existing substitute function.
@@ -50,6 +51,7 @@ Before the http handler is invoked, the executor SHALL substitute `{{ path }}` p
 - **WHEN** a prior step produced `outputs: { payload: '{"name":"x"}' }` and the http step has `body: '{{ payload }}'`
 - **THEN** the request body is the string value of `payload` from context (after substitution)
 
+---
 ### Requirement: Http step output key SHALL be configurable (outputKey)
 
 The key under which the http response is written to context SHALL be determined by the **executor** using the step's engine-reserved field `outputKey` (see step-context): when `outputKey` is present and a non-empty string, that value is the key; when absent, the step's `id` SHALL be used. The **http handler** SHALL return the response object (statusCode, headers, body) as `StepResult.outputs` without applying any key—i.e. the handler SHALL NOT wrap the response under a key in outputs; the executor SHALL write `outputs` to `context[effectiveKey]` where effectiveKey is `step.outputKey ?? step.id`.
@@ -74,6 +76,7 @@ The key under which the http response is written to context SHALL be determined 
 - **THEN** the executor writes the first step's outputs to `context.first` and the second's to `context.second`
 - **AND** neither overwrites the other
 
+---
 ### Requirement: Response body SHALL be parsed or represented for JSON, text, and binary
 
 When the response Content-Type indicates JSON (e.g. application/json), the http handler SHALL parse the body as JSON and expose it as an object in the response shape. When Content-Type indicates text, the body MAY be a string. When Content-Type indicates image (e.g. image/*) or application/octet-stream (or other binary), the handler SHALL read the response body as bytes and SHALL expose it in the response shape as a base64-encoded string so that the value is serializable in context (e.g. for template or downstream steps).
@@ -90,6 +93,7 @@ When the response Content-Type indicates JSON (e.g. application/json), the http 
 - **THEN** the handler SHALL read the body (e.g. arrayBuffer), encode as base64, and set response.body to that string
 - **AND** downstream steps can use the string (e.g. for logging or passing to another API) without binary in JSON context
 
+---
 ### Requirement: Network or runtime errors SHALL fail the step
 
 When the request fails (e.g. network error, DNS failure, invalid URL, timeout) or the handler throws, the step SHALL be marked as failed (`success: false`) with `error` set. Outputs SHALL NOT be merged for that step unless the implementation defines otherwise for specific error cases.
@@ -100,6 +104,7 @@ When the request fails (e.g. network error, DNS failure, invalid URL, timeout) o
 - **THEN** the step's `StepResult` has `success: false` and `error` set to a string representation
 - **AND** no outputs from this step are merged into context
 
+---
 ### Requirement: Http step MAY declare timeout and retry
 
 An http step MAY include optional `timeout` (number, in seconds) and `retry` (number, default 1). When `timeout` is present and positive, the handler SHALL abort the request after that many seconds (e.g. using AbortController/signal); if the request times out, the handler SHALL treat it as a failure (success: false, no outputs merged). When `retry` is present, the handler SHALL attempt the request up to `(retry + 1)` times; retries SHALL occur only on failure (network/runtime error or timeout), not on receipt of 4xx/5xx. After all attempts, the handler SHALL return the last result (success with responseObject if any attempt received a response, or failure if all attempts failed).
@@ -124,3 +129,225 @@ An http step MAY include optional `timeout` (number, in seconds) and `retry` (nu
 
 - **WHEN** an http step has `retry: 2` and all three attempts fail (e.g. network error)
 - **THEN** the handler returns success: false and the last error; no outputs merged
+
+---
+### Requirement: Step execution logging
+The HTTP handler SHALL provide execution details in the step log.
+
+#### Scenario: Success logging
+- **WHEN** an HTTP request completes successfully (e.g., 2xx status)
+- **THEN** the log SHALL contain the method, URL, and status code (e.g., `GET https://... → 200`)
+- **AND** the log SHALL NOT contain the response body by default to maintain brevity in the CLI summary
+
+#### Scenario: Error logging
+- **WHEN** an HTTP request fails or returns a non-success status code
+- **THEN** the log SHALL contain the error message and status code
+- **AND** the log SHALL contain a truncated version of the response body for immediate debugging
+
+
+<!-- @trace
+source: simplify-execution-logs
+updated: 2026-03-06
+code:
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - workspace/custom-handler/logistics-center-handler.mjs
+  - workspace/src/logisticsCenter.ts
+  - workspace/flows/order/batch-order-confirm.yaml
+  - packages/workspace/src/format.ts
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-pos.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/tt/params-count2.json
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/openapi/admin-payments.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/src/promotionRules.ts
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - packages/core/src/types.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/config/runflow.config.json
+  - workspace/flows/tt2/sub.yaml
+  - workspace/custom-handler/payments-handler.mjs
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/config/auth.json
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - workspace/src/scm.ts
+  - workspace/flows/tt/post-users.yaml
+  - workspace/flows/tt/get-users.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/custom-handler/promotion-rules-handler.mjs
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/custom-handler/log-helper.mjs
+  - workspace/custom-handler/txn-token-handler.mjs
+  - workspace/flows/tt/test.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - workspace/custom-handler/txn-last-token-handler.mjs
+  - packages/handlers/src/http.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/src/payments.ts
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+tests:
+  - packages/handlers/src/sleep.test.ts
+  - packages/workspace/src/format.test.ts
+  - apps/mcp-server/src/tools.test.ts
+  - packages/handlers/src/http.test.ts
+-->
+
+---
+### Requirement: Application-level success condition
+The HTTP handler SHALL support a `successCondition` property to evaluate the response body against a safe expression.
+
+#### Scenario: Body evaluation success
+- **WHEN** a `successCondition` expression is provided (e.g., `body.status == 'ok'`)
+- **AND** the evaluation returns `true`
+- **THEN** the step SHALL be marked as `success: true`
+
+#### Scenario: Body evaluation failure
+- **WHEN** a `successCondition` expression is provided
+- **AND** the evaluation returns `false`
+- **THEN** the step SHALL be marked as `success: false`
+- **AND** the log SHALL include the response body for debugging
+
+<!-- @trace
+source: simplify-execution-logs
+updated: 2026-03-06
+code:
+  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - workspace/custom-handler/logistics-center-handler.mjs
+  - workspace/src/logisticsCenter.ts
+  - workspace/flows/order/batch-order-confirm.yaml
+  - packages/workspace/src/format.ts
+  - workspace/flows/location-pickup/location-pickup-shipping.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
+  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
+  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
+  - workspace/openapi/admin-order.yaml
+  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
+  - workspace/openapi/admin-pos.yaml
+  - workspace/openapi/logistics-center.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
+  - workspace/openapi/store-front-outer-member-login.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
+  - packages/handlers/src/sleep.ts
+  - workspace/flows/payment/payments-transaction-query.yaml
+  - workspace/flows/tt/get-users-userId.yaml
+  - workspace/flows/convenience-store/store-to-store-shipping.yaml
+  - workspace/openapi/admin-location-point.yaml
+  - workspace/flows/tt/params-count2.json
+  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
+  - workspace/flows/payment/payment-txntoken-flow.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
+  - workspace/flows/tt/example-loop-two-branches.yaml
+  - workspace/openapi/admin-invoice.yaml
+  - workspace/openapi/admin-salepage.yaml
+  - workspace/custom-handler/scm-handler.mjs
+  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
+  - workspace/openapi/admin-payments.yaml
+  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
+  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
+  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
+  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
+  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
+  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
+  - workspace/flows/salepage/create-sale-page-flow.yaml
+  - workspace/openapi/store-to-store-shipping.yaml
+  - workspace/src/promotionRules.ts
+  - workspace/flows/payment/payment-cardtoken-flow.yaml
+  - workspace/flows/logistics/91app-ship-confirm.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
+  - workspace/flows/logistics/91app-shipping.yaml
+  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
+  - packages/core/src/types.ts
+  - workspace/openapi/admin-location-member.yaml
+  - workspace/config/runflow.config.json
+  - workspace/flows/tt2/sub.yaml
+  - workspace/custom-handler/payments-handler.mjs
+  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
+  - workspace/flows/promotion/promotion-rule-activate.yaml
+  - workspace/config/auth.json
+  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
+  - workspace/src/scm.ts
+  - workspace/flows/tt/post-users.yaml
+  - workspace/flows/tt/get-users.yaml
+  - packages/core/src/engine.ts
+  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
+  - workspace/flows/logistics/logistics-smart-master-flow.yaml
+  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
+  - workspace/custom-handler/promotion-rules-handler.mjs
+  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
+  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
+  - workspace/custom-handler/log-helper.mjs
+  - workspace/custom-handler/txn-token-handler.mjs
+  - workspace/flows/tt/test.yaml
+  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
+  - workspace/flows/salepage/update-sale-page-images-flow.yaml
+  - workspace/openapi/admin-delivery.yaml
+  - workspace/flows/promotion/create-special-price-promotion.yaml
+  - workspace/openapi/admin-promotion-rules.yaml
+  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
+  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
+  - workspace/openapi/admin-promotion.yaml
+  - workspace/custom-handler/txn-last-token-handler.mjs
+  - packages/handlers/src/http.ts
+  - workspace/openapi/admin-location.yaml
+  - workspace/src/payments.ts
+  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
+  - workspace/flows/logistics/delivery-shipment.yaml
+  - workspace/flows/convenience-store/store-shipping-confirm.yaml
+  - workspace/flows/convenience-store/store-shipping.yaml
+  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
+tests:
+  - packages/handlers/src/sleep.test.ts
+  - packages/workspace/src/format.test.ts
+  - apps/mcp-server/src/tools.test.ts
+  - packages/handlers/src/http.test.ts
+-->

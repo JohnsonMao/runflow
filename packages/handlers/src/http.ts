@@ -1,6 +1,7 @@
 // @env node
 import type { FactoryContext } from '@runflow/core'
 import { Buffer } from 'node:buffer'
+import { evaluateToBoolean } from '@runflow/core'
 
 function buildRequestUrl(baseUrlStr: string, path?: string, query?: Record<string, string> | string): string {
   const url = new URL(baseUrlStr)
@@ -38,6 +39,7 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
       cookie: z.union([z.string(), z.record(z.string())]).optional(),
       body: z.string().optional(),
       allowedHttpHosts: z.array(z.string()).optional(),
+      successCondition: z.string().optional(),
     }),
     run: async (context) => {
       const { step, signal } = context
@@ -141,18 +143,38 @@ function httpHandler({ defineHandler, z, utils }: FactoryContext) {
 
         const methodStr = (typeof step.method === 'string' ? step.method : 'GET').toUpperCase()
 
-        let logBody = ''
-        if (utils.isPlainObject(bodyValue) || Array.isArray(bodyValue)) {
-          logBody = JSON.stringify(utils.redact(bodyValue), null, 2)
-        }
-        else {
-          logBody = String(bodyValue)
+        let isSuccess = response.ok ?? (response.status >= 200 && response.status < 300)
+        let conditionError: string | undefined
+
+        if (isSuccess && step.successCondition) {
+          try {
+            // Evaluate condition using the current outputs (responseObject)
+            const evalCtx = { ...context.params, ...responseObject }
+            isSuccess = evaluateToBoolean(step.successCondition, evalCtx)
+            if (!isSuccess)
+              conditionError = `Success condition failed: ${step.successCondition}`
+          }
+          catch (e) {
+            isSuccess = false
+            conditionError = `Condition evaluation error: ${e instanceof Error ? e.message : String(e)}`
+          }
         }
 
-        const log = `${methodStr} ${finalUrl} → ${statusCode}\nBody: ${utils.truncate(logBody)}`
+        let log = `${methodStr} ${finalUrl} → ${statusCode}`
+        if (!isSuccess) {
+          let logBody = ''
+          if (utils.isPlainObject(bodyValue) || Array.isArray(bodyValue)) {
+            logBody = JSON.stringify(utils.redact(bodyValue), null, 2)
+          }
+          else {
+            logBody = String(bodyValue)
+          }
+          log += `\nBody: ${utils.truncate(logBody)}`
+        }
 
         return {
-          success: true,
+          success: isSuccess,
+          error: conditionError,
           outputs: responseObject,
           log,
         }

@@ -165,7 +165,9 @@ describe('executeTool', () => {
     unlinkSync(flowPath)
     expect(result.isError).toBe(true)
     const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
-    expect(text).toMatch(/Run error|error/i)
+    expect(text).toMatch(/\*\*Failed\*\*|error/i)
+    expect(text).toContain('s1')
+    expect(text).toContain('Unknown step type')
   })
 
   it('flow step can call another flow by workspace path when resolveFlow is passed', async () => {

@@ -47,13 +47,8 @@ function sleepHandler({ defineHandler, z }: FactoryContext) {
         }, { once: true })
       })
 
-      const logMsg = typeof seconds === 'number' && seconds >= 0
-        ? `slept ${seconds}s`
-        : `slept ${durationMs}ms`
-
       return {
         success: true,
-        log: logMsg,
       }
     },
   })

@@ -40,6 +40,7 @@ describe('http handler', () => {
 
     it('returns success and parsed JSON body for 200 response', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: () => Promise.resolve('{"key":"value"}'),
@@ -54,12 +55,53 @@ describe('http handler', () => {
         headers: { 'content-type': 'application/json' },
         body: { key: 'value' },
       })
+      expect(result?.log).toBe('GET https://example.com/json → 200')
+    })
+
+    it('returns failure when successCondition fails', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: () => Promise.resolve('{"status":"error"}'),
+      } as Response)
+      const step = {
+        id: 'fetch',
+        type: 'http',
+        url: 'https://example.com/json',
+        successCondition: 'body.status == "ok"',
+      }
+      const ctx = createMockContext(step)
+      const result = await handler.run(ctx as any)
+
+      expect(result?.success).toBe(false)
+      expect(result?.error).toContain('Success condition failed')
+      expect(result?.log).toContain('GET https://example.com/json → 200')
+      expect(result?.log).toContain('Body:')
+    })
+
+    it('returns log with body for non-ok response', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: () => Promise.resolve('{"error":"fail"}'),
+      } as Response)
+      const step = { id: 'fetch', type: 'http', url: 'https://example.com/fail' }
+      const ctx = createMockContext(step)
+      const result = await handler.run(ctx as any)
+
+      expect(result?.success).toBe(false)
+      expect(result?.log).toContain('GET https://example.com/fail → 500')
+      expect(result?.log).toContain('Body:')
+      expect(result?.log).toContain('"error": "fail"')
     })
 
     it('returns image response body as base64', async () => {
       const { Buffer } = await import('node:buffer')
       const binary = Buffer.alloc(32, 0x89)
       globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'image/png' }),
         arrayBuffer: () => Promise.resolve(binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength)),

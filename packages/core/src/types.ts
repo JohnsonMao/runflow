@@ -82,6 +82,8 @@ export interface FlowDefinition {
 
 export interface StepResult {
   stepId: string
+  /** The display name of the step, captured from FlowStep.name during execution. */
+  name?: string
   success: boolean
   error?: string
   outputs?: Record<string, unknown>
@@ -104,6 +106,7 @@ export interface StepResult {
 
 /** Options for building a StepResult (e.g. via context.stepResult). */
 export interface StepResultOptions {
+  name?: string
   error?: string
   outputs?: Record<string, unknown>
   log?: string

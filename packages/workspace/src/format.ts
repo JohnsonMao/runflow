@@ -3,12 +3,30 @@ import type { DiscoverEntry } from './discover'
 
 const MARKER_STEP_ID_RE = /^\w+\.iteration_\d+$/
 
-function formatStepIdDisplay(stepId: string): string {
-  const m = stepId.match(/^(\w+)\.iteration_(\d+)$/)
-  if (!m)
-    return stepId
-  const [, parent, num] = m
-  return `${parent} [iteration ${num}]`
+function formatStepIdDisplay(stepId: string, name?: string): string {
+  if (name) {
+    const iterations = stepId.match(/\.iteration_(\d+)/g)
+    if (iterations) {
+      const labels = iterations.map(m => `[Iteration ${m.match(/\d+/)![0]}]`).join(' ')
+      return `${labels} ${name}`
+    }
+    return name
+  }
+
+  const parts = stepId.split('.')
+  const labels: string[] = []
+  const nameParts: string[] = []
+
+  for (const part of parts) {
+    const m = part.match(/^iteration_(\d+)$/)
+    if (m)
+      labels.push(`[Iteration ${m[1]}]`)
+    else
+      nameParts.push(part)
+  }
+
+  const displayName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : stepId
+  return labels.length > 0 ? `${labels.join(' ')} ${displayName}` : displayName
 }
 
 /** Format execution result for display (CLI, MCP, Web). */
@@ -16,20 +34,29 @@ export function formatRunResult(result: RunResult, flowName?: string): string {
   const status = result.success ? '**Success**' : '**Failed**'
   const name = flowName ?? 'Flow'
   const headline = `${status} — Flow "${name}" (${result.steps.length} step(s)).`
-  const stepLines = result.steps.map((s) => {
-    const displayId = formatStepIdDisplay(s.stepId)
-    const isMarker = MARKER_STEP_ID_RE.test(s.stepId)
-    if (isMarker)
-      return `  ${displayId}`
-    const badge = s.success ? '✓' : '✗'
-    const extra: string[] = []
-    if (!s.success && s.error)
-      extra.push(`error: ${s.error}`)
-    if (s.log?.trim())
-      extra.push(`log: ${s.log.trim()}`)
-    const suffix = extra.length ? ` — ${extra.join(' ')}` : ''
-    return `- ${badge} ${displayId}${suffix}`
-  })
+
+  const stepLines = result.steps
+    .filter((s) => {
+      // Hide successful steps with no log
+      if (s.success && !s.log?.trim())
+        return false
+      // Hide marker steps (iteration markers)
+      if (MARKER_STEP_ID_RE.test(s.stepId))
+        return false
+      return true
+    })
+    .map((s) => {
+      const displayId = formatStepIdDisplay(s.stepId, s.name)
+      const badge = s.success ? '✓' : '✗'
+      const extra: string[] = []
+      if (!s.success && s.error)
+        extra.push(s.error)
+      if (s.log?.trim())
+        extra.push(s.log.trim())
+      const suffix = extra.length ? ` — ${extra.join(' — ')}` : ''
+      return `- ${badge} ${displayId}${suffix}`
+    })
+
   const stepsBlock = stepLines.length ? `\n\n${stepLines.join('\n')}` : ''
   if (!result.success) {
     // If we have steps, the error is already shown in the step details.

@@ -40,6 +40,7 @@ describe('sleep handler', () => {
       const result = await handler.run(ctx as any)
       expect(result?.success).toBe(true)
       expect(result?.outputs).toBeUndefined()
+      expect(result?.log).toBeUndefined()
     })
 
     it('waits for ms then returns success', async () => {

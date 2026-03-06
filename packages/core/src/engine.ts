@@ -19,6 +19,8 @@ export function stepResult(
     stepId,
     success,
   }
+  if (opts.name !== undefined)
+    out.name = opts.name
   if (opts.error !== undefined)
     out.error = opts.error
   if (opts.outputs !== undefined)
@@ -135,24 +137,25 @@ async function runStep(
   if (!step) {
     return { result: stepResult(stepId, false, { error: `Step not found: ${stepId}`, nextSteps: null }) }
   }
+  const stepName = typeof step.name === 'string' ? step.name : undefined
   const sub = substituteStep(step, { ...ctx, params: ctx })
   const config = registry[step.type]
   if (!config) {
-    return { result: stepResult(stepId, false, { error: `Unknown step type: ${step.type}`, nextSteps: null }) }
+    return { result: stepResult(stepId, false, { name: stepName, error: `Unknown step type: ${step.type}`, nextSteps: null }) }
   }
 
   if (config.schema) {
     const parsed = config.schema.safeParse(sub)
     if (!parsed.success) {
-      return { result: stepResult(stepId, false, { error: parsed.error.message, nextSteps: null }) }
+      return { result: stepResult(stepId, false, { name: stepName, error: parsed.error.message, nextSteps: null }) }
     }
   }
 
   if (dryRun) {
-    return { result: stepResult(stepId, true) }
+    return { result: stepResult(stepId, true, { name: stepName }) }
   }
   if (evaluateSkip(sub, ctx)) {
-    return { result: stepResult(stepId, true) }
+    return { result: stepResult(stepId, true, { name: stepName }) }
   }
 
   // Create AbortController for this step execution
@@ -215,9 +218,9 @@ async function runStep(
       report(result)
     }
     if (!lastResult) {
-      return stepResult(stepId, false, { error: 'Handler returned no result' })
+      return stepResult(stepId, false, { name: stepName, error: 'Handler returned no result' })
     }
-    return stepResult(stepId, lastResult.success, lastResult)
+    return stepResult(stepId, lastResult.success, { ...lastResult, name: stepName })
   }
 
   try {
@@ -226,7 +229,7 @@ async function runStep(
   }
   catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    return { result: stepResult(stepId, false, { error: message }) }
+    return { result: stepResult(stepId, false, { name: stepName, error: message }) }
   }
   finally {
     clearTimeout(timeoutId)
