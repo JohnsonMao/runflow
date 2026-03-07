@@ -75,6 +75,14 @@ async function getDiscoverCatalog(): Promise<DiscoverEntry[]> {
   if (!isDevelopment() && cachedCatalog != null && catalogConfigSnapshot?.configDir === configDir && catalogConfigSnapshot?.cwd === cwd)
     return cachedCatalog
   const catalog = await buildDiscoverCatalog(config, configDir, cwd)
+
+  // Log any discovery errors (e.g. duplicate IDs) to stderr
+  for (const entry of catalog) {
+    if (entry.error) {
+      console.error(`[Discovery Error] ${entry.error}`)
+    }
+  }
+
   cachedCatalog = catalog
   catalogConfigSnapshot = { configDir, cwd }
   return catalog

@@ -25,10 +25,12 @@ export async function runWithParse(
     return true
   })
   const consoleError = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
-    stderrChunks.push(a.map(String).join(' '))
+    const msg = a.map(String).join(' ')
+    stderrChunks.push(stderrChunks.length > 0 ? `\n${msg}` : msg)
   })
   const consoleLog = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
-    stdoutChunks.push(a.map(String).join(' '))
+    const msg = a.map(String).join(' ')
+    stdoutChunks.push(stdoutChunks.length > 0 ? `\n${msg}` : msg)
   })
   const origCwd = process.cwd()
   if (cwd)

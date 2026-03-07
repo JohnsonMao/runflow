@@ -30,15 +30,15 @@ function formatStepIdDisplay(stepId: string, name?: string): string {
 }
 
 /** Format execution result for display (CLI, MCP, Web). */
-export function formatRunResult(result: RunResult, flowName?: string): string {
+export function formatRunResult(result: RunResult, flowName?: string, verbose = false): string {
   const status = result.success ? '**Success**' : '**Failed**'
   const name = flowName ?? 'Flow'
   const headline = `${status} — Flow "${name}"`
 
   const stepLines = result.steps
     .filter((s) => {
-      // Hide successful steps with no log
-      if (s.success && !s.log?.trim())
+      // Hide successful steps with no log unless verbose
+      if (!verbose && s.success && !s.log?.trim())
         return false
       // Hide marker steps (iteration markers)
       if (MARKER_STEP_ID_RE.test(s.stepId))
@@ -68,6 +68,11 @@ export function formatRunResult(result: RunResult, flowName?: string): string {
     return `${headline}\n\nError: ${msg}`
   }
   return `${headline}${stepsBlock}`
+}
+
+/** Format execution result as a compact JSON string (for testing/programmatic use). */
+export function formatRunResultJson(result: RunResult): string {
+  return JSON.stringify(result)
 }
 
 function formatOneParam(p: ParamDeclaration, indent = ''): string[] {
@@ -103,9 +108,13 @@ export function formatListAsMarkdown(entries: DiscoverEntry[], limit: number, of
   const start = offset + 1
   const end = offset + slice.length
   const rangeLine = `Total: ${total} flows. Showing ${start}-${end}.\n\n`
-  const header = '| flowId | name |'
-  const separator = '| --- | --- |'
-  const rows = slice.map(e => `| ${escapeTableCell(e.flowId)} | ${escapeTableCell(e.name ?? '')} |`)
+  const header = '| flowId | name | tags | error |'
+  const separator = '| --- | --- | --- | --- |'
+  const rows = slice.map((e) => {
+    const tags = e.tags?.join(', ') ?? ''
+    const error = e.error ?? ''
+    return `| ${escapeTableCell(e.flowId)} | ${escapeTableCell(e.name ?? '')} | ${escapeTableCell(tags)} | ${escapeTableCell(error)} |`
+  })
   const table = [header, separator, ...rows].join('\n')
   const hasMore = offset + limit < total
   const nextOffset = offset + limit
@@ -128,12 +137,18 @@ export function formatDetailAsMarkdown(entry: DiscoverEntry): string {
   const flowId = entry.flowId.replace(/\n/g, ' ')
   const name = (entry.name ?? '').replace(/\n/g, ' ')
   const desc = (entry.description ?? '').replace(/\n/g, ' ')
+  const tags = entry.tags?.join(', ') ?? ''
+  const error = entry.error ?? ''
   const paramsBlock = formatParamsSummary(entry.params)
   const parts = [
     `- **flowId**: ${flowId}`,
     `- **name**: ${name}`,
     `- **description**: ${desc}`,
   ]
+  if (tags)
+    parts.push(`- **tags**: ${tags}`)
+  if (error)
+    parts.push(`- **error**: ${error}`)
   if (paramsBlock)
     parts.push(`- **params**:\n${paramsBlock.split('\n').map(l => `  ${l}`).join('\n')}`)
   const stepsBlock = formatStepsSummary(entry.steps)

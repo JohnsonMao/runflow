@@ -74,6 +74,8 @@ export interface StepContext {
 }
 
 export interface FlowDefinition {
+  id?: string
+  tags?: string[]
   name?: string
   description?: string
   params?: ParamDeclaration[]

@@ -1,5 +1,5 @@
-import type { WorkspaceStatus } from './types'
-import { useEffect, useState } from 'react'
+import type { TreeNode, WorkspaceStatus } from './types'
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Sidebar,
@@ -40,14 +40,41 @@ export function App(): React.ReactElement {
     const flowId = params.get('flowId')
     const folders = new Set<string>()
     if (flowId) {
-      const parts = flowId.split('/')
-      if (parts.length > 1) {
-        for (let i = 1; i < parts.length; i++)
-          folders.add(`folder:${parts.slice(0, i).join('/')}`)
+      if (flowId.includes(':')) {
+        const prefix = flowId.split(':')[0]
+        folders.add(`openapi:${prefix}`)
+      }
+      else {
+        const parts = flowId.split('/')
+        if (parts.length > 1) {
+          for (let i = 1; i < parts.length; i++)
+            folders.add(`folder:${parts.slice(0, i).join('/')}`)
+        }
       }
     }
     return folders
   })
+
+  // Sync selectedFlowId -> openFolderIds (auto-expand)
+  useEffect(() => {
+    if (selectedFlowId) {
+      setOpenFolderIds((prev) => {
+        const next = new Set(prev)
+        if (selectedFlowId.includes(':')) {
+          const prefix = selectedFlowId.split(':')[0]
+          next.add(`openapi:${prefix}`)
+        }
+        else {
+          const parts = selectedFlowId.split('/')
+          if (parts.length > 1) {
+            for (let i = 1; i < parts.length; i++)
+              next.add(`folder:${parts.slice(0, i).join('/')}`)
+          }
+        }
+        return next
+      })
+    }
+  }, [selectedFlowId])
 
   const [runResult, setRunResult] = useState<string | null>(null)
   const [runLoading, setRunLoading] = useState(false)
@@ -61,6 +88,7 @@ export function App(): React.ReactElement {
     flowDetail,
     paramValues,
     setParamValues,
+    isInitialized,
   } = useFlowGraph(selectedFlowId)
 
   // Clear run result when flow changes
@@ -71,6 +99,8 @@ export function App(): React.ReactElement {
 
   // Sync state to URL
   useEffect(() => {
+    if (!isInitialized)
+      return
     const url = new URL(window.location.href)
     if (selectedFlowId) {
       url.searchParams.set('flowId', selectedFlowId)
@@ -143,7 +173,27 @@ export function App(): React.ReactElement {
     })
   }
 
-  const displayError = treeError ?? graphError
+  // Aggregate errors from tree entries (for global duplicate ID warning)
+  const treeEntriesError = React.useMemo(() => {
+    if (!treeResponse)
+      return null
+    const findErrors = (nodes: TreeNode[]): string[] => {
+      let errors: string[] = []
+      for (const node of nodes) {
+        if (node.error)
+          errors.push(node.error)
+        if (node.children)
+          errors = [...errors, ...findErrors(node.children)]
+      }
+      return errors
+    }
+    const allErrors = findErrors(treeResponse.tree)
+    if (allErrors.length === 0)
+      return null
+    return `Workspace errors detected: ${allErrors.join('; ')}`
+  }, [treeResponse])
+
+  const displayError = treeError ?? treeEntriesError ?? graphError
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden">

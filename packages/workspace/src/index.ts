@@ -23,13 +23,15 @@ export type {
 } from './config'
 export {
   buildDiscoverCatalog,
+  buildTagTree,
+  buildTreeFromCatalog,
   DEFAULT_DISCOVER_LIMIT,
   DEFAULT_MAX_DEPTH,
   DEFAULT_MAX_FILES,
   getDiscoverEntry,
   MAX_DISCOVER_LIMIT,
 } from './discover'
-export type { DiscoverEntry, DiscoverStepSummary, FindFlowFilesOptions } from './discover'
+export type { DiscoverEntry, DiscoverStepSummary, FindFlowFilesOptions, TreeNode } from './discover'
 export { findFlowFiles } from './discover'
 export {
   flowDefinitionToGraph,
@@ -38,5 +40,5 @@ export {
   flowGraphToMermaid,
 } from './flowGraph'
 export type { FlowGraph, FlowGraphEdge, FlowGraphEdgeKind, FlowGraphJson, FlowGraphNode, FlowGraphNodeShape } from './flowGraph'
-export { formatDetailAsMarkdown, formatListAsMarkdown, formatRunResult } from './format'
+export { formatDetailAsMarkdown, formatListAsMarkdown, formatRunResult, formatRunResultJson } from './format'
 export { saveRunResult } from './snapshot'

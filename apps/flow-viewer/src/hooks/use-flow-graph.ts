@@ -9,18 +9,21 @@ export function useFlowGraph(selectedFlowId: string | null): {
   flowDetail: FlowDetail | null
   paramValues: Record<string, unknown>
   setParamValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>
+  isInitialized: boolean
 } {
   const [graph, setGraph] = useState<FlowGraph | null>(null)
   const [graphLoading, setGraphLoading] = useState(false)
   const [graphError, setGraphError] = useState<string | null>(null)
   const [flowDetail, setFlowDetail] = useState<FlowDetail | null>(null)
   const [paramValues, setParamValues] = useState<Record<string, unknown>>({})
+  const [isInitialized, setIsInitialized] = useState(false)
   const fetchingFlowIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!selectedFlowId) {
       setGraphError(null)
       fetchingFlowIdRef.current = null
+      setIsInitialized(false)
       return
     }
     const flowIdForThisFetch = selectedFlowId
@@ -28,7 +31,9 @@ export function useFlowGraph(selectedFlowId: string | null): {
     setGraphError(null)
     setGraph(null)
     setFlowDetail(null)
-    setParamValues({})
+    // Do NOT reset paramValues to {} here to avoid clearing URL params in App.tsx sync effect
+    // Instead, we mark as not initialized
+    setIsInitialized(false)
     setGraphLoading(true)
     fetch(`/api/workspace/graph?flowId=${encodeURIComponent(selectedFlowId)}`)
       .then(async (res) => {
@@ -75,6 +80,7 @@ export function useFlowGraph(selectedFlowId: string | null): {
         else {
           setParamValues(defaults)
         }
+        setIsInitialized(true)
       })
       .catch((err: unknown) => {
         if (fetchingFlowIdRef.current !== flowIdForThisFetch)
@@ -106,6 +112,7 @@ export function useFlowGraph(selectedFlowId: string | null): {
             else {
               setParamValues(defaults)
             }
+            setIsInitialized(true)
           })
           .catch(() => {})
       })
@@ -119,6 +126,7 @@ export function useFlowGraph(selectedFlowId: string | null): {
     if (!selectedFlowId) {
       setFlowDetail(null)
       setParamValues({})
+      setIsInitialized(false)
     }
   }, [selectedFlowId])
 
@@ -129,5 +137,6 @@ export function useFlowGraph(selectedFlowId: string | null): {
     flowDetail,
     paramValues,
     setParamValues,
+    isInitialized,
   }
 }

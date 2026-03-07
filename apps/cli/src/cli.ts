@@ -18,6 +18,7 @@ import {
   formatDetailAsMarkdown,
   formatListAsMarkdown,
   formatRunResult,
+  formatRunResultJson,
   getDiscoverEntry,
   loadConfig,
   MAX_DISCOVER_LIMIT,
@@ -103,6 +104,7 @@ interface RunCommandOptions {
   paramsFile?: string
   f?: string
   config?: string
+  json?: boolean
 }
 
 async function handleRunCommand(flowId: string, options: RunCommandOptions): Promise<void> {
@@ -162,7 +164,13 @@ async function handleRunCommand(flowId: string, options: RunCommandOptions): Pro
 
   saveRunResult(result, configDir)
 
-  console.log(formatRunResult(result, flow.flow.name))
+  const print = result.success ? console.log : console.error
+  if (options.json) {
+    print(formatRunResultJson(result))
+  }
+  else {
+    print(formatRunResult(result, flow.flow.name))
+  }
 
   if (!result.success) {
     process.exit(1)
@@ -178,6 +186,7 @@ program
   .option('--params-file <path>', 'Load params from a JSON file', undefined)
   .option('-f <path>', 'Short for --params-file', undefined)
   .option('--config <path>', 'Path to runflow.config.mjs (default: cwd/runflow.config.mjs)', undefined)
+  .option('--json', 'Output raw JSON for programmatic use', false)
   .action(async (flowId: string | undefined, options: RunCommandOptions) => {
     if (!flowId) {
       console.error('Error: flowId is required (file path or handlerKey:operationKey e.g. simple:get-users).')
@@ -304,6 +313,30 @@ program
       console.error(`Error: Failed to inspect snapshot: ${msg}`)
       process.exit(1)
     }
+  })
+
+program
+  .command('validate')
+  .description('Validate all flows in the workspace (checks for duplicate IDs and other errors)')
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .action(async (options: { config?: string }) => {
+    const cwd = process.cwd()
+    const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
+    const config = configPath ? await loadConfig(configPath) : null
+    const configDir = configPath ? path.dirname(configPath) : cwd
+    const catalog = await buildDiscoverCatalog(config, configDir, cwd)
+
+    const errors = catalog.filter(e => e.error != null)
+    if (errors.length === 0) {
+      console.log('✓ All flows are valid.')
+      return
+    }
+
+    console.error(`✗ Found ${errors.length} error(s) in workspace:`)
+    for (const entry of errors) {
+      console.error(`  - [${entry.flowId}] ${entry.error}`)
+    }
+    process.exit(1)
   })
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)

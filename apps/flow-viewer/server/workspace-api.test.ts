@@ -1,11 +1,11 @@
-import type { DiscoverEntryLike } from './workspace-api'
+import type { DiscoverEntry } from '@runflow/workspace'
+import { buildTreeFromCatalog } from '@runflow/workspace'
 import { describe, expect, it } from 'vitest'
-import { buildTreeFromCatalog } from './workspace-api'
 
 describe('buildTreeFromCatalog', () => {
   it('builds file nodes for path-like flowIds', () => {
-    const catalog: DiscoverEntryLike[] = [
-      { flowId: 'flows/hello.yaml', name: 'Hello' },
+    const catalog: DiscoverEntry[] = [
+      { flowId: 'flows/hello.yaml', name: 'Hello', path: 'flows/hello.yaml' },
     ]
     const tree = buildTreeFromCatalog(catalog)
     expect(tree).toHaveLength(1)
@@ -18,7 +18,7 @@ describe('buildTreeFromCatalog', () => {
   })
 
   it('puts openapi-like flowId without colon as single file node', () => {
-    const catalog: DiscoverEntryLike[] = [
+    const catalog: DiscoverEntry[] = [
       { flowId: 'pet-get', name: 'Get pet' },
     ]
     const tree = buildTreeFromCatalog(catalog)
@@ -29,7 +29,7 @@ describe('buildTreeFromCatalog', () => {
   })
 
   it('groups openapi flows by handler key when flowId is handlerKey:operationKey', () => {
-    const catalog: DiscoverEntryLike[] = [
+    const catalog: DiscoverEntry[] = [
       { flowId: 'pet:get', name: 'Get' },
       { flowId: 'pet:list', name: 'List' },
     ]

@@ -1,18 +1,17 @@
-# flow-review-ui Specification
+# flow-tags-navigation Specification
 
 ## Purpose
-TBD - created by archiving change flow-review-params-execute. Update Purpose after archive.
+
+TBD - created by archiving change 'flow-viewer-enhancements-and-fixes'. Update Purpose after archive.
 
 ## Requirements
 
-### Requirement: Flow review SHALL show flow graph when a flow is selected
+### Requirement: Flow tags definition
+The `FlowDefinition` SHALL support an optional `tags` property of type `string[]`.
 
-When the user selects a single flow (e.g. by flowId from a list or discover catalog), the flow review interface SHALL display that flow's graph. The graph SHALL be produced from flow-graph-format (nodes and edges) or from FlowDefinition using the same rules as flow-graph-format. The interface SHALL NOT require a new graph format; it SHALL use the same format as CLI `flow view --output json` or equivalent derivation from FlowDefinition.
-
-#### Scenario: Display graph from discover or resolved flow
-- **WHEN** the user has selected a flow and the client has graph data (flow-graph-format) or FlowDefinition for that flow
-- **THEN** the flow review interface SHALL render the flow graph (nodes and edges)
-- **AND** the sidebar SHALL automatically expand and highlight the corresponding entry (even for OpenAPI or custom ID flows)
+#### Scenario: Flow with tags
+- **WHEN** a Flow YAML includes a `tags` array (e.g., `tags: ["Production", "Core"]`)
+- **THEN** the system SHALL parse and make these tags available in the `DiscoverEntry`
 
 
 <!-- @trace
@@ -128,33 +127,14 @@ tests:
 -->
 
 ---
-### Requirement: Flow review SHALL display the flow's params declaration
+### Requirement: Sidebar Tag View
+The `flow-viewer` sidebar SHALL support a "Tag View" mode that displays flows grouped by tags.
 
-When a flow is selected, the interface SHALL display the params that the flow accepts. The params SHALL be those declared for the flow (ParamDeclaration[]), as provided by the discover entry or flow definition (name, type, required, default, description, and when applicable enum, schema, items). The interface SHALL present them in a way that allows the user to see what can be passed (e.g. labels, types, required indicator, descriptions).
-
-#### Scenario: Show params from discover entry or flow
-
-- **WHEN** the selected flow has params (e.g. DiscoverEntry.params or flow.params)
-- **THEN** the interface SHALL show each param's name and type
-- **AND** the interface SHALL indicate required params when the declaration says so
-- **AND** the interface MAY show default, description, enum, or schema when present
-
-#### Scenario: No params
-
-- **WHEN** the selected flow has no params or an empty params array
-- **THEN** the interface SHALL show that no params are needed (or an empty params section)
-- **AND** the user SHALL still be able to trigger execution with no params
-
----
-### Requirement: Flow review SHALL allow the user to supply params and trigger execution
-
-The interface SHALL provide a way for the user to enter or edit parameter values (according to the flow's params declaration) and SHALL provide an explicit action (e.g. "Run" or "Execute") to run the selected flow with those params. When the user triggers execution, the client SHALL call the execution endpoint (e.g. MCP executor_flow or equivalent) with the current flowId and the user-supplied params. The interface SHALL display the execution result or error to the user.
-
-#### Scenario: Execute with user-supplied params
-- **WHEN** the user has selected a flow, optionally filled in params, and triggers execution
-- **THEN** the client SHALL invoke the execution mechanism (e.g. executor_flow) with flowId and params
-- **AND** the interface SHALL show success or failure and result or error content to the user
-- **AND** the user-supplied params SHALL be persisted in the URL to survive page refreshes
+#### Scenario: Tag grouping in sidebar
+- **WHEN** the Tag View is active
+- **THEN** each unique tag SHALL be displayed as a virtual folder
+- **AND** a flow SHALL appear within every virtual folder corresponding to its tags
+- **AND** flows without tags SHALL be grouped under an "Untagged" virtual folder
 
 
 <!-- @trace
@@ -270,30 +250,13 @@ tests:
 -->
 
 ---
-### Requirement: Flow review SHALL use existing data and execution APIs
+### Requirement: Tag View tab switching
+The `flow-viewer` sidebar SHALL include a persistent tab or toggle to switch between Folder View and Tag View.
 
-The flow review interface SHALL obtain flow list and flow detail (including params and steps) from existing discovery or workspace APIs (e.g. discover_flow_list, discover_flow_detail, buildDiscoverCatalog, getDiscoverEntry). It SHALL obtain graph data from flow-graph-format or FlowDefinition (e.g. CLI flow view --output json or equivalent). It SHALL trigger execution only through existing execution APIs (e.g. MCP executor_flow or @runflow/core run()). The interface SHALL NOT define or require new backend endpoints for list, detail, graph, or execution.
-
-#### Scenario: Detail and params from discover
-
-- **WHEN** the client needs to show flow detail and params for a selected flowId
-- **THEN** it SHALL use discover_flow_detail or getDiscoverEntry (or equivalent) to get entry with params and steps
-- **AND** it SHALL NOT assume a new API that returns "flow review payload"
-
-#### Scenario: Execution via existing executor
-
-- **WHEN** the user triggers execution
-- **THEN** the client SHALL call executor_flow (or equivalent run(flow, { params })) with flowId and params
-- **AND** params validation and run semantics SHALL follow flow-params-schema and core executor
-
----
-### Requirement: Sidebar Navigation Modes
-The flow review interface SHALL support switching between Folder View and Tag View in the sidebar.
-
-#### Scenario: Switch to Tag View
-- **WHEN** the user selects the "Tags" tab in the sidebar
-- **THEN** the sidebar SHALL display flows grouped by their tags
-- **AND** the selection state SHALL be synchronized across both views
+#### Scenario: Tab switching
+- **WHEN** the user clicks the "Tags" tab
+- **THEN** the sidebar SHALL display the Tag-based virtual tree
+- **AND** this choice SHALL be persisted in local storage or URL if possible
 
 <!-- @trace
 source: flow-viewer-enhancements-and-fixes

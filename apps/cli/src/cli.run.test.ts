@@ -61,7 +61,7 @@ describe('flow run', () => {
       '    dependsOn: []',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--param', 'a=1', '--param', 'b=2', '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--param', 'a=1', '--param', 'b=2', '--json'], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('"a":"1"')
@@ -82,7 +82,7 @@ describe('flow run', () => {
     ].join('\n')
     writeFileSync(flowPath, yaml)
     writeFileSync(paramsPath, '{"a": "from-file", "b": "from-file"}')
-    const result = await runWithParse(['run', flowPath, '--params-file', paramsPath, '--param', 'a=overridden', '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--params-file', paramsPath, '--param', 'a=overridden', '--json'], process.cwd())
     unlinkSync(flowPath)
     unlinkSync(paramsPath)
     expect(result.code, `expected exit 0; stderr: ${result.stderr}`).toBe(0)
@@ -198,7 +198,7 @@ describe('flow run', () => {
       '    dependsOn: []',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(1)
     expect(result.stderr).toMatch(/Step s1|unknown|failed/i)
@@ -270,7 +270,7 @@ describe('flow run', () => {
       '  async run(ctx) { const m = ctx.step.message != null ? String(ctx.step.message) : ctx.step.id; return { success: true, log: m }; }',
       '})',
     ].join('\n'))
-    const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)
+    const result = await runWithParse(['run', flowPath, '--config', configPath], dir)
     unlinkSync(flowPath)
     unlinkSync(configPath)
     unlinkSync(handlerPath)
@@ -300,7 +300,7 @@ describe('flow run', () => {
       '    dependsOn: [cond]',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--param', 'useThen=false', '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--param', 'useThen=false', '--json'], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('BRANCH_ELSE')
@@ -329,7 +329,7 @@ describe('flow run', () => {
       '    dependsOn: [cond]',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--param', 'useThen=true', '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--param', 'useThen=true', '--json'], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('BRANCH_THEN')
@@ -352,7 +352,7 @@ describe('flow run', () => {
       '    dependsOn: [s1]',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--json'], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('from-set-42')
@@ -376,7 +376,7 @@ describe('flow run', () => {
       '    dependsOn: [loop]',
     ].join('\n')
     writeFileSync(flowPath, yaml)
-    const result = await runWithParse(['run', flowPath, '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '--json'], process.cwd())
     unlinkSync(flowPath)
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('"n":"0"')
@@ -465,7 +465,7 @@ describe('flow run', () => {
     ].join('\n')
     writeFileSync(flowPath, yaml)
     writeFileSync(paramsPath, '{"x": "from-f"}')
-    const result = await runWithParse(['run', flowPath, '-f', paramsPath, '--verbose'], process.cwd())
+    const result = await runWithParse(['run', flowPath, '-f', paramsPath, '--json'], process.cwd())
     unlinkSync(flowPath)
     unlinkSync(paramsPath)
     expect(result.code).toBe(0)
@@ -491,7 +491,7 @@ describe('flow run', () => {
     ].join('\n')
     writeFileSync(flowPath, yaml)
     const result = await runWithParse(
-      ['run', flowPath, '--param', 'body={"id":"1234"}', '--verbose'],
+      ['run', flowPath, '--param', 'body={"id":"1234"}', '--json'],
       dir,
     )
     unlinkSync(flowPath)
@@ -519,7 +519,7 @@ describe('flow run', () => {
     ].join('\n')
     writeFileSync(flowPath, yaml)
     const result = await runWithParse(
-      ['run', flowPath, '--params', '{"body":{"Id":123}}', '--verbose'],
+      ['run', flowPath, '--params', '{"body":{"Id":123}}', '--json'],
       dir,
     )
     unlinkSync(flowPath)
@@ -553,7 +553,7 @@ describe('flow run', () => {
       '})',
     ].join('\n')
     writeFileSync(handlerPath, handler)
-    const result = await runWithParse(['run', flowPath, '--config', configPath, '--verbose'], dir)
+    const result = await runWithParse(['run', flowPath, '--config', configPath, '--json'], dir)
     unlinkSync(flowPath)
     unlinkSync(configPath)
     unlinkSync(handlerPath)
@@ -581,7 +581,7 @@ describe('flow run', () => {
     })
     writeFileSync(flowPath, yaml)
     writeFileSync(configPath, config)
-    const result = await runWithParse(['run', 'flow.yaml', '--config', configPath, '--verbose'], dir)
+    const result = await runWithParse(['run', 'flow.yaml', '--config', configPath, '--json'], dir)
     unlinkSync(flowPath)
     unlinkSync(configPath)
     expect(result.code, result.stderr).toBe(0)
@@ -708,7 +708,7 @@ describe('flow run', () => {
     writeFileSync(subPath, subYaml)
     try {
       const result = await runWithParse(
-        ['run', mainPath, '--param', 'branch=else', '--verbose'],
+        ['run', mainPath, '--param', 'branch=else', '--json'],
         process.cwd(),
       )
       expect(result.code, result.stderr).toBe(0)

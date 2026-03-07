@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { TreeNode } from '../src/types.js'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import { buildRegistry, createFactoryContext, run } from '@runflow/core'
@@ -8,6 +7,8 @@ import {
   buildDiscoverCatalog,
   buildFlowMapForRun,
   buildRegistryFromConfig,
+  buildTagTree,
+  buildTreeFromCatalog,
   createResolveFlow,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
@@ -26,118 +27,6 @@ export interface WorkspaceContext {
   config: Awaited<ReturnType<typeof loadConfig>>
 }
 
-/** Entry from discover catalog; compatible with workspace DiscoverEntry. */
-export interface DiscoverEntryLike {
-  flowId: string
-  /** Flow display name (e.g. flow.name); used as tree node label when present. */
-  name: string
-}
-
-export function buildTreeFromCatalog(catalog: DiscoverEntryLike[]): TreeNode[] {
-  const hasSlash = (s: string) => s.includes('/')
-  const isFileFlowId = (s: string) => s.endsWith('.yaml') || s.endsWith('.yml') || hasSlash(s)
-  const fileEntries = catalog.filter(e => isFileFlowId(e.flowId))
-  const openApiLike = catalog.filter(e => !isFileFlowId(e.flowId))
-
-  const roots: TreeNode[] = []
-
-  const ensurePath = (parts: string[], flowId: string, name: string): void => {
-    if (parts.length === 0)
-      return
-    if (parts.length === 1) {
-      roots.push({
-        id: `file:${flowId}`,
-        label: parts[0],
-        type: 'file',
-        flowId,
-        name,
-      })
-      return
-    }
-    let current = roots
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i]
-      const folderId = `folder:${parts.slice(0, i + 1).join('/')}`
-      let folder = current.find((n): n is TreeNode => n.type === 'folder' && n.id === folderId)
-      if (!folder) {
-        folder = { id: folderId, label: part, type: 'folder', children: [] }
-        current.push(folder)
-        current = folder.children!
-      }
-      else {
-        current = folder.children!
-      }
-    }
-    const filePart = parts[parts.length - 1]
-    if (!current.some(n => n.type === 'file' && n.flowId === flowId)) {
-      current.push({
-        id: `file:${flowId}`,
-        label: filePart,
-        type: 'file',
-        flowId,
-        name,
-      })
-    }
-  }
-
-  for (const e of fileEntries) {
-    const parts = e.flowId.split('/')
-    ensurePath(parts, e.flowId, e.name)
-  }
-
-  const sortNodes = (nodes: TreeNode[]): void => {
-    nodes.sort((a, b) => {
-      if (a.type !== b.type)
-        return a.type === 'folder' ? -1 : 1
-      return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-    })
-    nodes.forEach(n => n.children && sortNodes(n.children))
-  }
-  sortNodes(roots)
-
-  if (openApiLike.length > 0) {
-    const byPrefix = new Map<string, DiscoverEntryLike[]>()
-    for (const e of openApiLike) {
-      const colonIdx = e.flowId.indexOf(':')
-      const prefix = colonIdx > 0 ? e.flowId.slice(0, colonIdx) : null
-      const key = prefix ?? e.flowId
-      const list = byPrefix.get(key) ?? []
-      list.push(e)
-      byPrefix.set(key, list)
-    }
-    const openApiChildren: TreeNode[] = []
-    for (const [prefix, entries] of byPrefix.entries()) {
-      if (entries.length === 1 && entries[0].flowId === prefix) {
-        openApiChildren.push({
-          id: `file:${entries[0].flowId}`,
-          label: entries[0].name || entries[0].flowId,
-          type: 'file',
-          flowId: entries[0].flowId,
-          name: entries[0].name,
-        })
-      }
-      else {
-        openApiChildren.push({
-          id: `openapi:${prefix}`,
-          label: prefix,
-          type: 'folder',
-          children: entries.map(e => ({
-            id: `file:${e.flowId}`,
-            label: e.name || e.flowId,
-            type: 'file' as const,
-            flowId: e.flowId,
-            name: e.name,
-          })),
-        })
-      }
-    }
-    openApiChildren.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
-    roots.push(...openApiChildren)
-  }
-
-  return roots
-}
-
 function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, configDir: string } {
   const runflowConfigPath = process.env.RUNFLOW_CONFIG_PATH
   const cwd = process.cwd()
@@ -145,7 +34,7 @@ function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, con
     ? path.resolve(runflowConfigPath)
     : findConfigFile(cwd)
   const configDir = configPath ? path.dirname(configPath) : cwd
-  return { cwd: configDir, configPath, configDir }
+  return { cwd, configPath, configDir }
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -178,10 +67,12 @@ async function handleTree(ctx: WorkspaceContext, res: ServerResponse): Promise<v
   try {
     const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
     const tree = buildTreeFromCatalog(catalog)
+    const tagTree = buildTagTree(catalog)
     sendJson(res, 200, {
       workspaceRoot: ctx.cwd,
       configPath: ctx.configPath ?? null,
       tree,
+      tagTree,
     })
   }
   catch (err) {

@@ -2,13 +2,25 @@
  * Flow-viewer 型別：flow graph 從 @runflow/workspace re-export；
  * workspace API 回應型別與 vite-plugin-workspace-api 一致，前端與 plugin 共用。
  */
-export type {
+import type {
+  DiscoverEntry,
   FlowGraph,
   FlowGraphEdge,
   FlowGraphEdgeKind,
   FlowGraphNode,
   FlowGraphNodeShape,
+  TreeNode,
 } from '@runflow/workspace'
+
+export type {
+  DiscoverEntry,
+  FlowGraph,
+  FlowGraphEdge,
+  FlowGraphEdgeKind,
+  FlowGraphNode,
+  FlowGraphNodeShape,
+  TreeNode,
+}
 
 export interface WorkspaceStatus {
   workspaceRoot: string
@@ -16,19 +28,11 @@ export interface WorkspaceStatus {
   configured: boolean
 }
 
-export interface TreeNode {
-  id: string
-  label: string
-  type: 'folder' | 'file'
-  flowId?: string
-  name?: string
-  children?: TreeNode[]
-}
-
 export interface TreeResponse {
   workspaceRoot: string
   configPath: string | null
   tree: TreeNode[]
+  tagTree: TreeNode[]
 }
 
 /** Nested param shape (no name; used in schema). */

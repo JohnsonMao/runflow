@@ -1,6 +1,6 @@
 import type { TreeNode, TreeResponse, WorkspaceStatus } from '../types'
-import { ChevronRight, FileCode2, Folder, FolderOpen } from 'lucide-react'
-import React from 'react'
+import { AlertCircle, ChevronRight, FileCode2, Folder, FolderOpen, Tag } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const INDENT_PX_BASE = 8
@@ -21,13 +22,14 @@ function indentPx(depth: number): number {
   return INDENT_PX_BASE + depth * INDENT_PX_PER_LEVEL
 }
 
-interface FlowSidebarProps {
-  workspaceStatus: WorkspaceStatus | null
-  treeResponse: TreeResponse | null
+interface TreeNodeItemProps {
+  node: TreeNode
+  depth: number
   selectedFlowId: string | null
   onSelectFlow: (flowId: string) => void
   openFolderIds: Set<string>
   onToggleFolder: (id: string) => void
+  isSidebarCollapsed: boolean
 }
 
 function TreeNodeItem({
@@ -38,15 +40,7 @@ function TreeNodeItem({
   openFolderIds,
   onToggleFolder,
   isSidebarCollapsed,
-}: {
-  node: TreeNode
-  depth: number
-  selectedFlowId: string | null
-  onSelectFlow: (flowId: string) => void
-  openFolderIds: Set<string>
-  onToggleFolder: (id: string) => void
-  isSidebarCollapsed: boolean
-}): React.ReactNode {
+}: TreeNodeItemProps): React.ReactElement | null {
   if (node.type === 'file' && node.flowId) {
     return (
       <SidebarMenuItem key={node.id}>
@@ -58,8 +52,20 @@ function TreeNodeItem({
           style={isSidebarCollapsed ? undefined : { paddingLeft: `${indentPx(depth)}px` }}
         >
           <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="truncate text-xs group-data-[collapsible=icon]:hidden" title={node.flowId}>
-            {node.name || node.label}
+          <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-xs" title={node.flowId}>
+              {node.name || node.label}
+            </span>
+            {node.error && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertCircle className="size-3 shrink-0 text-destructive" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px] border-destructive bg-destructive text-destructive-foreground">
+                  {node.error}
+                </TooltipContent>
+              </Tooltip>
+            )}
           </span>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -103,17 +109,16 @@ function TreeNodeItem({
         <CollapsibleContent>
           <div className="border-l border-sidebar-border pl-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:pl-0">
             {node.children.map(child => (
-              <React.Fragment key={child.id}>
-                {TreeNodeItem({
-                  node: child,
-                  depth: depth + 1,
-                  selectedFlowId,
-                  onSelectFlow,
-                  openFolderIds,
-                  onToggleFolder,
-                  isSidebarCollapsed,
-                })}
-              </React.Fragment>
+              <TreeNodeItem
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                selectedFlowId={selectedFlowId}
+                onSelectFlow={onSelectFlow}
+                openFolderIds={openFolderIds}
+                onToggleFolder={onToggleFolder}
+                isSidebarCollapsed={isSidebarCollapsed}
+              />
             ))}
           </div>
         </CollapsibleContent>
@@ -121,6 +126,15 @@ function TreeNodeItem({
     )
   }
   return null
+}
+
+interface FlowSidebarProps {
+  workspaceStatus: WorkspaceStatus | null
+  treeResponse: TreeResponse | null
+  selectedFlowId: string | null
+  onSelectFlow: (flowId: string) => void
+  openFolderIds: Set<string>
+  onToggleFolder: (id: string) => void
 }
 
 export function FlowSidebar({
@@ -134,6 +148,15 @@ export function FlowSidebar({
   const { state: sidebarState } = useSidebar()
   const isSidebarCollapsed = sidebarState === 'collapsed'
 
+  const [viewMode, setViewMode] = useState<'folders' | 'tags'>(() => {
+    const saved = localStorage.getItem('flow-viewer-sidebar-view')
+    return (saved === 'tags' ? 'tags' : 'folders')
+  })
+
+  useEffect(() => {
+    localStorage.setItem('flow-viewer-sidebar-view', viewMode)
+  }, [viewMode])
+
   if (!workspaceStatus?.configured) {
     return (
       <p className="px-2 py-4 text-xs text-muted-foreground">
@@ -144,26 +167,63 @@ export function FlowSidebar({
   if (!treeResponse) {
     return <p className="px-2 py-4 text-xs text-muted-foreground">載入中…</p>
   }
-  if (treeResponse.tree.length === 0) {
+
+  const hasFlows = treeResponse.tree.length > 0 || treeResponse.tagTree.length > 0
+
+  if (!hasFlows) {
     return (
       <p className="px-2 py-4 text-xs text-muted-foreground">
         未發現 flow（flowsDir 或 openapi 設定為空）。
       </p>
     )
   }
+
   return (
-    <SidebarMenu className="gap-0">
-      {treeResponse.tree.map(node =>
-        TreeNodeItem({
-          node,
-          depth: 0,
-          selectedFlowId,
-          onSelectFlow,
-          openFolderIds,
-          onToggleFolder,
-          isSidebarCollapsed,
-        }),
-      )}
-    </SidebarMenu>
+    <div className="flex flex-col gap-2 p-2">
+      <Tabs value={viewMode} onValueChange={v => setViewMode(v as any)} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 h-8">
+          <TabsTrigger value="folders" className="text-[10px] px-0">
+            <Folder className="size-3 mr-1" />
+            <span className="group-data-[collapsible=icon]:hidden">Folders</span>
+          </TabsTrigger>
+          <TabsTrigger value="tags" className="text-[10px] px-0">
+            <Tag className="size-3 mr-1" />
+            <span className="group-data-[collapsible=icon]:hidden">Tags</span>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="folders" className="mt-2 border-0 p-0 focus-visible:ring-0">
+          <SidebarMenu className="gap-0">
+            {treeResponse.tree.map((node: TreeNode) => (
+              <TreeNodeItem
+                key={node.id}
+                node={node}
+                depth={0}
+                selectedFlowId={selectedFlowId}
+                onSelectFlow={onSelectFlow}
+                openFolderIds={openFolderIds}
+                onToggleFolder={onToggleFolder}
+                isSidebarCollapsed={isSidebarCollapsed}
+              />
+            ))}
+          </SidebarMenu>
+        </TabsContent>
+        <TabsContent value="tags" className="mt-2 border-0 p-0 focus-visible:ring-0">
+          <SidebarMenu className="gap-0">
+            {treeResponse.tagTree.map((node: TreeNode) => (
+              <TreeNodeItem
+                key={node.id}
+                node={node}
+                depth={0}
+                selectedFlowId={selectedFlowId}
+                onSelectFlow={onSelectFlow}
+                openFolderIds={openFolderIds}
+                onToggleFolder={onToggleFolder}
+                isSidebarCollapsed={isSidebarCollapsed}
+              />
+            ))}
+          </SidebarMenu>
+        </TabsContent>
+      </Tabs>
+    </div>
   )
 }
