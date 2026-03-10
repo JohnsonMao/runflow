@@ -143,7 +143,7 @@ export async function inspectSnapshotTool(
     const snapshot = JSON.parse(content)
 
     if (expression) {
-      const result = evaluate(expression, snapshot as any)
+      const result = evaluate(expression, snapshot)
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
     }
     else {

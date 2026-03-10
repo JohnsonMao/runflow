@@ -1,10 +1,12 @@
 import type { OpenApiDocument, OperationFilter } from './types.js'
+import { normalizeFlowId } from '@runflow/core'
 
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'options', 'head'] as const
 
 /**
  * Filename-safe operation key: lowercase method + path with leading / removed,
  * / → -, {param} → param. Same as the written flow filename (without .yaml).
+ * The result is normalized to ensure consistent ID format.
  * e.g. get-users, get-users-id
  */
 export function toOperationKey(method: string, path: string): string {
@@ -13,7 +15,8 @@ export function toOperationKey(method: string, path: string): string {
     .replace(/^\//, '')
     .replace(/\//g, '-')
     .replace(/\{(\w+)\}/g, '$1')
-  return pathPart ? `${methodLower}-${pathPart}` : methodLower
+  const rawKey = pathPart ? `${methodLower}-${pathPart}` : methodLower
+  return normalizeFlowId(rawKey)
 }
 
 export interface CollectedOperation {

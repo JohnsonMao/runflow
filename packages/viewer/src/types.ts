@@ -71,4 +71,25 @@ export interface FlowDetail {
   description?: string
   params?: ParamDeclaration[]
   steps?: DiscoverStepSummary[]
+  /** Handler key for OpenAPI handlers (e.g., 'scm', 'payments'). */
+  handlerKey?: string
+  /** Original relative file path (for folder expansion). */
+  path?: string
+}
+
+/** Graph API response from GET /api/workspace/graph (extends FlowGraph with additional metadata). */
+export interface FlowGraphResponse extends FlowGraph {
+  flowId: string
+  /** Original flowId before normalization (for OpenAPI handlers). */
+  originalFlowId?: string
+  /** Original relative file path (for folder expansion). */
+  path?: string
+  /** Absolute file path. */
+  absPath?: string
+  /** Handler key for OpenAPI handlers (e.g., 'scm', 'payments'). */
+  handlerKey?: string
+  /** Flow parameters. */
+  params?: ParamDeclaration[]
+  /** Step summaries. */
+  steps?: DiscoverStepSummary[]
 }

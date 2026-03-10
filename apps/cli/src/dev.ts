@@ -32,21 +32,9 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   const config = configPath ? await loadConfig(configPath) : null
   const configDir = configPath ? path.dirname(configPath) : cwd
 
-  const { buildDiscoverCatalog, getDiscoverEntry } = await import('@runflow/workspace')
-  const catalog = await buildDiscoverCatalog(config, configDir, cwd)
-
+  // resolveAndLoadFlow now handles catalog lookup internally, so we can use it directly
   const catalogResolver = async (id: string): Promise<LoadedFlow> => {
-    try {
-      return await resolveAndLoadFlow(id, config, configDir, cwd)
-    }
-    catch (e) {
-      const entry = getDiscoverEntry(catalog, id)
-      if (entry) {
-        const resolveId = entry.absPath || entry.flowId
-        return await resolveAndLoadFlow(resolveId, config, configDir, cwd)
-      }
-      throw e
-    }
+    return await resolveAndLoadFlow(id, config, configDir, cwd)
   }
 
   let initialLoaded: LoadedFlow

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPlainObject, normalizeStepIds, redact, truncate } from './utils'
+import { isPlainObject, normalizeFlowId, normalizeStepIds, redact, truncate } from './utils'
 
 describe('normalizeStepIds', () => {
   it('returns [s] when given a single string', () => {
@@ -81,5 +81,58 @@ describe('truncate', () => {
   it('does not truncate short strings', () => {
     const short = 'hello'
     expect(truncate(short)).toBe('hello')
+  })
+})
+
+describe('normalizeFlowId', () => {
+  it('should normalize special characters', () => {
+    expect(normalizeFlowId('tt%2Fpost-users.yaml')).toBe('tt_2Fpost-users.yaml')
+    expect(normalizeFlowId('scm%3Apost-scm-V1-Category-GetCategory')).toBe('scm_3Apost-scm-V1-Category-GetCategory')
+    expect(normalizeFlowId('tt/post-users.yaml')).toBe('tt_post-users.yaml')
+    expect(normalizeFlowId('scm:post-scm-V1-Category-GetCategory')).toBe('scm_post-scm-V1-Category-GetCategory')
+  })
+
+  it('should preserve hyphens, underscores, and dots', () => {
+    expect(normalizeFlowId('get-users')).toBe('get-users')
+    expect(normalizeFlowId('get_users')).toBe('get_users')
+    expect(normalizeFlowId('get.users')).toBe('get.users')
+    expect(normalizeFlowId('get-users_id.v1')).toBe('get-users_id.v1')
+  })
+
+  it('should collapse consecutive underscores', () => {
+    expect(normalizeFlowId('get__users')).toBe('get_users')
+    expect(normalizeFlowId('api___call')).toBe('api_call')
+    expect(normalizeFlowId('test____multiple')).toBe('test_multiple')
+  })
+
+  it('should remove leading and trailing underscores', () => {
+    expect(normalizeFlowId('_get-users')).toBe('get-users')
+    expect(normalizeFlowId('get-users_')).toBe('get-users')
+    expect(normalizeFlowId('_get-users_')).toBe('get-users')
+    expect(normalizeFlowId('___test___')).toBe('test')
+  })
+
+  it('should handle percent signs and other special characters', () => {
+    expect(normalizeFlowId('test%ZZinvalid')).toBe('test_ZZinvalid')
+    expect(normalizeFlowId('test%GG')).toBe('test_GG')
+    expect(normalizeFlowId('test%')).toBe('test')
+  })
+
+  it('should handle edge cases', () => {
+    expect(normalizeFlowId('')).toBe('')
+    expect(normalizeFlowId('_')).toBe('')
+    expect(normalizeFlowId('___')).toBe('')
+    expect(normalizeFlowId('only-special-chars')).toBe('only-special-chars')
+    expect(normalizeFlowId('test/path/to/file')).toBe('test_path_to_file')
+    expect(normalizeFlowId('test:path:to:file')).toBe('test_path_to_file')
+    expect(normalizeFlowId('test path with spaces')).toBe('test_path_with_spaces')
+  })
+
+  it('should normalize complex cases', () => {
+    expect(normalizeFlowId('tt%2Fpost-users.yaml')).toBe('tt_2Fpost-users.yaml')
+    expect(normalizeFlowId('scm%3Apost-scm-V1-Category-GetCategory')).toBe('scm_3Apost-scm-V1-Category-GetCategory')
+    expect(normalizeFlowId('api/v1/users/{id}')).toBe('api_v1_users_id')
+    expect(normalizeFlowId('test%2Fpath%2Fto%2Ffile')).toBe('test_2Fpath_2Fto_2Ffile')
+    expect(normalizeFlowId('test/path/to/file')).toBe('test_path_to_file')
   })
 })

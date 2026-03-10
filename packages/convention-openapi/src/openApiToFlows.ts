@@ -27,7 +27,7 @@ export async function openApiToFlows(
 
   const output = options.output ?? 'memory'
   if (output !== 'memory' && typeof output === 'object' && output.outputDir) {
-    await writeFlowsToDir(result, output.outputDir)
+    await writeFlowsToDir(result, output.outputDir, options.handlerKey)
   }
 
   return result

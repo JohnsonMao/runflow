@@ -47,15 +47,24 @@ export function App(): React.ReactElement {
 
   // Initialize openFolderIds from URL (auto-expand to show selected flow)
   const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(() => {
+    const folders = new Set<string>()
     const params = new URLSearchParams(window.location.search)
     const flowId = params.get('flowId')
-    const folders = new Set<string>()
     if (flowId) {
-      if (flowId.includes(':')) {
+      // For normalized OpenAPI flow IDs, try to extract handler key
+      if (flowId.includes('_')) {
+        // Normalized ID like 'payments_get-users', extract handler key
+        const parts = flowId.split('_')
+        if (parts.length > 1)
+          folders.add(`openapi:${parts[0]}`)
+      }
+      else if (flowId.includes(':')) {
+        // Original format like 'payments:get-users'
         const prefix = flowId.split(':')[0]
         folders.add(`openapi:${prefix}`)
       }
       else {
+        // File path format
         const parts = flowId.split('/')
         if (parts.length > 1) {
           for (let i = 1; i < parts.length; i++)
@@ -66,12 +75,18 @@ export function App(): React.ReactElement {
     return folders
   })
 
-  // Sync selectedFlowId -> openFolderIds (auto-expand)
+  // Sync selectedFlowId -> openFolderIds (auto-expand to show selected flow)
   useEffect(() => {
     if (selectedFlowId) {
       setOpenFolderIds((prev) => {
         const next = new Set(prev)
-        if (selectedFlowId.includes(':')) {
+        // For normalized OpenAPI flow IDs, try to extract handler key
+        if (selectedFlowId.includes('_')) {
+          const parts = selectedFlowId.split('_')
+          if (parts.length > 1)
+            next.add(`openapi:${parts[0]}`)
+        }
+        else if (selectedFlowId.includes(':')) {
           const prefix = selectedFlowId.split(':')[0]
           next.add(`openapi:${prefix}`)
         }
@@ -103,6 +118,34 @@ export function App(): React.ReactElement {
     setGraph,
     setFlowDetail,
   } = useFlowGraph(selectedFlowId)
+
+  // Update openFolderIds when flowDetail includes handlerKey or path (from Graph API)
+  useEffect(() => {
+    if (!flowDetail)
+      return
+
+    setOpenFolderIds((prev) => {
+      const next = new Set(prev)
+
+      // For OpenAPI handlers, expand the handler folder
+      if (flowDetail.handlerKey) {
+        next.add(`openapi:${flowDetail.handlerKey}`)
+      }
+
+      // For file flows, expand folders based on path
+      if (flowDetail.path) {
+        const parts = flowDetail.path.split('/')
+        if (parts.length > 1) {
+          // Expand all parent folders
+          for (let i = 1; i < parts.length; i++) {
+            next.add(`folder:${parts.slice(0, i).join('/')}`)
+          }
+        }
+      }
+
+      return next
+    })
+  }, [flowDetail])
 
   // Handle WebSocket messages
   useEffect(() => {

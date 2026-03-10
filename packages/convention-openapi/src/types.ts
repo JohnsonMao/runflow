@@ -29,8 +29,11 @@ export interface OpenApiToFlowsOptions {
   /**
    * Output mode: 'memory' (default) returns flow(s) in memory only;
    * { outputDir: string } writes each flow to a file under that directory.
+   * When handlerKey is provided and output is a directory, flows are organized in subdirectories by handlerKey.
    */
   output?: 'memory' | { outputDir: string }
+  /** Handler key (e.g., 'scm', 'payments'). Used for organizing flows into subdirectories when writing to filesystem. */
+  handlerKey?: string
   /** Base URL for the API (e.g. https://api.example.com). Used to build full request URL. */
   baseUrl?: string
   /** Limit which operations to convert. When omitted, all operations are converted. */

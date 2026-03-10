@@ -3,4 +3,4 @@ export type { ChainableData, ChainableHttp, ChainableHttpRequest, ChainableStrin
 export { run } from './run'
 export { evaluate, evaluateToBoolean } from './safeExpression'
 export type { FlowDefinition, FlowStep, ParamDeclaration, ParamType, RunFlowFn, RunOptions, RunResult, StepContext, StepRegistry, StepResult, StepResultFn, StepResultOptions } from './types'
-export { buildRegistry, isPlainObject, normalizeStepIds, redact, truncate } from './utils'
+export { buildRegistry, isPlainObject, normalizeFlowId, normalizeStepIds, redact, truncate } from './utils'

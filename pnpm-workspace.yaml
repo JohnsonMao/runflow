@@ -7,6 +7,7 @@ catalogs:
     '@antfu/eslint-config': ^7.4.3
     '@testing-library/react': ^16.0.0
     '@types/dagre': ^0.7.53
+    '@types/polka': ^0.5.8
     '@types/express': ^5.0.0
     '@types/node': ^25.0.0
     '@types/ws': ^8.5.14
@@ -58,7 +59,3 @@ catalogs:
     ws: ^8.18.1
     yaml: ^2.7.0
     zod: ^3.24.0
-  conflicts_dev_h8_18_1:
-    '@types/ws': ^8.18.1
-catalog:
-  '@types/polka': ^0.5.8

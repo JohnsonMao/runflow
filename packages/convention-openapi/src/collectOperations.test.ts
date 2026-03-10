@@ -8,6 +8,20 @@ describe('toOperationKey', () => {
     expect(toOperationKey('Post', '/users')).toBe('post-users')
     expect(toOperationKey('GET', '/users/{id}')).toBe('get-users-id')
   })
+
+  it('normalizes URL-encoded characters in path', () => {
+    // % is converted to _ without URL decoding
+    expect(toOperationKey('GET', '/tt/post-users')).toBe('get-tt-post-users')
+    expect(toOperationKey('POST', 'scm:post-scm-V1-Category-GetCategory')).toBe('post-scm_post-scm-V1-Category-GetCategory')
+  })
+
+  it('normalizes special characters while preserving hyphens, underscores, and dots', () => {
+    // toOperationKey converts / to - first, then normalizes
+    expect(toOperationKey('GET', '/api/v1/users')).toBe('get-api-v1-users')
+    expect(toOperationKey('POST', '/test-path_with.dots')).toBe('post-test-path_with.dots')
+    // Test with URL-encoded characters: % is converted to _ without decoding
+    expect(toOperationKey('GET', '/api/v1/users')).toBe('get-api-v1-users')
+  })
 })
 
 describe('collectOperations', () => {

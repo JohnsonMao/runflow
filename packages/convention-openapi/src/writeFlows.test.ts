@@ -81,4 +81,20 @@ describe('writeFlowsToDir', () => {
     expect(files).toEqual([])
     rmdirSync(dir)
   })
+
+  it('organizes flows into subdirectories by handlerKey when provided', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'writeFlows-'))
+    const result: OpenApiToFlowsResult = new Map([
+      ['get-users', minimalFlow('GetUsers')],
+      ['post-items', minimalFlow('PostItems')],
+    ])
+    await writeFlowsToDir(result, dir, 'scm')
+    const files = readdirSync(dir)
+    expect(files).toEqual(['scm'])
+    const scmFiles = readdirSync(join(dir, 'scm')).sort()
+    expect(scmFiles).toEqual(['get-users.yaml', 'post-items.yaml'])
+    scmFiles.forEach(f => unlinkSync(join(dir, 'scm', f)))
+    rmdirSync(join(dir, 'scm'))
+    rmdirSync(dir)
+  })
 })

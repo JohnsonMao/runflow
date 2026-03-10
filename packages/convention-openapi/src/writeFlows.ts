@@ -7,11 +7,13 @@ function safeFileName(key: string): string {
   return key.replace(/\s+/g, '-').replace(/\//g, '-').replace(/[^\w-]/g, '') || 'flow'
 }
 
-export async function writeFlowsToDir(result: OpenApiToFlowsResult, outputDir: string): Promise<void> {
-  await mkdir(outputDir, { recursive: true })
+export async function writeFlowsToDir(result: OpenApiToFlowsResult, outputDir: string, handlerKey?: string): Promise<void> {
+  // If handlerKey is provided, organize flows into subdirectories by handler key
+  const targetDir = handlerKey ? join(outputDir, handlerKey) : outputDir
+  await mkdir(targetDir, { recursive: true })
   for (const [key, flow] of result) {
     const name = safeFileName(key)
-    const path = join(outputDir, `${name}.yaml`)
+    const path = join(targetDir, `${name}.yaml`)
     await writeFile(path, stringify(flow), 'utf-8')
   }
 }

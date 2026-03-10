@@ -30,8 +30,8 @@ describe('buildTreeFromCatalog', () => {
 
   it('groups openapi flows by handler key when flowId is handlerKey:operationKey', () => {
     const catalog: DiscoverEntry[] = [
-      { flowId: 'pet:get', name: 'Get' },
-      { flowId: 'pet:list', name: 'List' },
+      { flowId: 'pet:get', name: 'Get', handlerKey: 'pet', originalFlowId: 'pet:get' },
+      { flowId: 'pet:list', name: 'List', handlerKey: 'pet', originalFlowId: 'pet:list' },
     ]
     const tree = buildTreeFromCatalog(catalog)
     expect(tree).toHaveLength(1)

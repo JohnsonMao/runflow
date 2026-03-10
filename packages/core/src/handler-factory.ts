@@ -194,7 +194,7 @@ export type HandlerFactory = (context: FactoryContext) => HandlerConfig
 
 /** Create a factory context with injected tools. */
 export function createFactoryContext(): FactoryContext {
-  const defineHandler: DefineHandler = (config: any): any => {
+  const defineHandler: DefineHandler = (config: HandlerConfig): HandlerConfig => {
     return {
       type: config.type,
       schema: config.schema,

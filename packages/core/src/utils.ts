@@ -100,3 +100,29 @@ export function truncate(text: string, maxLength: number = MAX_BODY_LENGTH): str
   return `${text.slice(0, maxLength)}
 ... (truncated, use 'inspect' to view full)`
 }
+
+/**
+ * Normalizes a Flow ID by:
+ * 1. Converting all special characters to underscore _, except hyphens -, underscores _, and dots . which are preserved
+ * 2. Collapsing consecutive underscores into a single underscore
+ * 3. Removing leading and trailing underscores
+ *
+ * @param flowId - The Flow ID string to normalize
+ * @returns The normalized Flow ID string
+ */
+export function normalizeFlowId(flowId: string): string {
+  if (!flowId)
+    return flowId
+
+  // Convert special characters to underscore, preserving -, _, and .
+  // \w includes [A-Za-z0-9_], so we preserve word characters, hyphens, and dots
+  let normalized = flowId.replace(/[^\w\-.]/g, '_')
+
+  // Collapse consecutive underscores
+  normalized = normalized.replace(/_+/g, '_')
+
+  // Remove leading and trailing underscores
+  normalized = normalized.replace(/^_+|_+$/g, '')
+
+  return normalized
+}

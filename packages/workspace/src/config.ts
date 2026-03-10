@@ -293,7 +293,8 @@ async function loadFlowFromResolved(resolved: ResolvedFlow, configDir: string): 
 }
 
 /**
- * Resolve flowId and load the flow. Convenience for callers that have config/configDir/cwd.
+ * Resolve flowId using catalog lookup first (for custom IDs, normalized IDs, and OpenAPI handlers),
+ * then fall back to direct resolution. This ensures flows with custom IDs or normalized IDs are correctly resolved.
  * @throws Error with user-facing message when file/spec not found, operation not found, or flow invalid.
  */
 export async function resolveAndLoadFlow(
@@ -302,6 +303,41 @@ export async function resolveAndLoadFlow(
   configDir: string,
   cwd: string,
 ): Promise<LoadedFlow> {
+  // Try catalog lookup first to handle custom IDs, normalized IDs, and OpenAPI handlers
+  try {
+    const { buildDiscoverCatalog, getDiscoverEntry } = await import('./discover.js')
+    const catalog = await buildDiscoverCatalog(config, configDir, cwd)
+    const entry = getDiscoverEntry(catalog, flowId)
+
+    if (entry) {
+      // Determine the correct flowId to use for resolution:
+      // 1. For OpenAPI handlers: use originalFlowId (e.g., 'payments:get-users')
+      // 2. For file flows with custom id: use path or absPath (e.g., 'tt/test.yaml')
+      // 3. Otherwise: use originalFlowId if available, or flowId as-is
+      let resolvedFlowId = flowId
+      if (entry.handlerKey && entry.originalFlowId) {
+        // OpenAPI handler: use originalFlowId
+        resolvedFlowId = entry.originalFlowId
+      }
+      else if (entry.path || entry.absPath) {
+        // File flow: use path (relative) or absPath (absolute)
+        // Prefer path if it's relative to flowsDir, otherwise use absPath
+        resolvedFlowId = entry.path || entry.absPath!
+      }
+      else if (entry.originalFlowId) {
+        // Fallback: use originalFlowId if available
+        resolvedFlowId = entry.originalFlowId
+      }
+
+      const resolved = resolveFlowId(resolvedFlowId, config, configDir, cwd)
+      return loadFlowFromResolved(resolved, configDir)
+    }
+  }
+  catch {
+    // If catalog lookup fails, fall through to direct resolution
+  }
+
+  // Fall back to direct resolution (for backward compatibility and edge cases)
   const resolved = resolveFlowId(flowId, config, configDir, cwd)
   return loadFlowFromResolved(resolved, configDir)
 }

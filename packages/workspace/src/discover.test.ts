@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { findFlowFiles } from './discover'
+import { buildDiscoverCatalog, findFlowFiles } from './discover'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -135,6 +135,99 @@ describe('findFlowFiles', () => {
       unlinkSync(path.join(dir, 'a.yaml'))
       unlinkSync(path.join(dir, 'b.yaml'))
       unlinkSync(path.join(dir, 'c.yaml'))
+    }
+  })
+})
+
+describe('buildDiscoverCatalog - Flow ID normalization', () => {
+  it('normalizes Flow IDs from YAML files with special characters', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'buildDiscoverCatalog-normalize-'))
+    const subDir = path.join(dir, 'tt')
+    mkdirSync(subDir, { recursive: true })
+    writeFileSync(path.join(subDir, 'post-users.yaml'), 'id: tt%2Fpost-users.yaml\nname: Test\nsteps: []')
+    try {
+      const catalog = await buildDiscoverCatalog(null, dir, dir)
+      const entry = catalog.find(e => e.path === 'tt/post-users.yaml')
+      expect(entry).toBeDefined()
+      // % is converted to _ without URL decoding
+      expect(entry?.flowId).toBe('tt_2Fpost-users.yaml')
+    }
+    finally {
+      unlinkSync(path.join(subDir, 'post-users.yaml'))
+    }
+  })
+
+  it('normalizes Flow IDs from file paths', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'buildDiscoverCatalog-path-normalize-'))
+    const subDir = path.join(dir, 'api')
+    mkdirSync(subDir, { recursive: true })
+    writeFileSync(path.join(subDir, 'v1-users.yaml'), 'name: Test\nsteps: []')
+    try {
+      const catalog = await buildDiscoverCatalog(null, dir, dir)
+      const entry = catalog.find(e => e.path === 'api/v1-users.yaml')
+      expect(entry).toBeDefined()
+      expect(entry?.flowId).toBe('api_v1-users.yaml')
+    }
+    finally {
+      unlinkSync(path.join(subDir, 'v1-users.yaml'))
+    }
+  })
+
+  it('detects duplicate normalized Flow IDs', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'buildDiscoverCatalog-duplicate-'))
+    // Use two IDs that normalize to the same value: path separator / becomes _
+    writeFileSync(path.join(dir, 'flow1.yaml'), 'id: tt/post-users.yaml\nname: Flow 1\nsteps: []')
+    writeFileSync(path.join(dir, 'flow2.yaml'), 'id: tt_post-users.yaml\nname: Flow 2\nsteps: []')
+    try {
+      const catalog = await buildDiscoverCatalog(null, dir, dir)
+      const entry1 = catalog.find(e => e.path === 'flow1.yaml')
+      const entry2 = catalog.find(e => e.path === 'flow2.yaml')
+      expect(entry1).toBeDefined()
+      expect(entry2).toBeDefined()
+      expect(entry1?.flowId).toBe('tt_post-users.yaml')
+      expect(entry2?.flowId).toBe('tt_post-users.yaml')
+      // First occurrence should not have error
+      expect(entry1?.error).toBeUndefined()
+      // Second occurrence should have duplicate error
+      expect(entry2?.error).toContain('Duplicate flowId')
+      expect(entry2?.error).toContain('tt_post-users.yaml')
+      expect(entry2?.error).toContain('original: tt_post-users.yaml')
+    }
+    finally {
+      unlinkSync(path.join(dir, 'flow1.yaml'))
+      unlinkSync(path.join(dir, 'flow2.yaml'))
+    }
+  })
+
+  it('error message includes normalized ID, original ID, and source', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'buildDiscoverCatalog-error-msg-'))
+    writeFileSync(path.join(dir, 'first.yaml'), 'id: test-flow\nname: First\nsteps: []')
+    writeFileSync(path.join(dir, 'second.yaml'), 'id: test-flow\nname: Second\nsteps: []')
+    try {
+      const catalog = await buildDiscoverCatalog(null, dir, dir)
+      const duplicate = catalog.find(e => e.path === 'second.yaml')
+      expect(duplicate?.error).toContain('Duplicate flowId: test-flow')
+      expect(duplicate?.error).toContain('original: test-flow')
+      expect(duplicate?.error).toContain('already defined in')
+    }
+    finally {
+      unlinkSync(path.join(dir, 'first.yaml'))
+      unlinkSync(path.join(dir, 'second.yaml'))
+    }
+  })
+
+  it('preserves existing Flow IDs that are already normalized', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'buildDiscoverCatalog-preserve-'))
+    writeFileSync(path.join(dir, 'normal-flow.yaml'), 'id: normal-flow\nname: Normal\nsteps: []')
+    try {
+      const catalog = await buildDiscoverCatalog(null, dir, dir)
+      const entry = catalog.find(e => e.path === 'normal-flow.yaml')
+      expect(entry).toBeDefined()
+      expect(entry?.flowId).toBe('normal-flow')
+      expect(entry?.error).toBeUndefined()
+    }
+    finally {
+      unlinkSync(path.join(dir, 'normal-flow.yaml'))
     }
   })
 })

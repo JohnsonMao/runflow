@@ -3,6 +3,7 @@ import type { RunflowConfig } from './config'
 import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { openApiToFlows } from '@runflow/convention-openapi'
+import { normalizeFlowId } from '@runflow/core'
 import { isOpenApiHandlerEntry, mergeOpenApiSpecs, mergeParamDeclarations } from './config'
 import { loadFromFile } from './loadFlow'
 
@@ -21,6 +22,8 @@ export interface DiscoverStepSummary {
 
 export interface DiscoverEntry {
   flowId: string
+  /** Original flowId before normalization (for reverse lookup). Only set when different from flowId. */
+  originalFlowId?: string
   /** Flow display name (from flow.name); used by UI as label. */
   name: string
   description?: string
@@ -30,6 +33,8 @@ export interface DiscoverEntry {
   path?: string
   /** Absolute file path (for internal usage like dev watch). */
   absPath?: string
+  /** Handler key for OpenAPI handlers (e.g., 'scm', 'payments'). */
+  handlerKey?: string
   params?: ParamDeclaration[]
   /** Step summaries for detail view; when present, may include name/description. */
   steps?: DiscoverStepSummary[]
@@ -113,7 +118,7 @@ export async function buildDiscoverCatalog(
 ): Promise<DiscoverEntry[]> {
   const baseDir = config?.flowsDir ? path.resolve(configDir, config.flowsDir) : cwd
   const entries: DiscoverEntry[] = []
-  const idMap = new Map<string, string>() // flowId -> source
+  const idMap = new Map<string, { originalId: string, source: string }>() // normalizedFlowId -> { originalId, source }
 
   const flowFiles = findFlowFiles(baseDir, ['.yaml'], {
     allowedRoot: baseDir,
@@ -125,17 +130,20 @@ export async function buildDiscoverCatalog(
     if (!flow)
       continue
     const rel = path.relative(baseDir, filePath)
-    const flowId = flow.id || rel || filePath
+    const originalFlowId = flow.id || rel || filePath
+    const normalizedFlowId = normalizeFlowId(originalFlowId)
     let error: string | undefined
-    if (idMap.has(flowId)) {
-      error = `Duplicate flowId: ${flowId} (already defined in ${idMap.get(flowId)})`
+    if (idMap.has(normalizedFlowId)) {
+      const existing = idMap.get(normalizedFlowId)!
+      error = `Duplicate flowId: ${normalizedFlowId} (original: ${originalFlowId}, already defined in ${existing.source})`
     }
     else {
-      idMap.set(flowId, filePath)
+      idMap.set(normalizedFlowId, { originalId: originalFlowId, source: filePath })
     }
     entries.push({
-      flowId,
-      name: flow.name ?? (flowId || filePath),
+      flowId: normalizedFlowId,
+      ...(originalFlowId !== normalizedFlowId ? { originalFlowId } : {}),
+      name: flow.name ?? (normalizedFlowId || filePath),
       description: flow.description,
       tags: flow.tags,
       error,
@@ -164,26 +172,31 @@ export async function buildDiscoverCatalog(
         const opts: Parameters<typeof openApiToFlows>[1] = {
           output: 'memory',
           stepType: key,
+          handlerKey: key,
           baseUrl: entry.baseUrl,
           operationFilter: entry.operationFilter,
           paramExpose: entry.paramExpose,
         }
         const flows = await openApiToFlows(merged, opts)
         for (const [operationKey, flow] of flows) {
-          const flowId = `${key}:${operationKey}`
+          const originalFlowId = `${key}:${operationKey}`
+          const normalizedFlowId = normalizeFlowId(originalFlowId)
           let error: string | undefined
-          if (idMap.has(flowId)) {
-            error = `Duplicate flowId: ${flowId} (already defined in ${idMap.get(flowId)})`
+          if (idMap.has(normalizedFlowId)) {
+            const existing = idMap.get(normalizedFlowId)!
+            error = `Duplicate flowId: ${normalizedFlowId} (original: ${originalFlowId}, already defined in ${existing.source})`
           }
           else {
-            idMap.set(flowId, `handler:${key}`)
+            idMap.set(normalizedFlowId, { originalId: originalFlowId, source: `handler:${key}` })
           }
           entries.push({
-            flowId,
-            name: flow.name ?? flowId,
+            flowId: normalizedFlowId,
+            originalFlowId,
+            name: flow.name ?? normalizedFlowId,
             description: flow.description,
             tags: flow.tags,
             error,
+            handlerKey: key,
             params: mergeParamDeclarations(config?.params, flow.params),
             steps: flow.steps.map((s: FlowStep) => ({
               id: s.id,
@@ -272,18 +285,21 @@ export function buildTreeFromCatalog(catalog: DiscoverEntry[]): TreeNode[] {
   sortNodes(roots)
 
   if (openApiLike.length > 0) {
-    const byPrefix = new Map<string, DiscoverEntry[]>()
+    // Group OpenAPI flows by handlerKey (e.g., 'payments', 'scm')
+    const byHandlerKey = new Map<string, DiscoverEntry[]>()
     for (const e of openApiLike) {
-      const colonIdx = e.flowId.indexOf(':')
-      const prefix = colonIdx > 0 ? e.flowId.slice(0, colonIdx) : null
-      const key = prefix ?? e.flowId
-      const list = byPrefix.get(key) ?? []
+      // Use handlerKey if available, otherwise try to extract from originalFlowId or flowId
+      const handlerKey = e.handlerKey
+        ?? (e.originalFlowId?.includes(':') ? e.originalFlowId.split(':')[0] : null)
+        ?? (e.flowId.includes('_') ? e.flowId.split('_')[0] : null)
+        ?? 'openapi'
+      const list = byHandlerKey.get(handlerKey) ?? []
       list.push(e)
-      byPrefix.set(key, list)
+      byHandlerKey.set(handlerKey, list)
     }
     const openApiChildren: TreeNode[] = []
-    for (const [prefix, entries] of byPrefix.entries()) {
-      if (entries.length === 1 && entries[0].flowId === prefix) {
+    for (const [handlerKey, entries] of byHandlerKey.entries()) {
+      if (entries.length === 1) {
         openApiChildren.push({
           id: `file:${entries[0].flowId}`,
           label: entries[0].name || entries[0].flowId,
@@ -295,8 +311,8 @@ export function buildTreeFromCatalog(catalog: DiscoverEntry[]): TreeNode[] {
       }
       else {
         openApiChildren.push({
-          id: `openapi:${prefix}`,
-          label: prefix,
+          id: `openapi:${handlerKey}`,
+          label: handlerKey,
           type: 'folder',
           children: entries.map(e => ({
             id: `file:${e.flowId}`,

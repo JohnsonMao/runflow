@@ -93,7 +93,12 @@ async function handleGraph(
     return
   }
   try {
+    // resolveAndLoadFlow now handles catalog lookup internally
     const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
+
+    // Get catalog entry for metadata (for API response)
+    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+    const entry = getDiscoverEntry(catalog, flowId)
     const graph = flowDefinitionToGraphForVisualization(loaded.flow)
     const stepById = new Map(loaded.flow.steps.map(s => [s.id, s]))
     const nodes = graph.nodes.map((n) => {
@@ -113,6 +118,14 @@ async function handleGraph(
       flowName: loaded.flow.name,
       flowDescription: loaded.flow.description,
       flowId,
+      ...(entry
+        ? {
+            originalFlowId: entry.originalFlowId,
+            path: entry.path,
+            absPath: entry.absPath,
+            handlerKey: entry.handlerKey,
+          }
+        : {}),
       params: mergeParamDeclarations(ctx.config?.params, loaded.flow.params),
       steps: stepsSummary,
     })
@@ -161,6 +174,7 @@ async function handleRun(
     return
   }
   try {
+    // resolveAndLoadFlow now handles catalog lookup internally
     const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
     const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
     const flowMap = await buildFlowMapForRun(loaded.flow, resolveFlow)

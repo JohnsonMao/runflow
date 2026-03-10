@@ -1,4 +1,4 @@
-import type { FlowDetail, FlowGraph } from '../types'
+import type { FlowDetail, FlowGraph, FlowGraphResponse } from '../types'
 import { useEffect, useRef, useState } from 'react'
 import { initialParamValuesFromDetail } from '../lib/params'
 
@@ -53,28 +53,29 @@ export function useFlowGraph(selectedFlowId: string | null): UseFlowGraphResult 
         const data = await res.json().catch(() => ({}))
         if (!res.ok)
           throw new Error(data?.error ?? `Graph failed: ${res.status}`)
-        return data as FlowGraph
+        return data as FlowGraphResponse
       })
-      .then((raw) => {
+      .then((response) => {
         if (fetchingFlowIdRef.current !== flowIdForThisFetch)
           return
         const graphData: FlowGraph = {
-          nodes: raw.nodes ?? [],
-          edges: raw.edges ?? [],
-          flowName: raw.flowName,
-          flowDescription: raw.flowDescription,
+          nodes: response.nodes ?? [],
+          edges: response.edges ?? [],
+          flowName: response.flowName,
+          flowDescription: response.flowDescription,
         }
         if (graphData.nodes.length > 0)
           setGraph(graphData)
         else
           setGraph(null)
-        const withDetail = raw as FlowGraph & { flowId?: string, params?: FlowDetail['params'], steps?: FlowDetail['steps'] }
         const detail: FlowDetail = {
-          flowId: withDetail.flowId ?? flowIdForThisFetch,
-          name: raw.flowName ?? flowIdForThisFetch,
-          description: raw.flowDescription,
-          params: withDetail.params,
-          steps: withDetail.steps,
+          flowId: response.flowId ?? flowIdForThisFetch,
+          name: response.flowName ?? flowIdForThisFetch,
+          description: response.flowDescription,
+          params: response.params,
+          steps: response.steps,
+          handlerKey: response.handlerKey,
+          path: response.path,
         }
         setFlowDetail(detail)
 
