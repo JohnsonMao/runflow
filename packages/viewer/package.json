@@ -4,8 +4,11 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./dist/server/lib/index.js"
+    ".": "./server/lib/index.ts"
   },
+  "main": "./dist/server/lib/index.js",
+  "module": "./dist/server/lib/index.js",
+  "types": "./server/lib/index.ts",
   "files": [
     "dist"
   ],

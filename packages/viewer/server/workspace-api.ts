@@ -1,15 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
-import { buildRegistry, createFactoryContext, run } from '@runflow/core'
-import { builtinHandlers } from '@runflow/handlers'
 import {
   buildDiscoverCatalog,
-  buildFlowMapForRun,
-  buildRegistryFromConfig,
   buildTagTree,
   buildTreeFromCatalog,
-  createResolveFlow,
   findConfigFile,
   flowDefinitionToGraphForVisualization,
   formatRunResult,
@@ -19,12 +14,14 @@ import {
   resolveAndLoadFlow,
   saveRunResult,
 } from '@runflow/workspace'
+import { reloadAndExecuteFlow } from './execution'
 
 export interface WorkspaceContext {
   cwd: string
   configPath: string | null
   configDir: string
   config: Awaited<ReturnType<typeof loadConfig>>
+  broadcast?: (type: string, payload: any) => void
 }
 
 function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, configDir: string } {
@@ -174,25 +171,11 @@ async function handleRun(
     return
   }
   try {
-    // resolveAndLoadFlow now handles catalog lookup internally
-    const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
-    const resolveFlow = createResolveFlow(ctx.config, ctx.configDir, ctx.cwd)
-    const flowMap = await buildFlowMapForRun(loaded.flow, resolveFlow)
-    const effectiveParamsDeclaration = mergeParamDeclarations(ctx.config?.params, loaded.flow.params)
-    let registry
-    if (ctx.config) {
-      registry = await buildRegistryFromConfig(ctx.config, ctx.configDir)
+    const { loaded, result } = await reloadAndExecuteFlow(ctx, flowId, { params })
+    if (!result) {
+      sendJson(res, 500, { success: false, text: 'Execution failed: No result returned' })
+      return
     }
-    else {
-      const factoryContext = createFactoryContext()
-      registry = buildRegistry(builtinHandlers.map(f => f(factoryContext)))
-    }
-    const result = await run(loaded.flow, {
-      registry,
-      params: params && Object.keys(params).length > 0 ? params : undefined,
-      effectiveParamsDeclaration: effectiveParamsDeclaration.length > 0 ? effectiveParamsDeclaration : undefined,
-      flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
-    })
     saveRunResult(result, ctx.configDir)
     const text = formatRunResult(result, loaded.flow.name)
     sendJson(res, 200, { success: result.success, text })
@@ -214,7 +197,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /** Connect-style middleware for /api/workspace/*. Export for use by custom server (e.g. Express SSR). */
-export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext): (
+export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { broadcast: WorkspaceContext['broadcast'] }): (
   req: import('node:http').IncomingMessage,
   res: ServerResponse,
   next: () => void,
@@ -236,13 +219,13 @@ export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext): (
     }
 
     let ctx: WorkspaceContext
-    if (injectedCtx) {
+    if (injectedCtx && 'cwd' in injectedCtx) {
       ctx = injectedCtx
     }
     else {
       const { cwd, configPath, configDir } = resolveWorkspaceConfig()
       const config = configPath ? await loadConfig(configPath) : null
-      ctx = { cwd, configPath, configDir, config }
+      ctx = { cwd, configPath, configDir, config, broadcast: injectedCtx?.broadcast }
     }
 
     if (pathname === '/api/workspace/status') {

@@ -36,6 +36,30 @@ export function stepResult(
   return out
 }
 
+/**
+ * Safely invoke a hook function or array of hook functions.
+ * Supports both sync and async hooks, with error isolation.
+ * Async hooks are non-blocking (fire-and-forget).
+ */
+function safeInvoke(fn: unknown, ...args: unknown[]): void {
+  if (!fn)
+    return
+  const fns = Array.isArray(fn) ? fn : [fn]
+  for (const f of fns) {
+    if (typeof f !== 'function')
+      continue
+    try {
+      const res = f(...args)
+      if (res instanceof Promise) {
+        res.catch(e => console.error('Error in flow hook (async):', e))
+      }
+    }
+    catch (e) {
+      console.error('Error in flow hook:', e)
+    }
+  }
+}
+
 const DEFAULT_MAX_FLOW_CALL_DEPTH = 8
 const DEFAULT_STEP_TIMEOUT_SEC = 60
 
@@ -247,25 +271,6 @@ export async function executeFlow(
   initialParams: Record<string, unknown>,
   runFn: RunFn,
 ): Promise<RunResult> {
-  const safeInvoke = (fn: unknown, ...args: unknown[]) => {
-    if (!fn)
-      return
-    const fns = Array.isArray(fn) ? fn : [fn]
-    for (const f of fns) {
-      if (typeof f !== 'function')
-        continue
-      try {
-        const res = f(...args)
-        if (res instanceof Promise) {
-          res.catch(e => console.error('Error in flow hook (async):', e))
-        }
-      }
-      catch (e) {
-        console.error('Error in flow hook:', e)
-      }
-    }
-  }
-
   safeInvoke(options.onFlowStart, flow, initialParams)
 
   const steps: StepResult[] = []

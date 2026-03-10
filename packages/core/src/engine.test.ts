@@ -1,6 +1,6 @@
 import type { HandlerConfig } from './handler-factory'
 import type { FlowDefinition, RunResult, StepResult } from './types'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { executeFlow, stepResult } from './engine'
 import { run } from './run'
 
@@ -708,6 +708,195 @@ describe('executeFlow', () => {
       const result = await runEngine(flow, { registry: createRegistry(), continueOnError: true })
       expect(result.success).toBe(false)
       expect(result.steps.map(s => s.stepId)).toEqual(['s1'])
+    })
+  })
+
+  describe('hooks', () => {
+    const hookStubHandler: HandlerConfig = {
+      type: 'step',
+      run: async (ctx) => {
+        ctx.report({ success: true, outputs: { val: 1 } })
+      },
+    }
+
+    const hookRegistry = { step: hookStubHandler }
+
+    it('triggers onFlowStart and onFlowComplete', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const onFlowStart = vi.fn()
+      const onFlowComplete = vi.fn()
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart,
+        onFlowComplete,
+      })
+
+      expect(onFlowStart).toHaveBeenCalledWith(flow, {})
+      expect(onFlowComplete).toHaveBeenCalledWith(result)
+    })
+
+    it('triggers onStepStart and onStepComplete', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const onStepStart = vi.fn()
+      const onStepComplete = vi.fn()
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onStepStart,
+        onStepComplete,
+      })
+
+      expect(onStepStart).toHaveBeenCalledWith('s1', expect.objectContaining({ id: 's1' }))
+      expect(onStepComplete).toHaveBeenCalledWith('s1', result.steps[0])
+    })
+
+    it('does not block flow if a hook throws an error', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const onStepStart = vi.fn().mockImplementation(() => {
+        throw new Error('hook error')
+      })
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onStepStart,
+      })
+
+      expect(result.success).toBe(true)
+      expect(onStepStart).toHaveBeenCalled()
+      expect(consoleSpy).toHaveBeenCalledWith('Error in flow hook:', expect.any(Error))
+
+      consoleSpy.mockRestore()
+    })
+
+    it('triggers onFlowComplete even if flow fails early (e.g. topological sort failure)', async () => {
+      const flow: FlowDefinition = {
+        steps: [
+          { id: 's1', type: 'step', dependsOn: ['s2'] },
+          { id: 's2', type: 'step', dependsOn: ['s1'] }, // circular dependency
+        ],
+      }
+      const onFlowComplete = vi.fn()
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowComplete,
+      })
+
+      expect(result.success).toBe(false)
+      expect(onFlowComplete).toHaveBeenCalledWith(result)
+    })
+
+    it('triggers hooks in dryRun mode', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const onFlowStart = vi.fn()
+      const onFlowComplete = vi.fn()
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart,
+        onFlowComplete,
+        dryRun: true,
+      })
+
+      expect(result.success).toBe(true)
+      expect(onFlowStart).toHaveBeenCalled()
+      expect(onFlowComplete).toHaveBeenCalled()
+    })
+
+    it('supports multiple hooks as an array', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const h1 = vi.fn()
+      const h2 = vi.fn()
+
+      await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart: [h1, h2],
+      })
+
+      expect(h1).toHaveBeenCalled()
+      expect(h2).toHaveBeenCalled()
+    })
+
+    it('handles async hooks without blocking (non-blocking verification)', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+
+      let hookCompleted = false
+      const asyncHook = async () => {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        hookCompleted = true
+      }
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart: asyncHook,
+      })
+
+      expect(result.success).toBe(true)
+      // The hook should still be running or just finished, but executeFlow should not have waited for it
+      expect(hookCompleted).toBe(false)
+
+      // Cleanup/wait for the hook to finish to avoid leaking
+      await new Promise(resolve => setTimeout(resolve, 100))
+      expect(hookCompleted).toBe(true)
+    })
+
+    it('isolates errors from other hooks in an array', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const h1 = vi.fn().mockImplementation(() => {
+        throw new Error('hook 1 error')
+      })
+      const h2 = vi.fn()
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const result = await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart: [h1, h2],
+      })
+
+      expect(result.success).toBe(true)
+      expect(h1).toHaveBeenCalled()
+      expect(h2).toHaveBeenCalled() // Second hook still called
+      expect(consoleSpy).toHaveBeenCalledWith('Error in flow hook:', expect.any(Error))
+
+      consoleSpy.mockRestore()
+    })
+
+    it('handles async hook rejections without crashing', async () => {
+      const flow: FlowDefinition = {
+        steps: [{ id: 's1', type: 'step', dependsOn: [] }],
+      }
+      const asyncHook = async () => {
+        throw new Error('async hook error')
+      }
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await runEngine(flow, {
+        registry: hookRegistry,
+        onFlowStart: asyncHook,
+      })
+
+      // We need to wait a bit for the async rejection to be caught
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error in flow hook (async):', expect.any(Error))
+
+      consoleSpy.mockRestore()
     })
   })
 })

@@ -1,13 +1,8 @@
-import type { FlowStep } from '@runflow/core'
-import type { FlowGraph, LoadedFlow } from '@runflow/workspace'
+import type { LoadedFlow } from '@runflow/workspace'
 import path from 'node:path'
-import { run } from '@runflow/core'
-import { startViewerServer } from '@runflow/viewer'
+import { reloadAndExecuteFlow, startViewerServer } from '@runflow/viewer'
 import {
-  buildFlowMapForRun,
-  buildRegistryFromConfig,
   findConfigFile,
-  flowDefinitionToGraphForVisualization,
   loadConfig,
   resolveAndLoadFlow,
 } from '@runflow/workspace'
@@ -20,11 +15,6 @@ export interface DevOptions {
   config?: string
 }
 
-interface ReloadPayload extends FlowGraph {
-  flowId: string
-  params: any[] // TODO: Replace with proper ParamDeclaration from core if available
-}
-
 export async function runDev(flowPath: string, options: DevOptions): Promise<void> {
   const port = options.port || 8080
   const cwd = process.cwd()
@@ -32,120 +22,69 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   const config = configPath ? await loadConfig(configPath) : null
   const configDir = configPath ? path.dirname(configPath) : cwd
 
-  // resolveAndLoadFlow now handles catalog lookup internally, so we can use it directly
+  const workspaceCtx = { cwd, configPath, configDir, config }
+
+  // resolveAndLoadFlow now handles catalog lookup internally
   const catalogResolver = async (id: string): Promise<LoadedFlow> => {
     return await resolveAndLoadFlow(id, config, configDir, cwd)
   }
 
-  let initialLoaded: LoadedFlow
   let absoluteFlowPath: string
   try {
-    initialLoaded = await catalogResolver(flowPath)
-    absoluteFlowPath = initialLoaded.resolvedPath || path.resolve(cwd, flowPath)
+    const loaded = await catalogResolver(flowPath)
+    absoluteFlowPath = loaded.resolvedPath || path.resolve(cwd, flowPath)
   }
   catch (e) {
     console.error(`[Dev] Failed to resolve flow: ${flowPath}`, e)
     process.exit(1)
   }
 
-  // Cache for replay on connection
-  let currentGraph: FlowGraph | null = null
-  let currentFlowId = ''
-  let currentParams: any[] = []
+  let lastParamsFromUI: Record<string, unknown> | undefined
 
-  // Define broadcast before use
-  let broadcast: (data: { type: string, payload: unknown }) => void = () => {}
+  // Define broadcast proxy to avoid circular dependency / use before define
+  let broadcast: (type: string, payload: any) => void = () => {}
 
-  const reloadAndRunFlow = async (shouldRun = true): Promise<void> => {
+  const reloadAndRunFlow = async (shouldRun = true, params?: Record<string, unknown>): Promise<void> => {
     try {
       console.log(`[Dev] Reloading flow: ${flowPath}`)
-      const loaded = await catalogResolver(absoluteFlowPath || flowPath)
+      const effectiveParams = params || lastParamsFromUI
 
-      if (!loaded) {
-        console.error(`[Dev] Failed to resolve flow: ${flowPath}`)
-        return
-      }
-
-      // Update Cache
-      currentGraph = flowDefinitionToGraphForVisualization(loaded.flow)
-      currentFlowId = loaded.flow.id || flowPath
-      currentParams = loaded.flow.params || []
-
-      // Push DSL Update (Full Context)
-      broadcast({
-        type: 'FLOW_RELOAD',
-        payload: {
-          ...currentGraph,
-          flowId: currentFlowId,
-          params: currentParams,
-        } as ReloadPayload,
-      })
-
-      if (!shouldRun)
-        return
-
-      // Prepare for Run
-      const registry = await buildRegistryFromConfig(config, configDir)
-      const flowMap = await buildFlowMapForRun(loaded.flow, id => catalogResolver(id).then(l => l?.flow ? { flow: l.flow } : null))
-
-      // Run with Hooks
-      broadcast({ type: 'FLOW_START', payload: { flowId: currentFlowId } })
-
-      await run(loaded.flow, {
-        registry,
-        flowMap: Object.keys(flowMap).length > 0 ? flowMap : undefined,
-        onStepStart: (stepId: string, _step: FlowStep) => {
-          broadcast({ type: 'STEP_STATE_CHANGE', payload: { stepId, status: 'running' } })
-        },
-        onStepComplete: (stepId: string, result: any) => { // TODO: Import StepResult from core
-          broadcast({
-            type: 'STEP_STATE_CHANGE',
-            payload: {
-              stepId,
-              status: result.success ? 'success' : 'failure',
-              error: result.error,
-              outputs: result.outputs,
-            },
-          })
-        },
-      })
-
-      broadcast({ type: 'FLOW_COMPLETE', payload: null })
+      await reloadAndExecuteFlow(
+        { ...workspaceCtx, broadcast },
+        flowPath,
+        { params: effectiveParams, shouldBroadcast: true, skipRun: !shouldRun },
+      )
     }
     catch (e) {
       console.error(`[Dev] Error in dev cycle:`, e)
-      broadcast({ type: 'ERROR', payload: e instanceof Error ? e.message : String(e) })
+      broadcast('ERROR', e instanceof Error ? e.message : String(e))
     }
   }
 
   // 1. Start Integrated Viewer Server
   const viewerServer = await startViewerServer({
     port,
-    workspaceCtx: { cwd, configPath, configDir, config },
-    onConnection: (send: (type: string, payload: unknown) => void) => {
+    workspaceCtx,
+    onConnection: () => {
       console.log(`[Dev] Client connected, replaying state`)
-      if (currentGraph) {
-        send('FLOW_RELOAD', {
-          ...currentGraph,
-          flowId: currentFlowId,
-          params: currentParams,
-        } as ReloadPayload)
-      }
     },
-    onMessage: (msg: { type: string }) => {
+    onMessage: (msg: { type: string, payload?: any }) => {
       if (msg.type === 'RUN') {
-        console.log(`[Dev] Run requested from viewer`)
-        reloadAndRunFlow(true).catch(e => console.error('[Dev] Run error:', e))
+        console.log(`[Dev] Run requested from viewer`, msg.payload?.params ? 'with params' : 'without params')
+        if (msg.payload?.params) {
+          lastParamsFromUI = msg.payload.params
+        }
+        reloadAndRunFlow(true, msg.payload?.params).catch(e => console.error('[Dev] Run error:', e))
       }
     },
   })
 
   // Assign the real broadcast function
-  broadcast = (data: { type: string, payload: unknown }) => {
-    viewerServer.broadcast(data.type, data.payload)
+  broadcast = (type, payload) => {
+    viewerServer.broadcast(type, payload)
   }
 
-  // Handle Initial Load (don't run yet, just resolve and cache)
+  // Handle Initial Load (don't run yet, just resolve and cache/broadcast)
   await reloadAndRunFlow(false)
 
   // Watcher

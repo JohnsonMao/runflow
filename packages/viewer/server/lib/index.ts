@@ -9,6 +9,8 @@ import { createServer as createViteServer } from 'vite'
 import { WebSocketServer } from 'ws'
 import { createWorkspaceApiMiddleware } from '../workspace-api'
 
+export * from '../execution'
+
 export interface ViewerServerOptions {
   port: number
   workspaceCtx?: WorkspaceContext
@@ -22,7 +24,7 @@ export interface ViewerServerOptions {
 
 export interface ViewerServer {
   port: number
-  broadcast: (type: string, payload: any) => void
+  broadcast: (type: string, payload: unknown) => void
   close: () => Promise<void>
 }
 
@@ -32,11 +34,22 @@ const appDir = path.resolve(__dirname, '../../') // Points to packages/viewer
 export async function startViewerServer(options: ViewerServerOptions): Promise<ViewerServer> {
   const { port, workspaceCtx, enableViteDev, onConnection, onMessage } = options
 
-  // 1. Setup Polka
+  // 1. Setup Polka & HTTP Server & WebSocket Server
   const app = polka()
+  const server = http.createServer(app.handler as any)
+  const wss = new WebSocketServer({ server })
+
+  const broadcast = (type: string, payload: any) => {
+    const message = JSON.stringify({ type, payload })
+    for (const client of wss.clients) {
+      if (client.readyState === 1) {
+        client.send(message)
+      }
+    }
+  }
 
   // 2. Workspace API Middleware
-  app.use(createWorkspaceApiMiddleware(workspaceCtx))
+  app.use(createWorkspaceApiMiddleware(workspaceCtx ? { ...workspaceCtx, broadcast } : { broadcast }))
 
   // 3. Static Assets / Vite Dev
   if (enableViteDev) {
@@ -78,12 +91,7 @@ export async function startViewerServer(options: ViewerServerOptions): Promise<V
     app.use(serve)
   }
 
-  // 4. Create Node Server
-  const server = http.createServer(app.handler as any)
-
-  // 5. Setup WebSocket Server
-  const wss = new WebSocketServer({ server })
-
+  // 4. Setup WebSocket Handlers
   wss.on('connection', (ws) => {
     if (onConnection) {
       const send = (type: string, payload: any) => {
@@ -107,20 +115,11 @@ export async function startViewerServer(options: ViewerServerOptions): Promise<V
     })
   })
 
-  const broadcast = (type: string, payload: any) => {
-    const message = JSON.stringify({ type, payload })
-    for (const client of wss.clients) {
-      if (client.readyState === 1) {
-        client.send(message)
-      }
-    }
-  }
-
   return new Promise((resolve, reject) => {
     server.listen(port, () => {
-      process.stdout.write(`[Viewer] Server started on http://localhost:${port}`)
+      process.stdout.write(`[Viewer] Server started on http://localhost:${port}\n`)
       if (enableViteDev) {
-        process.stdout.write(`[Viewer] Running in Vite Dev Mode`)
+        process.stdout.write(`[Viewer] Running in Vite Dev Mode\n`)
       }
 
       resolve({

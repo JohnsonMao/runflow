@@ -243,7 +243,7 @@ export function App(): React.ReactElement {
 
     if (isConnected) {
       // In dev mode, we trigger run via WS (it reloads and runs)
-      sendMessage({ type: 'RUN' })
+      sendMessage({ type: 'RUN', payload: { params: paramValues } })
       return
     }
 
