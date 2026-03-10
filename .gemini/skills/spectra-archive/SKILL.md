@@ -9,9 +9,11 @@ metadata:
   generatedBy: "Spectra"
 ---
 
-Archive a completed change in the experimental workflow.
+Archive a completed change.
 
 **Input**: Optionally specify a change name after `/spectra:archive` (e.g., `/spectra:archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+
+**Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
 **Steps**
 

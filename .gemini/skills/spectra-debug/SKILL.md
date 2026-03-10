@@ -23,7 +23,7 @@ Systematically debug a problem using a four-phase workflow.
 
 ## The Three-Attempt Rule
 
-**Maximum 3 fix attempts per hypothesis.** If your third attempt fails:
+**Maximum 3 fix attempts per hypothesis in Phase 4 (Fix).** Phases 1-3 (Reproduce, Isolate, Root Cause) are investigation — they do not count toward this limit. If your third fix attempt fails:
 
 1. **Stop fixing**
 2. Document what you tried and why it failed
@@ -83,7 +83,7 @@ Ask these questions:
 
 Now — and only now — fix the bug.
 
-1. **Write a failing test** that reproduces the bug (use `/spectra:tdd` discipline)
+1. **Write a failing test** that reproduces the bug. If `tdd: true` is set in `openspec/config.yaml`, fetch TDD instructions via `spectra instructions --skill tdd` and follow the Red-Green-Refactor cycle
 2. **Make the minimum change** to fix the root cause — not the symptoms
 3. **Run the test** — confirm it passes
 4. **Run the full test suite** — ensure no regressions
