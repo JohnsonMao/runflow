@@ -200,7 +200,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /** Connect-style middleware for /api/workspace/*. Export for use by custom server (e.g. Express SSR). */
-export function createWorkspaceApiMiddleware(): (
+export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext): (
   req: import('node:http').IncomingMessage,
   res: ServerResponse,
   next: () => void,
@@ -220,9 +220,16 @@ export function createWorkspaceApiMiddleware(): (
       next()
       return
     }
-    const { cwd, configPath, configDir } = resolveWorkspaceConfig()
-    const config = configPath ? await loadConfig(configPath) : null
-    const ctx: WorkspaceContext = { cwd, configPath, configDir, config }
+
+    let ctx: WorkspaceContext
+    if (injectedCtx) {
+      ctx = injectedCtx
+    }
+    else {
+      const { cwd, configPath, configDir } = resolveWorkspaceConfig()
+      const config = configPath ? await loadConfig(configPath) : null
+      ctx = { cwd, configPath, configDir, config }
+    }
 
     if (pathname === '/api/workspace/status') {
       await handleStatus(ctx, res)

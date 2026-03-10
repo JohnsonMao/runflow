@@ -20,13 +20,17 @@
     "@runflow/convention-openapi": "workspace:^",
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
+    "@runflow/viewer": "workspace:*",
     "@runflow/workspace": "workspace:*",
+    "chokidar": "catalog:prod",
     "commander": "catalog:prod",
+    "open": "catalog:prod",
     "yaml": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
     "@types/node": "catalog:dev",
+    "@types/ws": "catalog:dev",
     "@vitest/coverage-v8": "catalog:dev",
     "eslint": "catalog:dev",
     "tsup": "catalog:dev",

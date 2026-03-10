@@ -366,7 +366,7 @@ class ExpressionParser {
             }
             this.consume('rp')
             if (Array.isArray(val) && prop)
-              val = val.map(item => (isPlainObject(item) ? (item as any)[prop!] : undefined))
+              val = val.map(item => (isPlainObject(item) ? item[prop!] : undefined))
             else
               val = []
           }

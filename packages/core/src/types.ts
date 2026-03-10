@@ -143,10 +143,14 @@ export interface RunOptions {
   defaultStepTimeoutSec?: number
   /** When true, engine continues execution even if a step fails (unless that step overrides with continueOnError: false). Default false. */
   continueOnError?: boolean
-  /** Called just before a step runs (after substitute, validate, skip). */
-  onStepStart?: (stepId: string, step: FlowStep) => void
-  /** Called when a step completes (success or failure). */
-  onStepComplete?: (stepId: string, result: StepResult) => void
+  /** Called just before a step runs (after substitute, validate, skip). Hooks are non-blocking and errors are isolated. */
+  onStepStart?: ((stepId: string, step: FlowStep) => void) | ((stepId: string, step: FlowStep) => void)[]
+  /** Called when a step completes (success or failure). Hooks are non-blocking and errors are isolated. */
+  onStepComplete?: ((stepId: string, result: StepResult) => void) | ((stepId: string, result: StepResult) => void)[]
+  /** Called when the flow execution starts. Hooks are non-blocking and errors are isolated. */
+  onFlowStart?: ((flow: FlowDefinition, params: Record<string, unknown>) => void) | ((flow: FlowDefinition, params: Record<string, unknown>) => void)[]
+  /** Called when the flow execution completes. Hooks are non-blocking and errors are isolated. */
+  onFlowComplete?: ((result: RunResult) => void) | ((result: RunResult) => void)[]
 }
 
 export interface RunResult {

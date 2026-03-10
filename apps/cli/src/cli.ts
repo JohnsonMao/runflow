@@ -1,5 +1,5 @@
-import type { StepRegistry } from '@runflow/core'
 // @env node
+import type { StepRegistry } from '@runflow/core'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -27,6 +27,7 @@ import {
   saveRunResult,
 } from '@runflow/workspace'
 import { createCommand } from 'commander'
+import { runDev } from './dev'
 
 export const program = createCommand()
 
@@ -34,6 +35,20 @@ program
   .name('flow')
   .description('Run YAML-defined flows')
   .version('0.0.0')
+
+program
+  .command('dev <flowId>')
+  .description('Develop flow with hot reload and live preview')
+  .option('-p, --port <number>', 'WebSocket port', '8080')
+  .option('--open', 'Open flow-viewer in browser', false)
+  .option('--config <path>', 'Path to runflow.config.mjs', undefined)
+  .action(async (flowId: string, options: { port: string, open: boolean, config?: string }) => {
+    await runDev(flowId, {
+      port: Number.parseInt(options.port, 10),
+      open: options.open,
+      config: options.config,
+    })
+  })
 
 function parseParamPairs(pairs: string[]): Record<string, unknown> {
   const params: Record<string, unknown> = {}

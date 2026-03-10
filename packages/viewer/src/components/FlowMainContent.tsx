@@ -6,9 +6,10 @@ import { FlowCanvas } from './FlowCanvas'
 interface FlowMainContentProps {
   graphLoading: boolean
   graph: FlowGraph | null
+  stepStatuses?: Record<string, string>
 }
 
-export function FlowMainContent({ graphLoading, graph }: FlowMainContentProps): React.ReactElement {
+export function FlowMainContent({ graphLoading, graph, stepStatuses }: FlowMainContentProps): React.ReactElement {
   if (graphLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -20,7 +21,7 @@ export function FlowMainContent({ graphLoading, graph }: FlowMainContentProps): 
     return (
       <ReactFlowProvider>
         <div className="h-full w-full">
-          <FlowCanvas graph={graph} />
+          <FlowCanvas graph={graph} stepStatuses={stepStatuses} />
         </div>
       </ReactFlowProvider>
     )

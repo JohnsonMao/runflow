@@ -10,5 +10,5 @@
     "paths": { "@/*": ["./src/*"] },
     "noEmit": true
   },
-  "include": ["src", "server", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "server", "tsup.config.ts", "vite.config.ts", "vitest.config.ts"]
 }

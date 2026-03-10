@@ -253,7 +253,16 @@ export function resolveFlowId(
   const baseDir = config?.flowsDir
     ? path.resolve(configDir, config.flowsDir)
     : cwd
-  const filePath = path.isAbsolute(flowId) ? flowId : path.resolve(baseDir, flowId)
+  let filePath = path.isAbsolute(flowId) ? flowId : path.resolve(baseDir, flowId)
+
+  // If file doesn't exist and has no extension, try adding .yaml
+  if (!existsSync(filePath) && !path.extname(filePath)) {
+    const withYaml = `${filePath}.yaml`
+    if (existsSync(withYaml)) {
+      filePath = withYaml
+    }
+  }
+
   return { type: 'file', path: filePath }
 }
 
@@ -261,6 +270,7 @@ export function resolveFlowId(
 
 export interface LoadedFlow {
   flow: FlowDefinition
+  resolvedPath?: string
 }
 
 async function loadFlowFromResolved(resolved: ResolvedFlow, configDir: string): Promise<LoadedFlow> {
@@ -279,7 +289,7 @@ async function loadFlowFromResolved(resolved: ResolvedFlow, configDir: string): 
   const flow = loadFromFile(resolved.path)
   if (!flow)
     throw new Error('Invalid or unreadable flow file.')
-  return { flow }
+  return { flow, resolvedPath: resolved.path }
 }
 
 /**

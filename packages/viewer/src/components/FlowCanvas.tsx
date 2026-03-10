@@ -1,5 +1,6 @@
 import type { NodeProps } from 'reactflow'
 import type { FlowGraph, FlowGraphNode } from '../types'
+import { useEffect } from 'react'
 import {
   Background,
   Controls,
@@ -15,14 +16,39 @@ import { cn } from '../lib/utils'
 
 interface FlowCanvasProps {
   graph: FlowGraph
+  stepStatuses?: Record<string, string>
 }
 
-function ProcessNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
+function StatusIndicator({ status }: { status?: string }) {
+  if (!status)
+    return null
+  const colors: Record<string, string> = {
+    running: 'bg-blue-500 animate-pulse',
+    success: 'bg-green-500',
+    failure: 'bg-red-500',
+  }
+  return (
+    <div className={cn('absolute -top-1 -right-1 h-3 w-3 rounded-full border border-white shadow-sm z-10', colors[status] || 'bg-slate-300')} />
+  )
+}
+
+function ProcessNode({ data }: NodeProps<FlowGraphNode & { status?: string }>): React.ReactElement {
+  const status = data.status
+  const statusStyles: Record<string, string> = {
+    running: 'border-blue-500 ring-2 ring-blue-200 bg-blue-50',
+    success: 'border-green-500 bg-green-50',
+    failure: 'border-red-500 bg-red-50',
+  }
+
   return (
     <div
-      className="flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm"
+      className={cn(
+        'flex min-w-20 items-center justify-center rounded border border-slate-500 bg-white px-3.5 py-2 shadow-sm transition-colors',
+        status && statusStyles[status],
+      )}
       title={data.description}
     >
+      <StatusIndicator status={status} />
       <Handle type="target" position={Position.Top} />
       <div className="max-w-[140px] wrap-break-words text-center text-xs font-normal text-slate-800">
         {data.label}
@@ -32,12 +58,19 @@ function ProcessNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   )
 }
 
-function DecisionNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
+function DecisionNode({ data }: NodeProps<FlowGraphNode & { status?: string }>): React.ReactElement {
+  const status = data.status
   return (
     <div
-      className="relative flex min-w-20 items-center justify-center rounded border-2 border-violet-600 bg-violet-100 px-3.5 py-2"
+      className={cn(
+        'relative flex min-w-20 items-center justify-center rounded border-2 border-violet-600 bg-violet-100 px-3.5 py-2 transition-colors',
+        status === 'running' && 'ring-2 ring-blue-200',
+        status === 'success' && 'bg-green-100 border-green-600',
+        status === 'failure' && 'bg-red-100 border-red-600',
+      )}
       title={data.description}
     >
+      <StatusIndicator status={status} />
       <div className="max-w-[200px] wrap-break-words text-center text-xs font-semibold text-slate-800">
         {data.label}
       </div>
@@ -51,12 +84,19 @@ function DecisionNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
 }
 
 /** Loop：上進入（含 loopBack）、下 loop 出去、右 done；版型與 process 一致 */
-function LoopNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
+function LoopNode({ data }: NodeProps<FlowGraphNode & { status?: string }>): React.ReactElement {
+  const status = data.status
   return (
     <div
-      className="relative flex min-w-20 items-center justify-center rounded border-2 border-amber-600 bg-amber-50 px-3.5 py-2 shadow-sm"
+      className={cn(
+        'relative flex min-w-20 items-center justify-center rounded border-2 border-amber-600 bg-amber-50 px-3.5 py-2 shadow-sm transition-colors',
+        status === 'running' && 'ring-2 ring-blue-200',
+        status === 'success' && 'bg-green-100 border-green-600',
+        status === 'failure' && 'bg-red-100 border-red-600',
+      )}
       title={data.description}
     >
+      <StatusIndicator status={status} />
       <Handle type="target" position={Position.Top} id="in" />
       <div className="max-w-[140px] wrap-break-words text-center text-xs font-semibold text-amber-900">
         {data.label}
@@ -69,20 +109,25 @@ function LoopNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
   )
 }
 
-function StartEndNode({ data }: NodeProps<FlowGraphNode>): React.ReactElement {
+function StartEndNode({ data }: NodeProps<FlowGraphNode & { status?: string }>): React.ReactElement {
   const { shape, description, label } = data
+  const status = data.status
   const isStart = shape === 'start'
   const isEnd = shape === 'end'
   return (
     <div
       className={cn(
-        'flex min-w-[72px] items-center justify-center rounded border-2 px-4 py-2 shadow-sm',
+        'flex min-w-[72px] items-center justify-center rounded border-2 px-4 py-2 shadow-sm transition-colors',
         isStart && 'border-green-600 bg-green-100 font-semibold',
         isEnd && 'border-blue-600 bg-blue-100 font-semibold',
         !isStart && !isEnd && 'border-slate-400 bg-white',
+        status === 'running' && 'ring-2 ring-blue-200',
+        status === 'success' && 'bg-green-100 border-green-600',
+        status === 'failure' && 'bg-red-100 border-red-600',
       )}
       title={description}
     >
+      <StatusIndicator status={status} />
       <Handle type="target" position={Position.Top} />
       <div className="text-center text-[13px] text-slate-800">
         {label}
@@ -99,10 +144,35 @@ const NODE_TYPES = {
   startEnd: StartEndNode,
 }
 
-export function FlowCanvas({ graph }: FlowCanvasProps): React.ReactElement {
+export function FlowCanvas({ graph, stepStatuses }: FlowCanvasProps): React.ReactElement {
   const { nodes: initialNodes, edges: initialEdges } = graphToReactFlow(graph)
-  const [nodes, , onNodesChange] = useNodesState(initialNodes)
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+
+  // Sync graph changes
+  useEffect(() => {
+    const { nodes: newNodes, edges: newEdges } = graphToReactFlow(graph)
+    setNodes(newNodes)
+    setEdges(newEdges)
+  }, [graph, setNodes, setEdges])
+
+  // Sync stepStatuses into node data
+  useEffect(() => {
+    if (!stepStatuses)
+      return
+    setNodes(nds =>
+      nds.map((node) => {
+        const status = stepStatuses[node.id]
+        if (status && node.data.status !== status) {
+          return {
+            ...node,
+            data: { ...node.data, status },
+          }
+        }
+        return node
+      }),
+    )
+  }, [stepStatuses, setNodes])
 
   return (
     <ReactFlow

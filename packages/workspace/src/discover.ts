@@ -28,6 +28,8 @@ export interface DiscoverEntry {
   error?: string
   /** Original relative file path (for Folder View navigation). */
   path?: string
+  /** Absolute file path (for internal usage like dev watch). */
+  absPath?: string
   params?: ParamDeclaration[]
   /** Step summaries for detail view; when present, may include name/description. */
   steps?: DiscoverStepSummary[]
@@ -138,6 +140,7 @@ export async function buildDiscoverCatalog(
       tags: flow.tags,
       error,
       path: rel,
+      absPath: filePath,
       params: mergeParamDeclarations(config?.params, flow.params),
       steps: flow.steps.map((s: FlowStep) => ({
         id: s.id,

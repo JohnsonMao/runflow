@@ -2,15 +2,19 @@ import type { FlowDetail, FlowGraph } from '../types'
 import { useEffect, useRef, useState } from 'react'
 import { initialParamValuesFromDetail } from '../lib/params'
 
-export function useFlowGraph(selectedFlowId: string | null): {
+interface UseFlowGraphResult {
   graph: FlowGraph | null
+  setGraph: React.Dispatch<React.SetStateAction<FlowGraph | null>>
   graphLoading: boolean
   graphError: string | null
   flowDetail: FlowDetail | null
+  setFlowDetail: React.Dispatch<React.SetStateAction<FlowDetail | null>>
   paramValues: Record<string, unknown>
   setParamValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>
   isInitialized: boolean
-} {
+}
+
+export function useFlowGraph(selectedFlowId: string | null): UseFlowGraphResult {
   const [graph, setGraph] = useState<FlowGraph | null>(null)
   const [graphLoading, setGraphLoading] = useState(false)
   const [graphError, setGraphError] = useState<string | null>(null)
@@ -31,6 +35,15 @@ export function useFlowGraph(selectedFlowId: string | null): {
     setGraphError(null)
     setGraph(null)
     setFlowDetail(null)
+
+    const wsUrl = new URLSearchParams(window.location.search).get('ws')
+    if (wsUrl) {
+      // In dev mode with WS, skip API fetch and wait for FLOW_RELOAD via WS
+      setGraphLoading(false)
+      setIsInitialized(true)
+      return
+    }
+
     // Do NOT reset paramValues to {} here to avoid clearing URL params in App.tsx sync effect
     // Instead, we mark as not initialized
     setIsInitialized(false)
@@ -132,9 +145,11 @@ export function useFlowGraph(selectedFlowId: string | null): {
 
   return {
     graph,
+    setGraph,
     graphLoading,
     graphError,
     flowDetail,
+    setFlowDetail,
     paramValues,
     setParamValues,
     isInitialized,

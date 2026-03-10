@@ -247,10 +247,33 @@ export async function executeFlow(
   initialParams: Record<string, unknown>,
   runFn: RunFn,
 ): Promise<RunResult> {
+  const safeInvoke = (fn: unknown, ...args: unknown[]) => {
+    if (!fn)
+      return
+    const fns = Array.isArray(fn) ? fn : [fn]
+    for (const f of fns) {
+      if (typeof f !== 'function')
+        continue
+      try {
+        const res = f(...args)
+        if (res instanceof Promise) {
+          res.catch(e => console.error('Error in flow hook (async):', e))
+        }
+      }
+      catch (e) {
+        console.error('Error in flow hook:', e)
+      }
+    }
+  }
+
+  safeInvoke(options.onFlowStart, flow, initialParams)
+
   const steps: StepResult[] = []
   const sortResult = topologicalSort(flow.steps)
   if (!sortResult.ok) {
-    return { success: false, steps: [], error: sortResult.error }
+    const res = { success: false, steps: [], error: sortResult.error }
+    safeInvoke(options.onFlowComplete, res)
+    return res
   }
   const dagOrder = sortResult.order
   const registry = options.registry ?? ({} as StepRegistry)
@@ -311,7 +334,9 @@ export async function executeFlow(
       if (!result.success)
         drySuccess = false
     }
-    return { success: drySuccess, steps }
+    const res = { success: drySuccess, steps }
+    safeInvoke(options.onFlowComplete, res)
+    return res
   }
 
   let success = true
@@ -331,9 +356,9 @@ export async function executeFlow(
     }
     const step = stepByIdMap.get(stepId)
     if (step)
-      options.onStepStart?.(stepId, step)
+      safeInvoke(options.onStepStart, stepId, step)
     const { result } = await runStep(stepId, ctx, runStepDeps, flowAbortController.signal)
-    options.onStepComplete?.(stepId, result)
+    safeInvoke(options.onStepComplete, stepId, result)
 
     if (result.nextSteps === null) {
       return {
@@ -365,12 +390,14 @@ export async function executeFlow(
       if (flowTerminated) {
         // A step returned nextSteps: null, so terminate the entire flow.
         flowAbortController.abort()
-        return {
+        const res = {
           success: result.success, // Use the last step's success for the flow result
           steps,
           finalParams: context,
           error: result.error, // Propagate error if the terminating step had one
         }
+        safeInvoke(options.onFlowComplete, res)
+        return res
       }
       completed.add(result.stepId)
       if (result.completedStepIds && Array.isArray(result.completedStepIds)) {
@@ -409,5 +436,6 @@ export async function executeFlow(
     runResult.error = steps.find(s => !s.success)?.error
   }
 
+  safeInvoke(options.onFlowComplete, runResult)
   return runResult
 }

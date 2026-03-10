@@ -15,8 +15,10 @@ import { FlowSidebar } from './components/FlowSidebar'
 import { ResultDialog } from './components/ResultDialog'
 import { useFlowGraph } from './hooks/use-flow-graph'
 import { useTheme } from './hooks/use-theme'
+import { useWebSocket } from './hooks/use-websocket'
 import { useWorkspace } from './hooks/use-workspace'
 import { setNested } from './lib/nested'
+import { initialParamValuesFromDetail } from './lib/params'
 
 function workspaceHint(workspaceStatus: WorkspaceStatus | null): string {
   if (!workspaceStatus?.configured)
@@ -33,6 +35,15 @@ export function App(): React.ReactElement {
     const params = new URLSearchParams(window.location.search)
     return params.get('flowId')
   })
+
+  // WebSocket URL from URL params
+  const [wsUrl] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('ws')
+  })
+
+  const { isConnected, lastMessage, sendMessage } = useWebSocket(wsUrl)
+  const [stepStatuses, setStepStatuses] = useState<Record<string, string>>({})
 
   // Initialize openFolderIds from URL (auto-expand to show selected flow)
   const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(() => {
@@ -89,7 +100,47 @@ export function App(): React.ReactElement {
     paramValues,
     setParamValues,
     isInitialized,
+    setGraph,
+    setFlowDetail,
   } = useFlowGraph(selectedFlowId)
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (!lastMessage)
+      return
+
+    switch (lastMessage.type) {
+      case 'FLOW_RELOAD':
+        if (lastMessage.payload) {
+          const payload = lastMessage.payload
+          setGraph(payload)
+          // Also update flow detail for params
+          setFlowDetail({
+            flowId: payload.flowId || selectedFlowId || '',
+            name: payload.flowName || selectedFlowId || '',
+            description: payload.flowDescription,
+            params: payload.params || [],
+          })
+          setStepStatuses({}) // Clear statuses on reload
+        }
+        break
+      case 'FLOW_START':
+        setStepStatuses({})
+        break
+      case 'STEP_STATE_CHANGE':
+        if (lastMessage.payload) {
+          const { stepId, status } = lastMessage.payload
+          setStepStatuses(prev => ({ ...prev, [stepId]: status }))
+        }
+        break
+      case 'FLOW_COMPLETE':
+        // Optional: show some completion toast
+        break
+      case 'ERROR':
+        console.error('[Dev Error]', lastMessage.payload)
+        break
+    }
+  }, [lastMessage, setGraph])
 
   // Clear run result when flow changes
   useEffect(() => {
@@ -131,6 +182,14 @@ export function App(): React.ReactElement {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [selectedFlowId])
 
+  // Initialize defaults when flowDetail is received via WebSocket
+  useEffect(() => {
+    if (isConnected && flowDetail && Object.keys(paramValues).length === 0) {
+      const defaults = initialParamValuesFromDetail(flowDetail)
+      setParamValues(defaults)
+    }
+  }, [flowDetail, isConnected, setParamValues])
+
   const handleParamChange = (path: string, value: unknown): void => {
     setParamValues(prev => setNested(prev, path, value))
   }
@@ -138,6 +197,13 @@ export function App(): React.ReactElement {
   const handleRun = (): void => {
     if (!selectedFlowId || runLoading)
       return
+
+    if (isConnected) {
+      // In dev mode, we trigger run via WS (it reloads and runs)
+      sendMessage({ type: 'RUN' })
+      return
+    }
+
     setRunLoading(true)
     setRunResult(null)
     fetch('/api/workspace/run', {
@@ -242,7 +308,7 @@ export function App(): React.ReactElement {
 
           <SidebarInset className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <main className="h-full w-full overflow-auto">
-              <FlowMainContent graphLoading={graphLoading} graph={graph} />
+              <FlowMainContent graphLoading={graphLoading} graph={graph} stepStatuses={stepStatuses} />
             </main>
           </SidebarInset>
         </div>
