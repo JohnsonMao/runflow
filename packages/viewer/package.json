@@ -4,7 +4,14 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./server/lib/index.ts"
+    ".": {
+      "types": "./server/lib/index.ts",
+      "import": {
+        "development": "./server/lib/index.ts",
+        "default": "./dist/server/lib/index.js"
+      },
+      "default": "./dist/server/lib/index.js"
+    }
   },
   "main": "./dist/server/lib/index.js",
   "module": "./dist/server/lib/index.js",
@@ -13,7 +20,7 @@
     "dist"
   ],
   "scripts": {
-    "dev": "tsx watch server/index.ts",
+    "dev": "tsx watch --conditions=development server/index.ts",
     "build": "vite build && tsup",
     "lint": "eslint .",
     "preview": "vite preview",
