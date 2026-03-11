@@ -40,165 +40,19 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown): void 
   res.end(JSON.stringify(body))
 }
 
-async function handleStatus(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
-  sendJson(res, 200, {
-    workspaceRoot: ctx.cwd,
-    configPath: ctx.configPath ?? null,
-    configured: Boolean(ctx.configPath && ctx.config),
-  })
-}
-
-async function handleList(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
-  try {
-    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
-    sendJson(res, 200, { workspaceRoot: ctx.cwd, entries: catalog })
-  }
-  catch (err) {
-    sendJson(res, 500, {
-      error: err instanceof Error ? err.message : 'Failed to build catalog',
-    })
-  }
-}
-
-async function handleTree(ctx: WorkspaceContext, res: ServerResponse): Promise<void> {
-  try {
-    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
-    const tree = buildTreeFromCatalog(catalog)
-    const tagTree = buildTagTree(catalog)
-    sendJson(res, 200, {
-      workspaceRoot: ctx.cwd,
-      configPath: ctx.configPath ?? null,
-      tree,
-      tagTree,
-    })
-  }
-  catch (err) {
-    sendJson(res, 500, {
-      error: err instanceof Error ? err.message : 'Failed to build tree',
-    })
-  }
-}
-
-async function handleGraph(
-  ctx: WorkspaceContext,
-  requestUrl: URL,
-  res: ServerResponse,
-): Promise<void> {
-  const flowId = requestUrl.searchParams.get('flowId')
-  if (!flowId?.trim()) {
-    sendJson(res, 400, { error: 'Missing flowId' })
-    return
-  }
-  try {
-    // resolveAndLoadFlow now handles catalog lookup internally
-    const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
-
-    // Get catalog entry for metadata (for API response)
-    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
-    const entry = getDiscoverEntry(catalog, flowId)
-    const graph = flowDefinitionToGraphForVisualization(loaded.flow)
-    const stepById = new Map(loaded.flow.steps.map(s => [s.id, s]))
-    const nodes = graph.nodes.map((n) => {
-      const step = stepById.get(n.id)
-      const name = step && typeof step.name === 'string' && step.name !== '' ? step.name : null
-      return name ? { ...n, label: name } : n
-    })
-    const stepsSummary = loaded.flow.steps.map(s => ({
-      id: s.id,
-      type: s.type,
-      ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
-      ...(s.description != null ? { description: s.description } : {}),
-    }))
-    sendJson(res, 200, {
-      ...graph,
-      nodes,
-      flowName: loaded.flow.name,
-      flowDescription: loaded.flow.description,
-      flowId,
-      ...(entry
-        ? {
-            originalFlowId: entry.originalFlowId,
-            path: entry.path,
-            absPath: entry.absPath,
-            handlerKey: entry.handlerKey,
-          }
-        : {}),
-      params: mergeParamDeclarations(ctx.config?.params, loaded.flow.params),
-      steps: stepsSummary,
-    })
-  }
-  catch (err) {
-    sendJson(res, 404, {
-      error: err instanceof Error ? err.message : 'Flow not found or invalid',
-    })
-  }
-}
-
-async function handleDetail(
-  ctx: WorkspaceContext,
-  requestUrl: URL,
-  res: ServerResponse,
-): Promise<void> {
-  const flowId = requestUrl.searchParams.get('flowId')
-  if (!flowId?.trim()) {
-    sendJson(res, 400, { error: 'Missing flowId' })
-    return
-  }
-  try {
-    const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
-    const entry = getDiscoverEntry(catalog, flowId)
-    if (!entry) {
-      sendJson(res, 404, { error: `Flow not found: ${flowId}` })
-      return
-    }
-    sendJson(res, 200, entry)
-  }
-  catch (err) {
-    sendJson(res, 500, {
-      error: err instanceof Error ? err.message : 'Failed to get flow detail',
-    })
-  }
-}
-
-async function handleRun(
-  ctx: WorkspaceContext,
-  body: { flowId: string, params?: Record<string, unknown> },
-  res: ServerResponse,
-): Promise<void> {
-  const { flowId, params } = body
-  if (!flowId?.trim()) {
-    sendJson(res, 400, { error: 'Missing flowId' })
-    return
-  }
-  try {
-    const { loaded, result } = await reloadAndExecuteFlow(ctx, flowId, { params })
-    if (!result) {
-      sendJson(res, 500, { success: false, text: 'Execution failed: No result returned' })
-      return
-    }
-    saveRunResult(result, ctx.configDir)
-    const text = formatRunResult(result, loaded.flow.name)
-    sendJson(res, 200, { success: result.success, text })
-  }
-  catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    sendJson(res, 500, { success: false, text: `Run error: ${message}` })
-  }
-}
-
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+async function readJsonBody(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = []
   for await (const chunk of req)
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   const raw = Buffer.concat(chunks).toString('utf8')
   if (!raw.trim())
     return {}
-  return JSON.parse(raw) as unknown
+  return JSON.parse(raw)
 }
 
 /** Connect-style middleware for /api/workspace/*. Export for use by custom server (e.g. Express SSR). */
 export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { broadcast: WorkspaceContext['broadcast'] }): (
-  req: import('node:http').IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   next: () => void,
 ) => void {
@@ -212,6 +66,7 @@ export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { 
       next()
       return
     }
+
     const pathname = requestUrl.pathname
     if (!pathname.startsWith('/api/workspace/')) {
       next()
@@ -220,7 +75,7 @@ export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { 
 
     let ctx: WorkspaceContext
     if (injectedCtx && 'cwd' in injectedCtx) {
-      ctx = injectedCtx
+      ctx = injectedCtx as WorkspaceContext
     }
     else {
       const { cwd, configPath, configDir } = resolveWorkspaceConfig()
@@ -228,36 +83,117 @@ export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { 
       ctx = { cwd, configPath, configDir, config, broadcast: injectedCtx?.broadcast }
     }
 
-    if (pathname === '/api/workspace/status') {
-      await handleStatus(ctx, res)
-      return
-    }
-    if (pathname === '/api/workspace/list') {
-      await handleList(ctx, res)
-      return
-    }
-    if (pathname === '/api/workspace/tree') {
-      await handleTree(ctx, res)
-      return
-    }
-    if (pathname === '/api/workspace/graph') {
-      await handleGraph(ctx, requestUrl, res)
-      return
-    }
-    if (pathname === '/api/workspace/detail') {
-      await handleDetail(ctx, requestUrl, res)
-      return
-    }
-    if (pathname === '/api/workspace/run' && req.method === 'POST') {
-      try {
-        const body = await readJsonBody(req) as { flowId?: string, params?: Record<string, unknown> }
-        await handleRun(ctx, { flowId: body?.flowId ?? '', params: body?.params }, res)
+    try {
+      if (pathname === '/api/workspace/status') {
+        sendJson(res, 200, {
+          workspaceRoot: ctx.cwd,
+          configPath: ctx.configPath ?? null,
+          configured: Boolean(ctx.configPath && ctx.config),
+        })
+        return
       }
-      catch {
-        sendJson(res, 400, { success: false, text: 'Invalid JSON body' })
+
+      if (pathname === '/api/workspace/list') {
+        const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+        sendJson(res, 200, { workspaceRoot: ctx.cwd, entries: catalog })
+        return
       }
-      return
+
+      if (pathname === '/api/workspace/tree') {
+        const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+        const tree = buildTreeFromCatalog(catalog)
+        const tagTree = buildTagTree(catalog)
+        sendJson(res, 200, {
+          workspaceRoot: ctx.cwd,
+          configPath: ctx.configPath ?? null,
+          tree,
+          tagTree,
+        })
+        return
+      }
+
+      if (pathname === '/api/workspace/graph') {
+        const flowId = requestUrl.searchParams.get('flowId')
+        if (!flowId?.trim()) {
+          sendJson(res, 400, { error: 'Missing flowId' })
+          return
+        }
+        const loaded = await resolveAndLoadFlow(flowId, ctx.config, ctx.configDir, ctx.cwd)
+        const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+        const entry = getDiscoverEntry(catalog, flowId)
+        const graph = flowDefinitionToGraphForVisualization(loaded.flow)
+        const stepById = new Map(loaded.flow.steps.map(s => [s.id, s]))
+        const nodes = graph.nodes.map((n) => {
+          const step = stepById.get(n.id)
+          const name = step && typeof step.name === 'string' && step.name !== '' ? step.name : null
+          return name ? { ...n, label: name } : n
+        })
+        const stepsSummary = loaded.flow.steps.map(s => ({
+          id: s.id,
+          type: s.type,
+          ...(s.name != null && s.name !== '' ? { name: s.name } : {}),
+          ...(s.description != null ? { description: s.description } : {}),
+        }))
+        sendJson(res, 200, {
+          ...graph,
+          nodes,
+          flowName: loaded.flow.name,
+          flowDescription: loaded.flow.description,
+          flowId,
+          ...(entry
+            ? {
+                originalFlowId: entry.originalFlowId,
+                path: entry.path,
+                absPath: entry.absPath,
+                handlerKey: entry.handlerKey,
+              }
+            : {}),
+          params: mergeParamDeclarations(ctx.config?.params, loaded.flow.params),
+          steps: stepsSummary,
+        })
+        return
+      }
+
+      if (pathname === '/api/workspace/detail') {
+        const flowId = requestUrl.searchParams.get('flowId')
+        if (!flowId?.trim()) {
+          sendJson(res, 400, { error: 'Missing flowId' })
+          return
+        }
+        const catalog = await buildDiscoverCatalog(ctx.config, ctx.configDir, ctx.cwd)
+        const entry = getDiscoverEntry(catalog, flowId)
+        if (!entry) {
+          sendJson(res, 404, { error: `Flow not found: ${flowId}` })
+          return
+        }
+        sendJson(res, 200, entry)
+        return
+      }
+
+      if (pathname === '/api/workspace/run' && req.method === 'POST') {
+        const body = await readJsonBody(req)
+        const { flowId, params } = body
+        if (!flowId?.trim()) {
+          sendJson(res, 400, { error: 'Missing flowId' })
+          return
+        }
+        const { loaded, result } = await reloadAndExecuteFlow(ctx, flowId, { params })
+        if (!result) {
+          sendJson(res, 500, { success: false, text: 'Execution failed: No result returned' })
+          return
+        }
+        saveRunResult(result, ctx.configDir)
+        const text = formatRunResult(result, loaded.flow.name)
+        sendJson(res, 200, { success: result.success, text })
+        return
+      }
+
+      next()
     }
-    next()
+    catch (err) {
+      sendJson(res, 500, {
+        error: err instanceof Error ? err.message : 'Internal Server Error',
+      })
+    }
   }
 }

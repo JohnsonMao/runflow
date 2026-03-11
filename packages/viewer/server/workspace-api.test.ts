@@ -1,6 +1,7 @@
 import type { DiscoverEntry } from '@runflow/workspace'
 import { buildTreeFromCatalog } from '@runflow/workspace'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createWorkspaceApiMiddleware } from './workspace-api'
 
 describe('buildTreeFromCatalog', () => {
   it('builds file nodes for path-like flowIds', () => {
@@ -38,5 +39,42 @@ describe('buildTreeFromCatalog', () => {
     expect(tree[0].id).toBe('openapi:pet')
     expect(tree[0].type).toBe('folder')
     expect(tree[0].children).toHaveLength(2)
+  })
+})
+
+describe('createWorkspaceApiMiddleware', () => {
+  it('should call next() for non-matching URLs', async () => {
+    const middleware = createWorkspaceApiMiddleware()
+    const req = { url: '/foo' } as any
+    const res = {} as any
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('should handle /api/workspace/status', async () => {
+    const mockCtx = {
+      cwd: '/test',
+      configPath: '/test/config.yaml',
+      configDir: '/test',
+      config: {},
+    }
+    const middleware = createWorkspaceApiMiddleware(mockCtx as any)
+    const req = { url: '/api/workspace/status' } as any
+    const res = {
+      statusCode: 0,
+      setHeader: vi.fn(),
+      end: vi.fn(),
+    } as any
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+    const body = JSON.parse(res.end.mock.calls[0][0])
+    expect(body.workspaceRoot).toBe('/test')
+    expect(body.configured).toBe(true)
   })
 })

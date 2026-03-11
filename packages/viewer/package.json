@@ -5,22 +5,22 @@
   "private": true,
   "exports": {
     ".": {
-      "types": "./server/lib/index.ts",
+      "types": "./server/index.ts",
       "import": {
-        "development": "./server/lib/index.ts",
-        "default": "./dist/server/lib/index.js"
+        "development": "./server/index.ts",
+        "default": "./dist/server/index.js"
       },
-      "default": "./dist/server/lib/index.js"
+      "default": "./dist/server/index.js"
     }
   },
-  "main": "./dist/server/lib/index.js",
-  "module": "./dist/server/lib/index.js",
-  "types": "./server/lib/index.ts",
+  "main": "./dist/server/index.js",
+  "module": "./dist/server/index.js",
+  "types": "./server/index.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "dev": "tsx watch --conditions=development server/index.ts",
+    "dev": "tsx watch --conditions=development server/cli.ts",
     "build": "vite build && tsup",
     "lint": "eslint .",
     "preview": "vite preview",
