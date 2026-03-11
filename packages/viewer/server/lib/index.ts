@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { watch } from 'chokidar'
 import polka from 'polka'
 import sirv from 'sirv'
 import { createServer as createViteServer } from 'vite'
@@ -16,6 +17,10 @@ export interface ViewerServerOptions {
   workspaceCtx?: WorkspaceContext
   staticPath?: string
   enableViteDev?: boolean
+  /** Path to watch for changes. When a change occurs, the server will trigger a reload. */
+  watchPath?: string
+  /** Function to call when a watched file changes. If not provided, a default reload and broadcast will be performed if workspaceCtx is available. */
+  onChange?: (path: string) => void
   /** Called when a new WebSocket client connects. Host can use the provided send function to push initial state. */
   onConnection?: (send: (type: string, payload: any) => void) => void
   /** Called when a message is received from a WebSocket client. */
@@ -32,14 +37,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const appDir = path.resolve(__dirname, '../../') // Points to packages/viewer
 
 export async function startViewerServer(options: ViewerServerOptions): Promise<ViewerServer> {
-  const { port, workspaceCtx, enableViteDev, onConnection, onMessage } = options
+  const { port, workspaceCtx, enableViteDev, onConnection, onMessage, watchPath, onChange } = options
 
   // 1. Setup Polka & HTTP Server & WebSocket Server
   const app = polka()
   const server = http.createServer(app.handler as any)
   const wss = new WebSocketServer({ server })
 
+  let lastFlowReload: any = null
+  const stepStatuses = new Map<string, string>()
+
   const broadcast = (type: string, payload: any) => {
+    if (type === 'FLOW_RELOAD') {
+      lastFlowReload = payload
+      stepStatuses.clear()
+    }
+    else if (type === 'STEP_STATE_CHANGE') {
+      stepStatuses.set(payload.stepId, payload.status)
+    }
+    else if (type === 'FLOW_START') {
+      stepStatuses.clear()
+    }
+
     const message = JSON.stringify({ type, payload })
     for (const client of wss.clients) {
       if (client.readyState === 1) {
@@ -93,6 +112,14 @@ export async function startViewerServer(options: ViewerServerOptions): Promise<V
 
   // 4. Setup WebSocket Handlers
   wss.on('connection', (ws) => {
+    // Replay state to new client
+    if (lastFlowReload) {
+      ws.send(JSON.stringify({ type: 'FLOW_RELOAD', payload: lastFlowReload }))
+    }
+    for (const [stepId, status] of stepStatuses.entries()) {
+      ws.send(JSON.stringify({ type: 'STEP_STATE_CHANGE', payload: { stepId, status } }))
+    }
+
     if (onConnection) {
       const send = (type: string, payload: any) => {
         if (ws.readyState === 1) {
@@ -113,7 +140,45 @@ export async function startViewerServer(options: ViewerServerOptions): Promise<V
         }
       }
     })
+
+    ws.on('close', () => {
+      // If no more clients, wait a bit and then exit if still no clients
+      // This handles page refreshes gracefully
+      setTimeout(() => {
+        if (wss.clients.size === 0) {
+          process.stdout.write(`[Viewer] All clients disconnected. Closing process...\n`)
+          process.exit(0)
+        }
+      }, 1000)
+    })
   })
+
+  // 5. Setup File Watcher
+  let watcher: ReturnType<typeof watch> | null = null
+  if (watchPath) {
+    process.stdout.write(`[Viewer] Watching for changes: ${watchPath}\n`)
+    watcher = watch(watchPath, { ignoreInitial: true })
+    watcher.on('change', async (changedPath) => {
+      process.stdout.write(`[Viewer] File changed: ${changedPath}\n`)
+      if (onChange) {
+        onChange(changedPath)
+      }
+      else if (workspaceCtx) {
+        // Default reload logic if workspaceCtx is available
+        const { reloadAndExecuteFlow } = await import('../execution.js')
+        try {
+          await reloadAndExecuteFlow(
+            { ...workspaceCtx, broadcast },
+            watchPath,
+            { shouldBroadcast: true, skipRun: true },
+          )
+        }
+        catch (e) {
+          broadcast('ERROR', e instanceof Error ? e.message : String(e))
+        }
+      }
+    })
+  }
 
   return new Promise((resolve, reject) => {
     server.listen(port, () => {
@@ -126,6 +191,7 @@ export async function startViewerServer(options: ViewerServerOptions): Promise<V
         port,
         broadcast,
         close: () => new Promise((res) => {
+          watcher?.close().catch(() => {})
           wss.close()
           server.close(() => res())
         }),

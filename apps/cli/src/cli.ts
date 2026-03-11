@@ -39,7 +39,7 @@ program
 program
   .command('dev <flowId>')
   .description('Develop flow with hot reload and live preview')
-  .option('-p, --port <number>', 'WebSocket port', '8080')
+  .option('-p, --port <number>', 'WebSocket port', '4321')
   .option('--open', 'Open flow-viewer in browser', false)
   .option('--config <path>', 'Path to runflow.config.mjs', undefined)
   .action(async (flowId: string, options: { port: string, open: boolean, config?: string }) => {

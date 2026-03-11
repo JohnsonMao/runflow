@@ -293,8 +293,9 @@ async function loadFlowFromResolved(resolved: ResolvedFlow, configDir: string): 
 }
 
 /**
- * Resolve flowId using catalog lookup first (for custom IDs, normalized IDs, and OpenAPI handlers),
- * then fall back to direct resolution. This ensures flows with custom IDs or normalized IDs are correctly resolved.
+ * Resolve flowId using a multi-step resolution strategy:
+ * 1. Fast Path: Try direct file resolution (normalized path).
+ * 2. Slow Path: Fall back to catalog lookup for custom IDs, normalized IDs, and OpenAPI handlers.
  * @throws Error with user-facing message when file/spec not found, operation not found, or flow invalid.
  */
 export async function resolveAndLoadFlow(
@@ -303,29 +304,32 @@ export async function resolveAndLoadFlow(
   configDir: string,
   cwd: string,
 ): Promise<LoadedFlow> {
-  // Try catalog lookup first to handle custom IDs, normalized IDs, and OpenAPI handlers
+  // 1. Try direct resolution (Fast Path)
+  const resolvedDirect = resolveFlowId(flowId, config, configDir, cwd)
+  if (resolvedDirect.type === 'file' && existsSync(resolvedDirect.path) && statSync(resolvedDirect.path).isFile()) {
+    try {
+      return await loadFlowFromResolved(resolvedDirect, configDir)
+    }
+    catch {
+      // If loading fails (e.g. invalid YAML), fall through to catalog for better error message
+    }
+  }
+
+  // 2. Fall back to catalog lookup (Slow Path) for custom IDs or OpenAPI handlers
   try {
     const { buildDiscoverCatalog, getDiscoverEntry } = await import('./discover.js')
     const catalog = await buildDiscoverCatalog(config, configDir, cwd)
     const entry = getDiscoverEntry(catalog, flowId)
 
     if (entry) {
-      // Determine the correct flowId to use for resolution:
-      // 1. For OpenAPI handlers: use originalFlowId (e.g., 'payments:get-users')
-      // 2. For file flows with custom id: use path or absPath (e.g., 'tt/test.yaml')
-      // 3. Otherwise: use originalFlowId if available, or flowId as-is
       let resolvedFlowId = flowId
       if (entry.handlerKey && entry.originalFlowId) {
-        // OpenAPI handler: use originalFlowId
         resolvedFlowId = entry.originalFlowId
       }
       else if (entry.path || entry.absPath) {
-        // File flow: use path (relative) or absPath (absolute)
-        // Prefer path if it's relative to flowsDir, otherwise use absPath
         resolvedFlowId = entry.path || entry.absPath!
       }
       else if (entry.originalFlowId) {
-        // Fallback: use originalFlowId if available
         resolvedFlowId = entry.originalFlowId
       }
 
@@ -337,9 +341,8 @@ export async function resolveAndLoadFlow(
     // If catalog lookup fails, fall through to direct resolution
   }
 
-  // Fall back to direct resolution (for backward compatibility and edge cases)
-  const resolved = resolveFlowId(flowId, config, configDir, cwd)
-  return loadFlowFromResolved(resolved, configDir)
+  // Final fallback to direct resolution for clear error reporting
+  return loadFlowFromResolved(resolvedDirect, configDir)
 }
 
 export function createResolveFlow(
@@ -348,26 +351,13 @@ export function createResolveFlow(
   cwd: string,
 ): ResolveFlowFn {
   return async (flowId: string) => {
-    const resolved = resolveFlowId(flowId, config, configDir, cwd)
-    if (resolved.type === 'openapi') {
-      try {
-        const merged = await mergeOpenApiSpecs(resolved.specPaths, configDir)
-        const flows = await openApiToFlows(merged, { ...resolved.options, output: 'memory', stepType: resolved.options.stepType ?? 'http' })
-        const selected = flows.get(resolved.operation)
-        if (!selected)
-          return null
-        return { flow: selected }
-      }
-      catch {
-        return null
-      }
+    try {
+      const loaded = await resolveAndLoadFlow(flowId, config, configDir, cwd)
+      return { flow: loaded.flow }
     }
-    if (!existsSync(resolved.path) || !statSync(resolved.path).isFile())
+    catch {
       return null
-    const loaded = loadFromFile(resolved.path)
-    if (!loaded)
-      return null
-    return { flow: loaded }
+    }
   }
 }
 

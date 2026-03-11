@@ -8,7 +8,7 @@ import { isOpenApiHandlerEntry, mergeOpenApiSpecs, mergeParamDeclarations } from
 import { loadFromFile } from './loadFlow'
 
 export const DEFAULT_MAX_DEPTH = 32
-export const DEFAULT_MAX_FILES = 1000
+export const DEFAULT_MAX_FILES = 200
 export const DEFAULT_DISCOVER_LIMIT = 10
 export const MAX_DISCOVER_LIMIT = 10
 
@@ -97,7 +97,7 @@ export function findFlowFiles(
         continue
       const name = String(e.name)
       const full = path.join(d, name)
-      if (e.isDirectory() && name !== 'node_modules' && !name.startsWith('.')) {
+      if (e.isDirectory() && name !== 'node_modules' && name !== 'dist' && name !== 'build' && name !== 'out' && !name.startsWith('.')) {
         walk(full, depth + 1)
       }
       else if (e.isFile() && extensions.some(ext => name.toLowerCase().endsWith(ext))) {

@@ -66,7 +66,18 @@ export async function reloadAndExecuteFlow(
   })
 
   if (broadcast) {
-    broadcast('FLOW_COMPLETE', { flowId, success: result.success })
+    const { formatRunResult } = await import('@runflow/workspace')
+    const formatted = formatRunResult(result)
+
+    if (!result.success) {
+      console.error(`[Execution] Flow error: ${result.error}`)
+    }
+    broadcast('FLOW_COMPLETE', {
+      flowId,
+      success: result.success,
+      result: formatted,
+      raw: result,
+    })
   }
 
   return { loaded, result, effectiveParamsDeclaration }

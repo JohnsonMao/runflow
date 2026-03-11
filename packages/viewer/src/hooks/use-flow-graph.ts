@@ -36,14 +36,6 @@ export function useFlowGraph(selectedFlowId: string | null): UseFlowGraphResult 
     setGraph(null)
     setFlowDetail(null)
 
-    const wsUrl = new URLSearchParams(window.location.search).get('ws')
-    if (wsUrl) {
-      // In dev mode with WS, skip API fetch and wait for FLOW_RELOAD via WS
-      setGraphLoading(false)
-      setIsInitialized(true)
-      return
-    }
-
     // Do NOT reset paramValues to {} here to avoid clearing URL params in App.tsx sync effect
     // Instead, we mark as not initialized
     setIsInitialized(false)

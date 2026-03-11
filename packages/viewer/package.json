@@ -32,6 +32,7 @@
     "@runflow/core": "workspace:*",
     "@runflow/handlers": "workspace:^",
     "@runflow/workspace": "workspace:*",
+    "chokidar": "catalog:prod",
     "clsx": "catalog:frontend",
     "dagre": "catalog:dev",
     "lucide-react": "catalog:frontend",

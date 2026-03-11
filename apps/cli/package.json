@@ -22,7 +22,6 @@
     "@runflow/handlers": "workspace:^",
     "@runflow/viewer": "workspace:*",
     "@runflow/workspace": "workspace:*",
-    "chokidar": "catalog:prod",
     "commander": "catalog:prod",
     "open": "catalog:prod",
     "yaml": "catalog:prod"

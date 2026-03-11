@@ -6,7 +6,6 @@ import {
   loadConfig,
   resolveAndLoadFlow,
 } from '@runflow/workspace'
-import { watch } from 'chokidar'
 import open from 'open'
 
 export interface DevOptions {
@@ -16,7 +15,7 @@ export interface DevOptions {
 }
 
 export async function runDev(flowPath: string, options: DevOptions): Promise<void> {
-  const port = options.port || 8080
+  const port = options.port || 4321
   const cwd = process.cwd()
   const configPath = options.config ? path.resolve(cwd, options.config) : findConfigFile(cwd)
   const config = configPath ? await loadConfig(configPath) : null
@@ -44,14 +43,15 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   // Define broadcast proxy to avoid circular dependency / use before define
   let broadcast: (type: string, payload: any) => void = () => {}
 
-  const reloadAndRunFlow = async (shouldRun = true, params?: Record<string, unknown>): Promise<void> => {
+  const reloadAndRunFlow = async (shouldRun = true, params?: Record<string, unknown>, targetFlowPath?: string): Promise<void> => {
     try {
-      console.log(`[Dev] Reloading flow: ${flowPath}`)
+      const activeFlowPath = targetFlowPath || flowPath
+      console.log(`[Dev] ${shouldRun ? 'Running' : 'Reloading'} flow: ${activeFlowPath}`)
       const effectiveParams = params || lastParamsFromUI
 
       await reloadAndExecuteFlow(
         { ...workspaceCtx, broadcast },
-        flowPath,
+        activeFlowPath,
         { params: effectiveParams, shouldBroadcast: true, skipRun: !shouldRun },
       )
     }
@@ -61,20 +61,26 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
     }
   }
 
-  // 1. Start Integrated Viewer Server
+  // 1. Start Integrated Viewer Server with internal Watcher
   const viewerServer = await startViewerServer({
     port,
     workspaceCtx,
+    watchPath: absoluteFlowPath,
+    onChange: () => {
+      // On save, just reload to update the graph/UI, don't run automatically
+      reloadAndRunFlow(false).catch(e => console.error('[Dev] Watcher reload error:', e))
+    },
     onConnection: () => {
-      console.log(`[Dev] Client connected, replaying state`)
+      // Replay is handled internally by startViewerServer now
     },
     onMessage: (msg: { type: string, payload?: any }) => {
       if (msg.type === 'RUN') {
-        console.log(`[Dev] Run requested from viewer`, msg.payload?.params ? 'with params' : 'without params')
+        const targetFlow = msg.payload?.flowId || flowPath
+        console.log(`[Dev] Run requested from viewer for: ${targetFlow}`, msg.payload?.params ? 'with params' : 'without params')
         if (msg.payload?.params) {
           lastParamsFromUI = msg.payload.params
         }
-        reloadAndRunFlow(true, msg.payload?.params).catch(e => console.error('[Dev] Run error:', e))
+        reloadAndRunFlow(true, msg.payload?.params, targetFlow).catch(e => console.error('[Dev] Run error:', e))
       }
     },
   })
@@ -87,16 +93,6 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   // Handle Initial Load (don't run yet, just resolve and cache/broadcast)
   await reloadAndRunFlow(false)
 
-  // Watcher
-  console.log(`[Dev] Watching: ${absoluteFlowPath}`)
-  const watcher = watch(absoluteFlowPath, {
-    ignoreInitial: true,
-  })
-
-  watcher.on('change', () => {
-    reloadAndRunFlow(true).catch(e => console.error('[Dev] Watcher reload error:', e))
-  })
-
   if (options.open) {
     const viewerUrl = `http://localhost:${port}/?ws=localhost:${port}&flowId=${encodeURIComponent(flowPath)}`
     console.log(`[Dev] Opening viewer: ${viewerUrl}`)
@@ -104,7 +100,6 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   }
 
   process.on('SIGINT', () => {
-    watcher.close().catch(() => {})
     viewerServer.close().catch(() => {})
     process.exit()
   })

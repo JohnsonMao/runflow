@@ -177,7 +177,11 @@ export function App(): React.ReactElement {
         }
         break
       case 'FLOW_COMPLETE':
-        // Optional: show some completion toast
+        if (lastMessage.payload) {
+          const { success, result: formatted } = lastMessage.payload
+          setRunResult(formatted || (success ? '執行成功' : '執行失敗'))
+          setResultDialogOpen(true)
+        }
         break
       case 'ERROR':
         console.error('[Dev Error]', lastMessage.payload)
@@ -243,7 +247,7 @@ export function App(): React.ReactElement {
 
     if (isConnected) {
       // In dev mode, we trigger run via WS (it reloads and runs)
-      sendMessage({ type: 'RUN', payload: { params: paramValues } })
+      sendMessage({ type: 'RUN', payload: { flowId: selectedFlowId, params: paramValues } })
       return
     }
 
