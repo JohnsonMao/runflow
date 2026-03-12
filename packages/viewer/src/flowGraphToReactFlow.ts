@@ -64,6 +64,9 @@ export function graphToReactFlow(graph: FlowGraph): { nodes: Node[], edges: Edge
       ...(targetHandle ? { targetHandle } : {}),
       type: e.kind === 'loopBack' ? 'smoothstep' : 'default',
       className: e.kind === 'loopBack' ? 'flow-edge-loop-back' : undefined,
+      data: {
+        kind: e.kind,
+      },
     }
   })
   return { nodes, edges }

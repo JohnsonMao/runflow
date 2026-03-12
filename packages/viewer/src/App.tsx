@@ -1,5 +1,7 @@
+import type { LogEntry } from './components/ExecutionPanel'
+import type { WebSocketMessage } from './hooks/use-websocket'
 import type { TreeNode, WorkspaceStatus } from './types'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Sidebar,
@@ -9,10 +11,10 @@ import {
   SidebarGroupLabel,
   SidebarInset,
 } from '@/components/ui/sidebar'
+import { ExecutionPanel } from './components/ExecutionPanel'
 import { FlowHeader } from './components/FlowHeader'
 import { FlowMainContent } from './components/FlowMainContent'
 import { FlowSidebar } from './components/FlowSidebar'
-import { ResultDialog } from './components/ResultDialog'
 import { useFlowGraph } from './hooks/use-flow-graph'
 import { useTheme } from './hooks/use-theme'
 import { useWebSocket } from './hooks/use-websocket'
@@ -36,14 +38,13 @@ export function App(): React.ReactElement {
     return params.get('flowId')
   })
 
-  // WebSocket URL from URL params
-  const [wsUrl] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('ws')
-  })
-
-  const { isConnected, lastMessage, sendMessage } = useWebSocket(wsUrl)
   const [stepStatuses, setStepStatuses] = useState<Record<string, string>>({})
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [executionPanelOpen, setExecutionPanelOpen] = useState(false)
+  const [executionPanelTab, setExecutionPanelTab] = useState<'params' | 'logs'>('params')
+  const [paramErrors, setParamErrors] = useState<Record<string, string>>({})
+  const flowCanvasRef = useRef<{ fitView: () => void } | null>(null)
+  const prevFlowIdRef = useRef<string | null>(selectedFlowId)
 
   // Initialize openFolderIds from URL (auto-expand to show selected flow)
   const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(() => {
@@ -102,10 +103,7 @@ export function App(): React.ReactElement {
     }
   }, [selectedFlowId])
 
-  const [runResult, setRunResult] = useState<string | null>(null)
   const [runLoading, setRunLoading] = useState(false)
-  const [paramsSheetOpen, setParamsSheetOpen] = useState(false)
-  const [resultDialogOpen, setResultDialogOpen] = useState(false)
 
   const {
     graph,
@@ -148,51 +146,136 @@ export function App(): React.ReactElement {
   }, [flowDetail])
 
   // Handle WebSocket messages
-  useEffect(() => {
-    if (!lastMessage)
-      return
-
-    switch (lastMessage.type) {
-      case 'FLOW_RELOAD':
-        if (lastMessage.payload) {
-          const payload = lastMessage.payload
-          setGraph(payload)
-          // Also update flow detail for params
-          setFlowDetail({
-            flowId: payload.flowId || selectedFlowId || '',
-            name: payload.flowName || selectedFlowId || '',
-            description: payload.flowDescription,
-            params: payload.params || [],
-          })
-          setStepStatuses({}) // Clear statuses on reload
-        }
+  const handleWebSocketMessage = React.useCallback((message: WebSocketMessage) => {
+    switch (message.type) {
+      case 'FLOW_RELOAD': {
+        const payload = message.payload
+        setGraph(payload)
+        // Also update flow detail for params
+        setFlowDetail({
+          flowId: payload.flowId || selectedFlowId || '',
+          name: payload.flowName || selectedFlowId || '',
+          description: payload.flowDescription,
+          params: payload.params || [],
+        })
+        setStepStatuses({}) // Clear statuses on reload
+        setLogs([]) // Clear logs on reload
         break
-      case 'FLOW_START':
+      }
+      case 'FLOW_START': {
         setStepStatuses({})
+        setLogs([])
+        setParamErrors({}) // Clear param errors on flow start
+        // Auto-open sidebar and switch to Logs tab on execution start
+        setExecutionPanelOpen(true)
+        setExecutionPanelTab('logs')
         break
-      case 'STEP_STATE_CHANGE':
-        if (lastMessage.payload) {
-          const { stepId, status } = lastMessage.payload
-          setStepStatuses(prev => ({ ...prev, [stepId]: status }))
-        }
-        break
-      case 'FLOW_COMPLETE':
-        if (lastMessage.payload) {
-          const { success, result: formatted } = lastMessage.payload
-          setRunResult(formatted || (success ? '執行成功' : '執行失敗'))
-          setResultDialogOpen(true)
-        }
-        break
-      case 'ERROR':
-        console.error('[Dev Error]', lastMessage.payload)
-        break
-    }
-  }, [lastMessage, setGraph])
+      }
+      case 'PARAMS_VALIDATION_ERROR': {
+        const { error, fieldPaths } = message.payload
+        // Switch to Params tab and show errors
+        setExecutionPanelOpen(true)
+        setExecutionPanelTab('params')
+        setRunLoading(false)
 
-  // Clear run result when flow changes
+        // Build error map from field paths
+        const errors: Record<string, string> = {}
+        // Parse error message to map paths to messages
+        // Format: "path1 (required): message1; path2: message2"
+        const errorParts = error.split(';')
+        for (const part of errorParts) {
+          // Find the colon that separates path from message
+          const colonIndex = part.indexOf(':')
+          if (colonIndex > 0) {
+            const pathPart = part.slice(0, colonIndex).trim()
+            const message = part.slice(colonIndex + 1).trim()
+            // Remove "(required)" from path if present
+            const path = pathPart.replace(/\s*\(required\)\s*$/, '').trim()
+            if (path && message)
+              errors[path] = message
+          }
+        }
+        setParamErrors(errors)
+
+        // Focus on first error field after a short delay
+        if (fieldPaths.length > 0) {
+          setTimeout(() => {
+            const firstErrorPath = fieldPaths[0]!
+            const fieldId = `param-${firstErrorPath.replace(/\./g, '-')}`
+            const fieldElement = document.getElementById(fieldId)
+            if (fieldElement) {
+              fieldElement.focus()
+              fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+          }, 100)
+        }
+        break
+      }
+      case 'STEP_STATE_CHANGE': {
+        const { stepId, status, outputs, error } = message.payload
+        // Extract base stepId from prefixed stepId (e.g., "loop.iteration_1.loopBody" -> "loopBody")
+        // This handles subSteps that are flattened with prefixes
+        setStepStatuses(prev => ({ ...prev, [stepId]: status }))
+
+        // Update logs: replace existing log for this stepId, or add new entry
+        // Priority: replace 'running' status first, then replace the last occurrence of this stepId
+        setLogs((prev) => {
+          const newLog: LogEntry = {
+            stepId,
+            status,
+            outputs: error ? { error, ...(outputs || {}) } : outputs,
+            timestamp: Date.now(),
+          }
+
+          // First, try to find and replace a 'running' status log for this stepId
+          const runningIndex = prev.findIndex(log => log.stepId === stepId && log.status === 'running')
+          if (runningIndex >= 0) {
+            // Replace running status with final status
+            const updated = [...prev]
+            updated[runningIndex] = newLog
+            return updated
+          }
+
+          // If no 'running' status found, find the last occurrence of this stepId (from end to start)
+          // This handles cases where a step might be updated multiple times
+          let lastIndex = -1
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i]!.stepId === stepId) {
+              lastIndex = i
+              break
+            }
+          }
+
+          if (lastIndex >= 0) {
+            // Replace the last occurrence of this stepId
+            const updated = [...prev]
+            updated[lastIndex] = newLog
+            return updated
+          }
+
+          // No existing log found, add new entry
+          return [...prev, newLog]
+        })
+        break
+      }
+      case 'ERROR': {
+        console.error('[Dev Error]', message.payload)
+        break
+      }
+    }
+  }, [setGraph, selectedFlowId])
+
+  const { isConnected } = useWebSocket(window.location.host, handleWebSocketMessage)
+
+  // Clear logs when flow changes (including switching between flows)
   useEffect(() => {
-    if (!selectedFlowId)
-      setRunResult(null)
+    // Clear logs when flowId changes (not just when it becomes null)
+    if (prevFlowIdRef.current !== selectedFlowId) {
+      setLogs([])
+      setStepStatuses({})
+      setParamErrors({}) // Clear param errors when flow changes
+      prevFlowIdRef.current = selectedFlowId
+    }
   }, [selectedFlowId])
 
   // Sync state to URL
@@ -245,14 +328,16 @@ export function App(): React.ReactElement {
     if (!selectedFlowId || runLoading)
       return
 
-    if (isConnected) {
-      // In dev mode, we trigger run via WS (it reloads and runs)
-      sendMessage({ type: 'RUN', payload: { flowId: selectedFlowId, params: paramValues } })
-      return
-    }
+    // Clear previous errors
+    setParamErrors({})
 
+    // Auto-open sidebar and switch to Logs tab when run starts
+    setExecutionPanelOpen(true)
+    setExecutionPanelTab('logs')
+
+    // Use HTTP API for execution - it works in both dev and standalone modes
+    // The HTTP API will broadcast execution results via WebSocket if broadcast is available
     setRunLoading(true)
-    setRunResult(null)
     fetch('/api/workspace/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -264,16 +349,31 @@ export function App(): React.ReactElement {
           return { success: false, text: data?.text ?? `Run failed: ${res.status}` }
         return { success: data.success ?? false, text: data.text ?? '' }
       })
-      .then(({ text }) => {
-        setRunResult(text ?? null)
-        setResultDialogOpen(true)
-      })
       .catch((err: unknown) => {
-        setRunResult(err instanceof Error ? err.message : 'Run failed')
-        setResultDialogOpen(true)
+        // Add error to logs
+        setLogs(prev => [
+          ...prev,
+          {
+            stepId: 'error',
+            status: 'failure',
+            outputs: { error: err instanceof Error ? err.message : 'Run failed' },
+            timestamp: Date.now(),
+          },
+        ])
       })
       .finally(() => setRunLoading(false))
   }
+
+  // Handle canvas resizing when sidebar opens/closes
+  useEffect(() => {
+    // Use a small delay to ensure DOM has updated
+    const timer = setTimeout(() => {
+      if (flowCanvasRef.current) {
+        flowCanvasRef.current.fitView()
+      }
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [executionPanelOpen])
 
   const toggleFolder = (id: string): void => {
     setOpenFolderIds((prev) => {
@@ -334,11 +434,8 @@ export function App(): React.ReactElement {
             workspaceHint={workspaceHint(workspaceStatus)}
             flowName={graph?.flowName}
             selectedFlowId={selectedFlowId}
-            flowDetail={flowDetail}
-            paramValues={paramValues}
-            onParamChange={handleParamChange}
-            paramsSheetOpen={paramsSheetOpen}
-            setParamsSheetOpen={setParamsSheetOpen}
+            executionPanelOpen={executionPanelOpen}
+            setExecutionPanelOpen={setExecutionPanelOpen}
             runLoading={runLoading}
             onRun={handleRun}
             dark={dark}
@@ -353,18 +450,33 @@ export function App(): React.ReactElement {
             </Card>
           )}
 
-          <SidebarInset className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main className="h-full w-full overflow-auto">
-              <FlowMainContent graphLoading={graphLoading} graph={graph} stepStatuses={stepStatuses} />
-            </main>
-          </SidebarInset>
+          <div className="flex min-h-0 min-w-0 flex-1">
+            <SidebarInset className="min-h-0 min-w-0 flex-1 overflow-hidden">
+              <main className="h-full w-full overflow-auto">
+                <FlowMainContent
+                  graphLoading={graphLoading}
+                  graph={graph}
+                  stepStatuses={stepStatuses}
+                  canvasRef={flowCanvasRef}
+                />
+              </main>
+            </SidebarInset>
+            {executionPanelOpen && (
+              <div className="w-96 shrink-0">
+                <ExecutionPanel
+                  flowDetail={flowDetail}
+                  paramValues={paramValues}
+                  onParamChange={handleParamChange}
+                  logs={logs}
+                  activeTab={executionPanelTab}
+                  onTabChange={setExecutionPanelTab}
+                  paramErrors={paramErrors}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      <ResultDialog
-        open={resultDialogOpen}
-        onOpenChange={setResultDialogOpen}
-        result={runResult}
-      />
     </div>
   )
 }

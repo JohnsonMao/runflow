@@ -80,6 +80,10 @@ export interface FlowDetail {
 /** Graph API response from GET /api/workspace/graph (extends FlowGraph with additional metadata). */
 export interface FlowGraphResponse extends FlowGraph {
   flowId: string
+  /** Flow name. */
+  flowName?: string
+  /** Flow description. */
+  flowDescription?: string
   /** Original flowId before normalization (for OpenAPI handlers). */
   originalFlowId?: string
   /** Original relative file path (for folder expansion). */

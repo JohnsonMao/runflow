@@ -7,9 +7,10 @@ interface FlowMainContentProps {
   graphLoading: boolean
   graph: FlowGraph | null
   stepStatuses?: Record<string, string>
+  canvasRef?: React.MutableRefObject<{ fitView: () => void } | null>
 }
 
-export function FlowMainContent({ graphLoading, graph, stepStatuses }: FlowMainContentProps): React.ReactElement {
+export function FlowMainContent({ graphLoading, graph, stepStatuses, canvasRef }: FlowMainContentProps): React.ReactElement {
   if (graphLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -21,7 +22,7 @@ export function FlowMainContent({ graphLoading, graph, stepStatuses }: FlowMainC
     return (
       <ReactFlowProvider>
         <div className="h-full w-full">
-          <FlowCanvas graph={graph} stepStatuses={stepStatuses} />
+          <FlowCanvas graph={graph} stepStatuses={stepStatuses} canvasRef={canvasRef} />
         </div>
       </ReactFlowProvider>
     )

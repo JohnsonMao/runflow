@@ -1,3 +1,4 @@
+import type { BroadcastFunction } from '../src/hooks/use-websocket'
 import type { WorkspaceContext } from './workspace-api'
 import http from 'node:http'
 import path from 'node:path'
@@ -18,15 +19,11 @@ export interface ViewerServerOptions {
   watchPath?: string
   /** Function to call when a watched file changes. If not provided, a default reload and broadcast will be performed if workspaceCtx is available. */
   onChange?: (path: string) => void
-  /** Called when a new WebSocket client connects. Host can use the provided send function to push initial state. */
-  onConnection?: (send: (type: string, payload: any) => void) => void
-  /** Called when a message is received from a WebSocket client. */
-  onMessage?: (data: any) => void
 }
 
 export interface ViewerServer {
   port: number
-  broadcast: (type: string, payload: unknown) => void
+  broadcast: BroadcastFunction
   close: () => Promise<void>
 }
 
@@ -34,12 +31,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const appDir = path.resolve(__dirname, '../')
 
 export async function startViewerServer(options: ViewerServerOptions): Promise<ViewerServer> {
-  const { port, workspaceCtx, enableViteDev, onConnection, onMessage, watchPath, onChange } = options
+  const { port, workspaceCtx, enableViteDev, watchPath, onChange } = options
 
   const app = polka()
-  const server = http.createServer(app.handler as any)
+  const server = http.createServer(app.handler as unknown as http.RequestListener)
 
-  const state = new ViewerState(server, { onConnection, onMessage })
+  const state = new ViewerState(server)
   const broadcast = state.broadcast
 
   app.use(createWorkspaceApiMiddleware(workspaceCtx ? { ...workspaceCtx, broadcast } : { broadcast }))

@@ -316,7 +316,7 @@ program
       const snapshot = JSON.parse(content)
 
       if (expression) {
-        const result = evaluate(expression, snapshot as any)
+        const result = evaluate(expression, snapshot as Record<string, unknown>)
         console.log(JSON.stringify(result, null, 2))
       }
       else {

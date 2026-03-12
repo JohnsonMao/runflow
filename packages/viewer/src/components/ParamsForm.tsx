@@ -9,11 +9,13 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { getNested } from '../lib/nested'
+import { cn } from '../lib/utils'
 
 interface ParamsFormProps {
   params: ParamDeclaration[]
   paramValues: Record<string, unknown>
   onParamChange: (path: string, value: unknown) => void
+  paramErrors?: Record<string, string>
 }
 
 interface ParamFieldProps {
@@ -23,10 +25,12 @@ interface ParamFieldProps {
   required?: boolean
   value: unknown
   onParamChange: (path: string, value: unknown) => void
+  error?: string
 }
 
-function ParamField({ path, prop, label, required, value, onParamChange }: ParamFieldProps): React.ReactElement {
+function ParamField({ path, prop, label, required, value, onParamChange, error }: ParamFieldProps): React.ReactElement {
   const id = `param-${path.replace(/\./g, '-')}`
+  const hasError = Boolean(error)
   if (prop.type === 'boolean') {
     return (
       <div className="flex items-center justify-between gap-3">
@@ -66,7 +70,7 @@ function ParamField({ path, prop, label, required, value, onParamChange }: Param
               onParamChange(path, options.find(opt => String(opt) === str))
           }}
         >
-          <SelectTrigger id={id} className="h-9 w-full min-w-0">
+          <SelectTrigger id={id} className={cn('h-9 w-full min-w-0', hasError && 'border-destructive')}>
             <SelectValue placeholder={prop.description ?? undefined} />
           </SelectTrigger>
           <SelectContent>
@@ -82,6 +86,9 @@ function ParamField({ path, prop, label, required, value, onParamChange }: Param
             ))}
           </SelectContent>
         </Select>
+        {hasError && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
       </div>
     )
   }
@@ -105,8 +112,11 @@ function ParamField({ path, prop, label, required, value, onParamChange }: Param
           value={numVal === undefined ? '' : numVal}
           onChange={e => onParamChange(path, e.target.value === '' ? undefined : Number(e.target.value))}
           placeholder={prop.description ?? undefined}
-          className="h-9"
+          className={cn('h-9', hasError && 'border-destructive')}
         />
+        {hasError && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
       </div>
     )
   }
@@ -122,8 +132,11 @@ function ParamField({ path, prop, label, required, value, onParamChange }: Param
         value={value != null ? String(value) : ''}
         onChange={e => onParamChange(path, e.target.value || undefined)}
         placeholder={prop.description ?? undefined}
-        className="h-9"
+        className={cn('h-9', hasError && 'border-destructive')}
       />
+      {hasError && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
     </div>
   )
 }
@@ -132,10 +145,12 @@ function ParamControl({
   param,
   onParamChange,
   getNestedValue,
+  paramErrors,
 }: {
   param: ParamDeclaration
   onParamChange: (path: string, value: unknown) => void
   getNestedValue: (path: string) => unknown
+  paramErrors: Record<string, string>
 }): React.ReactElement {
   if (param.type === 'object' && param.schema && Object.keys(param.schema).length > 0) {
     return (
@@ -153,17 +168,21 @@ function ParamControl({
             : null}
         </legend>
         <div className="flex flex-col w-80 gap-3">
-          {Object.entries(param.schema).map(([key, prop]) => (
-            <ParamField
-              key={`${param.name}.${key}`}
-              path={`${param.name}.${key}`}
-              prop={prop}
-              label={key}
-              required={prop.required}
-              value={getNestedValue(`${param.name}.${key}`)}
-              onParamChange={onParamChange}
-            />
-          ))}
+          {Object.entries(param.schema).map(([key, prop]) => {
+            const nestedPath = `${param.name}.${key}`
+            return (
+              <ParamField
+                key={nestedPath}
+                path={nestedPath}
+                prop={prop}
+                label={key}
+                required={prop.required}
+                value={getNestedValue(nestedPath)}
+                onParamChange={onParamChange}
+                error={paramErrors[nestedPath]}
+              />
+            )
+          })}
         </div>
       </fieldset>
     )
@@ -177,12 +196,13 @@ function ParamControl({
         required={param.required}
         value={getNestedValue(param.name)}
         onParamChange={onParamChange}
+        error={paramErrors[param.name]}
       />
     </div>
   )
 }
 
-export function ParamsForm({ params, paramValues, onParamChange }: ParamsFormProps): React.ReactElement {
+export function ParamsForm({ params, paramValues, onParamChange, paramErrors = {} }: ParamsFormProps): React.ReactElement {
   const getNestedValue = (path: string) => getNested(paramValues, path)
   return (
     <div className="flex flex-col gap-4">
@@ -192,6 +212,7 @@ export function ParamsForm({ params, paramValues, onParamChange }: ParamsFormPro
           param={p}
           onParamChange={onParamChange}
           getNestedValue={getNestedValue}
+          paramErrors={paramErrors}
         />
       ))}
     </div>

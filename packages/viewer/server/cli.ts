@@ -5,9 +5,17 @@ import { startViewerServer } from './app'
 const isProd = process.env.NODE_ENV === 'production'
 
 async function run() {
-  await startViewerServer({
-    port: 5173,
+  const port = 5173
+  const viewerServer = await startViewerServer({
+    port,
     enableViteDev: !isProd,
+  })
+
+  console.log(`[Viewer] WebSocket server ready at ws://localhost:${port}`)
+
+  process.on('SIGINT', () => {
+    viewerServer.close().catch(() => {})
+    process.exit()
   })
 }
 

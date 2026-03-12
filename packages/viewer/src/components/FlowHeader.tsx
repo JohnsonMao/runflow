@@ -1,19 +1,14 @@
-import type { FlowDetail } from '../types'
-import { Moon, Play, Sun } from 'lucide-react'
+import { Moon, Play, Settings2, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { ParamsSheet } from './ParamsSheet'
 
 interface FlowHeaderProps {
   workspaceHint: string
   flowName?: string
   selectedFlowId: string | null
-  flowDetail: FlowDetail | null
-  paramValues: Record<string, unknown>
-  onParamChange: (path: string, value: unknown) => void
-  paramsSheetOpen: boolean
-  setParamsSheetOpen: (open: boolean) => void
+  executionPanelOpen: boolean
+  setExecutionPanelOpen: (open: boolean) => void
   runLoading: boolean
   onRun: () => void
   dark: boolean
@@ -24,11 +19,8 @@ export function FlowHeader({
   workspaceHint,
   flowName,
   selectedFlowId,
-  flowDetail,
-  paramValues,
-  onParamChange,
-  paramsSheetOpen,
-  setParamsSheetOpen,
+  executionPanelOpen,
+  setExecutionPanelOpen,
   runLoading,
   onRun,
   dark,
@@ -58,15 +50,15 @@ export function FlowHeader({
       <div className="grow flex flex-wrap justify-between gap-2">
         {selectedFlowId && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="shrink-0">
-              <ParamsSheet
-                open={paramsSheetOpen}
-                onOpenChange={setParamsSheetOpen}
-                flowDetail={flowDetail}
-                paramValues={paramValues}
-                onParamChange={onParamChange}
-              />
-            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExecutionPanelOpen(!executionPanelOpen)}
+              className="shrink-0 gap-2"
+            >
+              <Settings2 className="size-4" aria-hidden />
+              執行面板
+            </Button>
             <Button
               type="button"
               onClick={onRun}

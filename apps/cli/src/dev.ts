@@ -1,4 +1,4 @@
-import type { LoadedFlow } from '@runflow/workspace'
+import type { BroadcastFunction } from '@runflow/viewer'
 import path from 'node:path'
 import { reloadAndExecuteFlow, startViewerServer } from '@runflow/viewer'
 import {
@@ -23,14 +23,9 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
 
   const workspaceCtx = { cwd, configPath, configDir, config }
 
-  // resolveAndLoadFlow now handles catalog lookup internally
-  const catalogResolver = async (id: string): Promise<LoadedFlow> => {
-    return await resolveAndLoadFlow(id, config, configDir, cwd)
-  }
-
   let absoluteFlowPath: string
   try {
-    const loaded = await catalogResolver(flowPath)
+    const loaded = await resolveAndLoadFlow(flowPath, config, configDir, cwd)
     absoluteFlowPath = loaded.resolvedPath || path.resolve(cwd, flowPath)
   }
   catch (e) {
@@ -41,7 +36,7 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   let lastParamsFromUI: Record<string, unknown> | undefined
 
   // Define broadcast proxy to avoid circular dependency / use before define
-  let broadcast: (type: string, payload: any) => void = () => {}
+  let broadcast: BroadcastFunction = () => {}
 
   const reloadAndRunFlow = async (shouldRun = true, params?: Record<string, unknown>, targetFlowPath?: string): Promise<void> => {
     try {
@@ -70,19 +65,6 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
       // On save, just reload to update the graph/UI, don't run automatically
       reloadAndRunFlow(false).catch(e => console.error('[Dev] Watcher reload error:', e))
     },
-    onConnection: () => {
-      // Replay is handled internally by startViewerServer now
-    },
-    onMessage: (msg: { type: string, payload?: any }) => {
-      if (msg.type === 'RUN') {
-        const targetFlow = msg.payload?.flowId || flowPath
-        console.log(`[Dev] Run requested from viewer for: ${targetFlow}`, msg.payload?.params ? 'with params' : 'without params')
-        if (msg.payload?.params) {
-          lastParamsFromUI = msg.payload.params
-        }
-        reloadAndRunFlow(true, msg.payload?.params, targetFlow).catch(e => console.error('[Dev] Run error:', e))
-      }
-    },
   })
 
   // Assign the real broadcast function
@@ -94,7 +76,7 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
   await reloadAndRunFlow(false)
 
   if (options.open) {
-    const viewerUrl = `http://localhost:${port}/?ws=localhost:${port}&flowId=${encodeURIComponent(flowPath)}`
+    const viewerUrl = `http://localhost:${port}/?flowId=${encodeURIComponent(flowPath)}`
     console.log(`[Dev] Opening viewer: ${viewerUrl}`)
     await open(viewerUrl)
   }

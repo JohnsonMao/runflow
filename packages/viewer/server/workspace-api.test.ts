@@ -1,4 +1,6 @@
 import type { DiscoverEntry } from '@runflow/workspace'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { WorkspaceContext } from './workspace-api'
 import { buildTreeFromCatalog } from '@runflow/workspace'
 import { describe, expect, it, vi } from 'vitest'
 import { createWorkspaceApiMiddleware } from './workspace-api'
@@ -45,8 +47,8 @@ describe('buildTreeFromCatalog', () => {
 describe('createWorkspaceApiMiddleware', () => {
   it('should call next() for non-matching URLs', async () => {
     const middleware = createWorkspaceApiMiddleware()
-    const req = { url: '/foo' } as any
-    const res = {} as any
+    const req = { url: '/foo' } as unknown as IncomingMessage
+    const res = {} as unknown as ServerResponse
     const next = vi.fn()
 
     await middleware(req, res, next)
@@ -60,13 +62,16 @@ describe('createWorkspaceApiMiddleware', () => {
       configDir: '/test',
       config: {},
     }
-    const middleware = createWorkspaceApiMiddleware(mockCtx as any)
-    const req = { url: '/api/workspace/status' } as any
+    const middleware = createWorkspaceApiMiddleware(mockCtx as unknown as WorkspaceContext)
+    const req = { url: '/api/workspace/status' } as unknown as IncomingMessage
     const res = {
       statusCode: 0,
       setHeader: vi.fn(),
       end: vi.fn(),
-    } as any
+    } as unknown as ServerResponse & {
+      statusCode: number
+      end: { mock: { calls: string[][] } }
+    }
     const next = vi.fn()
 
     await middleware(req, res, next)

@@ -1,10 +1,11 @@
+import type { BroadcastFunction } from '../src/hooks/use-websocket'
 import type { WorkspaceContext } from './workspace-api'
 import { watch } from 'chokidar'
 
 export interface WatcherOptions {
   watchPath?: string
   workspaceCtx?: WorkspaceContext
-  broadcast: (type: string, payload: any) => void
+  broadcast: BroadcastFunction
   onChange?: (path: string) => void
 }
 

@@ -33,7 +33,7 @@ describe('handler-factory', () => {
         msg: z.string(),
       }),
       run: async (context) => {
-        context.report({ success: true, log: context.step.msg })
+        context.report({ success: true, log: (context.step as any).msg })
       },
     })
 

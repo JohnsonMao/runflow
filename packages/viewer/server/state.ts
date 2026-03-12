@@ -1,17 +1,15 @@
+import type { Server } from 'node:http'
 import type { WebSocket } from 'ws'
+import type { BroadcastFunction, WebSocketMessagePayloads } from '../src/hooks/use-websocket'
+import type { FlowGraphResponse } from '../src/types'
 import { WebSocketServer } from 'ws'
 
-export interface ViewerStateOptions {
-  onMessage?: (data: any) => void
-  onConnection?: (send: (type: string, payload: any) => void) => void
-}
-
 export class ViewerState {
-  private lastFlowReload: any = null
+  private lastFlowReload: FlowGraphResponse | null = null
   private stepStatuses = new Map<string, string>()
   private wss: WebSocketServer
 
-  constructor(server: any, private options: ViewerStateOptions = {}) {
+  constructor(server: Server) {
     this.wss = new WebSocketServer({ server })
     this.setupWss()
   }
@@ -26,25 +24,7 @@ export class ViewerState {
         this.send(ws, 'STEP_STATE_CHANGE', { stepId, status })
       }
 
-      if (this.options.onConnection) {
-        this.options.onConnection((type, payload) => this.send(ws, type, payload))
-      }
-
-      ws.on('message', (raw) => {
-        if (this.options.onMessage) {
-          try {
-            const data = JSON.parse(raw.toString())
-            this.options.onMessage(data)
-          }
-          catch {
-            // Ignore invalid JSON
-          }
-        }
-      })
-
       ws.on('close', () => {
-        // If no more clients, wait a bit and then exit if still no clients
-        // This handles page refreshes gracefully
         setTimeout(() => {
           if (this.wss.clients.size === 0) {
             process.stdout.write(`[Viewer] All clients disconnected. Closing process...\n`)
@@ -52,16 +32,21 @@ export class ViewerState {
           }
         }, 1000)
       })
+
+      ws.on('error', (error) => {
+        console.error('[Viewer] WebSocket error:', error)
+      })
     })
   }
 
-  public broadcast = (type: string, payload: any) => {
+  public broadcast: BroadcastFunction = (type, payload) => {
     if (type === 'FLOW_RELOAD') {
-      this.lastFlowReload = payload
+      this.lastFlowReload = payload as FlowGraphResponse
       this.stepStatuses.clear()
     }
     else if (type === 'STEP_STATE_CHANGE') {
-      this.stepStatuses.set(payload.stepId, payload.status)
+      const stepPayload = payload as WebSocketMessagePayloads['STEP_STATE_CHANGE']
+      this.stepStatuses.set(stepPayload.stepId, stepPayload.status)
     }
     else if (type === 'FLOW_START') {
       this.stepStatuses.clear()
@@ -75,7 +60,11 @@ export class ViewerState {
     }
   }
 
-  private send(ws: WebSocket, type: string, payload: any) {
+  private send<T extends keyof WebSocketMessagePayloads>(
+    ws: WebSocket,
+    type: T,
+    payload: WebSocketMessagePayloads[T],
+  ) {
     if (ws.readyState === 1) {
       ws.send(JSON.stringify({ type, payload }))
     }

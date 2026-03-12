@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { BroadcastFunction } from '../src/hooks/use-websocket'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import {
@@ -21,7 +22,7 @@ export interface WorkspaceContext {
   configPath: string | null
   configDir: string
   config: Awaited<ReturnType<typeof loadConfig>>
-  broadcast?: (type: string, payload: any) => void
+  broadcast?: BroadcastFunction
 }
 
 function resolveWorkspaceConfig(): { cwd: string, configPath: string | null, configDir: string } {
@@ -40,7 +41,7 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown): void 
   res.end(JSON.stringify(body))
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<any> {
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   for await (const chunk of req)
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
@@ -171,7 +172,7 @@ export function createWorkspaceApiMiddleware(injectedCtx?: WorkspaceContext | { 
       }
 
       if (pathname === '/api/workspace/run' && req.method === 'POST') {
-        const body = await readJsonBody(req)
+        const body = (await readJsonBody(req)) as { flowId?: string, params?: Record<string, unknown> }
         const { flowId, params } = body
         if (!flowId?.trim()) {
           sendJson(res, 400, { error: 'Missing flowId' })

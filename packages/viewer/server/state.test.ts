@@ -1,3 +1,4 @@
+import type { Server } from 'node:http'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { ViewerState } from './state'
@@ -12,12 +13,12 @@ vi.mock('ws', () => {
 })
 
 describe('viewerState', () => {
-  let mockServer: any
+  let mockServer: Server
   let state: ViewerState
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockServer = {}
+    mockServer = {} as Server
     state = new ViewerState(mockServer)
   })
 
@@ -31,26 +32,29 @@ describe('viewerState', () => {
       send: vi.fn(),
     }
     // Accessing private wss for testing
-    ;(state as any).wss.clients.add(mockClient)
+    const wss = (state as unknown as { wss: { clients: Set<unknown> } }).wss
+    wss.clients.add(mockClient)
 
-    state.broadcast('TEST_EVENT', { foo: 'bar' })
+    state.broadcast('ERROR', { foo: 'bar' })
 
     expect(mockClient.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'TEST_EVENT', payload: { foo: 'bar' } }),
+      JSON.stringify({ type: 'ERROR', payload: { foo: 'bar' } }),
     )
   })
 
   it('should clear step statuses on FLOW_START', () => {
     state.broadcast('STEP_STATE_CHANGE', { stepId: '1', status: 'running' })
-    expect((state as any).stepStatuses.size).toBe(1)
+    const stepStatuses = (state as unknown as { stepStatuses: Map<string, string> }).stepStatuses
+    expect(stepStatuses.size).toBe(1)
 
     state.broadcast('FLOW_START', { flowId: 'test' })
-    expect((state as any).stepStatuses.size).toBe(0)
+    expect(stepStatuses.size).toBe(0)
   })
 
   it('should update lastFlowReload on FLOW_RELOAD', () => {
-    const payload = { nodes: [], edges: [] }
+    const payload = { nodes: [], edges: [], flowId: 'test-flow' }
     state.broadcast('FLOW_RELOAD', payload)
-    expect((state as any).lastFlowReload).toBe(payload)
+    const lastFlowReload = (state as unknown as { lastFlowReload: unknown }).lastFlowReload
+    expect(lastFlowReload).toBe(payload)
   })
 })

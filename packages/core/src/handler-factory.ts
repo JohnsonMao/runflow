@@ -34,7 +34,7 @@ interface FlowStepBase {
 /**
  * Extract base ZodObject from ZodEffects (created by refine, superRefine, etc.).
  */
-type ExtractZodObject<TSchema extends z.ZodTypeAny> = TSchema extends z.ZodObject<any>
+type ExtractZodObject<TSchema extends z.ZodTypeAny> = TSchema extends z.ZodObject<z.ZodRawShape>
   ? TSchema
   : TSchema extends z.ZodEffects<infer TInner>
     ? ExtractZodObject<TInner>
@@ -85,7 +85,7 @@ export interface HandlerConfig<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
 /** Factory helper function with automatic type inference from schema. */
 export interface DefineHandler {
   /** Define handler with ZodObject schema - infers step type from schema. */
-  <TSchema extends z.ZodObject<any>>(
+  <TSchema extends z.ZodObject<z.ZodRawShape>>(
     config: {
       type: string
       schema: TSchema
@@ -94,7 +94,7 @@ export interface DefineHandler {
     }
   ): HandlerConfig<TSchema>
   /** Define handler with ZodEffects schema (from refine, superRefine, etc.) - infers step type from base object. */
-  <TSchema extends z.ZodEffects<z.ZodObject<any>>>(
+  <TSchema extends z.ZodEffects<z.ZodObject<z.ZodRawShape>>>(
     config: {
       type: string
       schema: TSchema

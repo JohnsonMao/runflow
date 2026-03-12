@@ -10,10 +10,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 const INDENT_PX_BASE = 8
 const INDENT_PX_PER_LEVEL = 14
@@ -41,89 +44,132 @@ function TreeNodeItem({
   onToggleFolder,
   isSidebarCollapsed,
 }: TreeNodeItemProps): React.ReactElement | null {
+  const isSubItem = depth > 0
+  const shouldWrapInMenuItem = !isSubItem || isSidebarCollapsed
+
   if (node.type === 'file' && node.flowId) {
-    return (
-      <SidebarMenuItem key={node.id}>
-        <SidebarMenuButton
-          isActive={selectedFlowId === node.flowId}
-          onClick={() => onSelectFlow(node.flowId!)}
-          tooltip={node.name || node.label}
-          className="min-h-8 gap-2 group-data-[collapsible=icon]:pl-2"
-          style={isSidebarCollapsed ? undefined : { paddingLeft: `${indentPx(depth)}px` }}
-        >
-          <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-xs" title={node.flowId}>
-              {node.name || node.label}
-            </span>
-            {node.error && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertCircle className="size-3 shrink-0 text-destructive" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[300px] border-destructive bg-destructive text-destructive-foreground">
-                  {node.error}
-                </TooltipContent>
-              </Tooltip>
-            )}
+    const buttonContent = (
+      <SidebarMenuButton
+        isActive={selectedFlowId === node.flowId}
+        onClick={() => onSelectFlow(node.flowId!)}
+        tooltip={node.name || node.label}
+        className="min-h-8 gap-2 group-data-[collapsible=icon]:pl-2"
+        style={isSidebarCollapsed ? undefined : { paddingLeft: `${indentPx(depth)}px` }}
+      >
+        <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+          <span className="truncate text-xs" title={node.flowId}>
+            {node.name || node.label}
           </span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
+          {node.error && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertCircle className="size-3 shrink-0 text-destructive" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px] border-destructive bg-destructive text-destructive-foreground">
+                {node.error}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+      </SidebarMenuButton>
     )
+
+    if (shouldWrapInMenuItem) {
+      return (
+        <SidebarMenuItem key={node.id}>
+          {buttonContent}
+        </SidebarMenuItem>
+      )
+    }
+
+    return buttonContent
   }
   if (node.type === 'folder' && node.children && node.children.length > 0) {
     const isOpen = openFolderIds.has(node.id)
-    return (
+    const collapsibleContent = (
       <Collapsible
-        key={node.id}
         open={isOpen}
         onOpenChange={() => onToggleFolder(node.id)}
       >
-        <SidebarMenuItem>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex min-w-0 flex-1">
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent group-data-[collapsible=icon]:w-[30px] group-data-[collapsible=icon]:min-w-[30px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
-                    style={isSidebarCollapsed ? undefined : { paddingLeft: `${indentPx(depth)}px` }}
-                  >
-                    <ChevronRight
-                      className={`size-3.5 shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-90' : ''}`}
-                      aria-hidden
-                    />
-                    {isOpen
-                      ? <FolderOpen className="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:block" aria-hidden />
-                      : <Folder className="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:block" aria-hidden />}
-                    <span className="truncate font-medium group-data-[collapsible=icon]:hidden">{node.label}</span>
-                  </button>
-                </CollapsibleTrigger>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="right" align="center" hidden={!isSidebarCollapsed}>
-              {node.label}
-            </TooltipContent>
-          </Tooltip>
-        </SidebarMenuItem>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex min-w-0 flex-1">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent group-data-[collapsible=icon]:w-[30px] group-data-[collapsible=icon]:min-w-[30px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
+                  style={isSidebarCollapsed ? undefined : { paddingLeft: `${indentPx(depth)}px` }}
+                >
+                  <ChevronRight
+                    className={`size-3.5 shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-90' : ''}`}
+                    aria-hidden
+                  />
+                  {isOpen
+                    ? <FolderOpen className="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:block" aria-hidden />
+                    : <Folder className="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:block" aria-hidden />}
+                  <span className="truncate font-medium group-data-[collapsible=icon]:hidden">{node.label}</span>
+                </button>
+              </CollapsibleTrigger>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right" align="center" hidden={!isSidebarCollapsed}>
+            {node.label}
+          </TooltipContent>
+        </Tooltip>
         <CollapsibleContent>
-          <div className="border-l border-sidebar-border pl-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:pl-0">
-            {node.children.map(child => (
-              <TreeNodeItem
-                key={child.id}
-                node={child}
-                depth={depth + 1}
-                selectedFlowId={selectedFlowId}
-                onSelectFlow={onSelectFlow}
-                openFolderIds={openFolderIds}
-                onToggleFolder={onToggleFolder}
-                isSidebarCollapsed={isSidebarCollapsed}
-              />
-            ))}
-          </div>
+          {isSidebarCollapsed
+            ? (
+                <SidebarMenu className="gap-0">
+                  {node.children.map(child => (
+                    <TreeNodeItem
+                      key={child.id}
+                      node={child}
+                      depth={depth + 1}
+                      selectedFlowId={selectedFlowId}
+                      onSelectFlow={onSelectFlow}
+                      openFolderIds={openFolderIds}
+                      onToggleFolder={onToggleFolder}
+                      isSidebarCollapsed={isSidebarCollapsed}
+                    />
+                  ))}
+                </SidebarMenu>
+              )
+            : (
+                <SidebarMenuSub>
+                  {node.children.map((child) => {
+                    const childItem = (
+                      <TreeNodeItem
+                        node={child}
+                        depth={depth + 1}
+                        selectedFlowId={selectedFlowId}
+                        onSelectFlow={onSelectFlow}
+                        openFolderIds={openFolderIds}
+                        onToggleFolder={onToggleFolder}
+                        isSidebarCollapsed={isSidebarCollapsed}
+                      />
+                    )
+                    return (
+                      <SidebarMenuSubItem key={child.id}>
+                        {childItem}
+                      </SidebarMenuSubItem>
+                    )
+                  })}
+                </SidebarMenuSub>
+              )}
         </CollapsibleContent>
       </Collapsible>
     )
+
+    if (shouldWrapInMenuItem) {
+      return (
+        <SidebarMenuItem key={node.id}>
+          {collapsibleContent}
+        </SidebarMenuItem>
+      )
+    }
+
+    return collapsibleContent
   }
   return null
 }
@@ -179,9 +225,9 @@ export function FlowSidebar({
   }
 
   return (
-    <div className="flex flex-col gap-2 p-2">
-      <Tabs value={viewMode} onValueChange={v => setViewMode(v as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 h-8">
+    <div className="flex flex-col gap-2">
+      <Tabs value={viewMode} onValueChange={v => setViewMode(v as 'folders' | 'tags')} className="w-full">
+        <TabsList className={cn('grid w-full grid-cols-2 transition-[height,opacity] h-8', isSidebarCollapsed && 'h-0 opacity-0 overflow-hidden')}>
           <TabsTrigger value="folders" className="text-[10px] px-0">
             <Folder className="size-3 mr-1" />
             <span className="group-data-[collapsible=icon]:hidden">Folders</span>

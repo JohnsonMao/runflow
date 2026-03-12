@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createServer as createViteServer } from 'vite'
@@ -9,13 +10,13 @@ export async function createViteMiddleware(appDir: string) {
     root: appDir,
   })
 
-  return async (req: any, res: any, next: any) => {
+  return async (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
     // Let Vite handle the request
     vite.middlewares(req, res, async () => {
       if (res.writableEnded)
         return next()
 
-      const url = req.url
+      const url = req.url || '/'
       try {
         const template = fs.readFileSync(path.resolve(appDir, 'index.html'), 'utf-8')
         const html = await vite.transformIndexHtml(url, template)
