@@ -236,13 +236,13 @@ If no argument is provided, the workflow will extract requirements from conversa
     - List of artifacts created
     - Validation result
 
-    Use **AskUserQuestion tool** to confirm the workflow is complete. This ensures the workflow stops even when auto-accept is enabled. Provide exactly these options:
-    - **First option (will be auto-selected)**: "Done" — End the propose workflow. Inform the user they can run `/spectra:apply <change-name>` when ready.
+    Use **AskUserQuestion tool** to ask what to do next. This ensures the workflow stops even when auto-accept is enabled. Provide exactly these options:
+    - **First option (will be auto-selected)**: "Park" — Execute `spectra park "<name>"` to stash the change, then inform the user they can run `/spectra:apply <change-name>` when ready (which will auto-unpark).
     - **Second option**: "Apply" — Invoke `/spectra:apply <change-name>` to start implementation.
 
-    If **AskUserQuestion tool** is not available, display the summary and inform the user to run `/spectra:apply <change-name>` when ready. Then STOP — do not continue.
+    If **AskUserQuestion tool** is not available, execute `spectra park "<name>"` and inform the user to run `/spectra:apply <change-name>` when ready. Then STOP — do not continue.
 
-    **After the user responds**, if they chose "Done", the workflow is OVER. If they chose "Apply", invoke `/spectra:apply <change-name>` to begin implementation.
+    **After the user responds**, if they chose "Park", execute `spectra park "<name>"` and the workflow is OVER. If they chose "Apply", invoke `/spectra:apply <change-name>` to begin implementation.
 
 **Artifact Creation Guidelines**
 
