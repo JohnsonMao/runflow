@@ -37,214 +37,36 @@ The web visualization MAY accept a FlowDefinition (e.g. parsed flow YAML or JSON
 
 ---
 ### Requirement: Viewer SHALL be read-only
+The visualization SHALL be read-only: it SHALL NOT execute the flow, SHALL NOT modify the flow definition, and SHALL NOT persist changes. Interaction MAY include zoom, pan, and optional selection/highlight. In live mode (WebSocket connected), the viewer SHALL dynamically reflect external execution progress and DSL updates but SHALL NOT initiate execution. (Note: Only `RUN` command from client is allowed via WebSocket).
 
-The visualization SHALL be read-only: it SHALL NOT execute the flow, SHALL NOT modify the flow definition, and SHALL NOT persist changes. Interaction MAY include zoom, pan, and optional selection/highlight. In live mode (WebSocket connected), the viewer SHALL dynamically reflect external execution progress and DSL updates but SHALL NOT initiate execution.
-
-#### Scenario: No execution
-
-- **WHEN** the user views a flow graph
-- **THEN** the viewer SHALL NOT run or trigger flow execution (except when reflecting real-time updates from an external source)
-- **AND** the viewer SHALL NOT require a runflow backend to display the graph
-
-#### Scenario: Optional interaction
-
-- **WHEN** the user interacts with the canvas
-- **THEN** the viewer MAY support zoom and pan
-- **AND** the viewer MAY support selecting a node or edge for highlight or tooltip
-- **AND** the viewer SHALL NOT allow editing step ids, types, or dependsOn through the UI (unless explicitly scoped as a future capability)
+#### Scenario: No execution results popup
+- **WHEN** the flow run completes in the viewer (live mode)
+- **THEN** the viewer SHALL NOT display a modal dialog (ResultDialog)
+- **AND** the viewer SHALL instead rely on the Sidebar Log Panel for execution results
 
 
 <!-- @trace
-source: real-time-flow-preview
-updated: 2026-03-09
+source: optimize-execution-ui
+updated: 2026-03-14
 code:
-  - workspace/flows/convenience-store/convenience-store-master-flow.yaml
-  - packages/viewer/src/components/ResultDialog.tsx
-  - workspace/flows/promotion/create-discount-reach-piece-with-price-promotion.yaml
-  - workspace/openapi/store-to-store-shipping.yaml
-  - apps/flow-viewer/src/flowDefinitionToGraph.ts
-  - packages/viewer/src/components/ui/input.tsx
-  - workspace/flows/payment/payments-transaction-query.yaml
-  - workspace/flows/logistics/logistics-center-fulfillment-complete.yaml
-  - apps/flow-viewer/src/components/FlowSidebar.tsx
-  - apps/flow-viewer/index.html
-  - workspace/flows/salepage/create-sale-page-flow.yaml
-  - workspace/openapi/admin-promotion-rules.yaml
-  - apps/flow-viewer/components.json
-  - workspace/flows/logistics/delivery-shipment.yaml
-  - workspace/flows/location-pickup/location-pickup-shipping.yaml
-  - apps/flow-viewer/src/components/ParamsSheet.tsx
-  - packages/viewer/src/components/ui/button.tsx
-  - apps/flow-viewer/src/hooks/use-flow-graph.ts
-  - packages/viewer/src/hooks/use-websocket.ts
-  - workspace/openapi/admin-invoice.yaml
-  - apps/flow-viewer/src/hooks/use-mobile.ts
-  - packages/viewer/src/components/ui/skeleton.tsx
-  - workspace/flows/logistics/logistics-center-fulfillment-fail.yaml
-  - workspace/flows/tt/post-users.yaml
-  - apps/flow-viewer/src/hooks/use-workspace.ts
-  - workspace/flows/tt/params-count2.json
-  - packages/viewer/src/components/ui/separator.tsx
-  - apps/flow-viewer/src/types.ts
-  - pnpm-workspace.yaml
-  - workspace/flows/promotion/create-reach-piece-free-gift-promotion.yaml
-  - workspace/src/logisticsCenter.ts
-  - apps/flow-viewer/src/index.css
-  - workspace/flows/promotion/create-discount-nth-piece-with-price-promotion.yaml
-  - packages/viewer/index.html
-  - workspace/custom-handler/txn-last-token-handler.mjs
-  - packages/viewer/src/components/ui/select.tsx
-  - packages/viewer/src/index.css
-  - apps/flow-viewer/src/components/ParamsForm.tsx
-  - apps/flow-viewer/tsconfig.json
-  - workspace/flows/promotion/create-discount-reach-piece-with-amount-promotion.yaml
-  - workspace/src/payments.ts
-  - apps/flow-viewer/src/components/ui/tabs.tsx
-  - workspace/custom-handler/logistics-center-handler.mjs
-  - workspace/flows/promotion/promotion-rule-activate.yaml
-  - packages/viewer/src/components/ParamsSheet.tsx
-  - ARCHITECTURAL_REFORM.md
-  - packages/viewer/src/lib/utils.ts
-  - packages/workspace/src/config.ts
-  - apps/flow-viewer/src/hooks/use-theme.ts
-  - packages/viewer/src/layout.ts
-  - workspace/custom-handler/txn-token-handler.mjs
-  - apps/flow-viewer/src/App.tsx
-  - apps/flow-viewer/src/lib/params.ts
-  - packages/viewer/src/components/FlowHeader.tsx
-  - packages/viewer/package.json
-  - apps/flow-viewer/server/index.ts
-  - packages/viewer/src/hooks/use-flow-graph.ts
-  - workspace/flows/tt2/sub.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping.yaml
-  - workspace/flows/promotion/create-special-price-promotion.yaml
-  - apps/flow-viewer/src/components/ui/button.tsx
-  - workspace/openapi/admin-delivery.yaml
-  - packages/viewer/tsup.config.ts
-  - apps/flow-viewer/src/components/ui/input.tsx
-  - workspace/flows/promotion/create-discount-reach-price-with-rate-promotion.yaml
-  - workspace/src/scm.ts
-  - workspace/flows/location-pickup/location-pickup-arrived-confirm.yaml
-  - workspace/config/runflow.config.json
-  - apps/flow-viewer/src/layout.ts
-  - workspace/flows/location-pickup/location-pickup-ship-confirm.yaml
-  - workspace/flows/logistics/delivery-order-confirm-and-shipping.yaml
-  - workspace/custom-handler/payments-handler.mjs
-  - workspace/flows/promotion/create-discount-reach-price-with-amount-promotion.yaml
-  - packages/viewer/src/App.tsx
-  - apps/flow-viewer/src/components/ui/sidebar.tsx
-  - packages/viewer/src/components/ui/card.tsx
-  - workspace/flows/convenience-store/store-shipping.yaml
-  - workspace/openapi/admin-location-member.yaml
-  - packages/workspace/src/discover.ts
-  - workspace/openapi/admin-location-point.yaml
-  - packages/viewer/server/lib/index.ts
-  - workspace/flows/promotion/create-register-reach-piece-promotion.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-rate-promotion.yaml
-  - packages/viewer/src/main.tsx
-  - workspace/openapi/store-front-outer-member-login.yaml
-  - workspace/flows/convenience-store/store-shipping-confirm.yaml
-  - workspace/src/promotionRules.ts
-  - workspace/custom-handler/promotion-rules-handler.mjs
-  - apps/flow-viewer/package.json
-  - packages/viewer/vite.config.ts
-  - apps/flow-viewer/src/components/FlowMainContent.tsx
-  - apps/flow-viewer/src/components/ui/sheet.tsx
-  - apps/flow-viewer/src/components/ui/card.tsx
-  - packages/viewer/src/components/ui/switch.tsx
-  - apps/flow-viewer/src/flowGraphToReactFlow.ts
-  - apps/flow-viewer/src/lib/nested.ts
-  - packages/viewer/src/components/ui/collapsible.tsx
-  - apps/flow-viewer/vitest.config.ts
-  - apps/flow-viewer/src/components/ui/tooltip.tsx
-  - packages/viewer/src/components/ParamsForm.tsx
-  - packages/viewer/src/components/ui/sheet.tsx
-  - apps/flow-viewer/src/components/ui/separator.tsx
-  - packages/viewer/src/lib/nested.ts
-  - workspace/flows/logistics/91app-shipping.yaml
-  - packages/viewer/src/hooks/use-workspace.ts
-  - workspace/flows/logistics/logistics-smart-master-flow.yaml
-  - workspace/flows/convenience-store/seven-eleven-tcat-ship-confirm.yaml
-  - workspace/flows/payment/payment-txntoken-flow.yaml
-  - workspace/flows/promotion/create-multi-buy-lowest-price-free-promotion.yaml
-  - apps/flow-viewer/src/components/ui/dialog.tsx
-  - workspace/flows/promotion/create-discount-reach-piece-with-rate-promotion.yaml
-  - workspace/flows/promotion/create-reach-price-free-gift-promotion.yaml
-  - packages/viewer/vitest.config.ts
-  - workspace/flows/promotion/create-addon-salepage-extra-purchase-promotion.yaml
-  - workspace/openapi/admin-pos.yaml
-  - apps/flow-viewer/src/lib/utils.ts
-  - apps/cli/src/dev.ts
-  - packages/core/src/safeExpression.ts
-  - packages/viewer/components.json
-  - packages/core/src/types.ts
-  - packages/viewer/src/flowGraphToReactFlow.ts
   - packages/viewer/server/index.ts
-  - packages/viewer/src/lib/params.ts
-  - workspace/flows/convenience-store/store-to-store-complete-flow.yaml
-  - workspace/flows/order/batch-order-confirm.yaml
-  - packages/viewer/src/components/FlowMainContent.tsx
-  - workspace/flows/logistics/91app-ship-confirm.yaml
-  - workspace/flows/tt/get-users.yaml
-  - workspace/openapi/logistics-center.yaml
-  - apps/flow-viewer/src/components/ui/select.tsx
-  - apps/cli/src/cli.ts
-  - packages/viewer/src/components/ui/dialog.tsx
-  - apps/flow-viewer/src/components/FlowCanvas.tsx
-  - packages/viewer/src/components/ui/sidebar.tsx
+  - packages/viewer/server/workspace-handlers.ts
+  - packages/viewer/server/watcher.ts
+  - apps/cli/src/dev.ts
   - packages/viewer/src/types.ts
-  - workspace/flows/convenience-store/seven-eleven-tcat-shipping.yaml
-  - workspace/flows/promotion/create-register-reach-price-promotion.yaml
-  - workspace/flows/salepage/update-sale-page-images-flow.yaml
-  - workspace/flows/convenience-store/store-to-store-shipping-confirm.yaml
-  - workspace/flows/promotion/create-reach-groups-piece-promotion.yaml
+  - packages/viewer/server/state.ts
+  - packages/viewer/package.json
+  - packages/viewer/src/App.tsx
+  - packages/viewer/server/execution.ts
+  - packages/viewer/src/hooks/use-websocket.ts
   - packages/viewer/server/workspace-api.ts
-  - workspace/flows/tt/test.yaml
-  - packages/viewer/src/flowDefinitionToGraph.ts
-  - packages/viewer/src/components/ui/tabs.tsx
-  - workspace/flows/convenience-store/family-mart-fulfillment-complete.yaml
-  - workspace/flows/promotion/create-discount-nth-piece-with-amount-promotion.yaml
-  - workspace/flows/convenience-store/store-order-confirm-and-shipping.yaml
-  - apps/flow-viewer/vite.config.ts
-  - packages/viewer/src/components/ui/tooltip.tsx
-  - packages/viewer/src/hooks/use-theme.ts
-  - packages/viewer/src/components/FlowCanvas.tsx
-  - workspace/openapi/admin-payments.yaml
-  - apps/flow-viewer/src/components/ui/skeleton.tsx
-  - apps/cli/package.json
-  - workspace/config/auth.json
-  - workspace/flows/tt/get-users-userId.yaml
-  - apps/flow-viewer/src/components/ui/collapsible.tsx
-  - packages/viewer/tsconfig.json
-  - workspace/flows/location-pickup/location-pickup-pickup-confirm.yaml
-  - apps/flow-viewer/src/components/FlowHeader.tsx
-  - apps/flow-viewer/src/components/ui/switch.tsx
-  - workspace/flows/location-pickup/location-pickup-cancel-order.yaml
-  - workspace/flows/payment/payment-cardtoken-flow.yaml
-  - workspace/openapi/admin-location.yaml
-  - workspace/openapi/admin-salepage.yaml
-  - workspace/flows/tt/example-loop-two-branches.yaml
-  - workspace/openapi/admin-promotion.yaml
-  - workspace/flows/logistics/hk-logistics-smart-master-flow.yaml
-  - workspace/openapi/admin-order.yaml
-  - apps/flow-viewer/src/main.tsx
-  - apps/flow-viewer/server/workspace-api.ts
-  - apps/flow-viewer/src/components/ResultDialog.tsx
-  - packages/viewer/src/hooks/use-mobile.ts
-  - packages/viewer/src/components/FlowSidebar.tsx
-  - workspace/custom-handler/scm-handler.mjs
-  - packages/core/src/engine.ts
+  - packages/viewer/server/app.ts
 tests:
-  - apps/flow-viewer/src/flowGraphToReactFlow.test.ts
-  - apps/flow-viewer/src/flowDefinitionToGraph.test.ts
   - packages/viewer/server/workspace-api.test.ts
-  - packages/core/src/hooks_v2.test.ts
-  - packages/core/src/hooks.test.ts
-  - packages/viewer/src/layout.test.ts
-  - apps/flow-viewer/src/layout.test.ts
-  - apps/flow-viewer/server/workspace-api.test.ts
-  - packages/viewer/src/flowGraphToReactFlow.test.ts
-  - packages/viewer/src/flowDefinitionToGraph.test.ts
+  - packages/viewer/server/execution.test.ts
+  - packages/viewer/src/hooks/use-websocket.test.ts
+  - packages/viewer/server/workspace-handlers.test.ts
+  - packages/viewer/server/state.test.ts
 -->
 
 ---
@@ -648,4 +470,37 @@ tests:
   - packages/viewer/server/workspace-api.test.ts
   - packages/viewer/src/flowGraphToReactFlow.test.ts
   - packages/core/src/hooks_v2.test.ts
+-->
+
+---
+### Requirement: Viewer SHALL support dynamic canvas resizing
+The web visualization SHALL allow the canvas to resize and re-center (fitView) when the execution sidebar opens or closes.
+
+#### Scenario: Resize canvas with sidebar toggle
+- **WHEN** the Sidebar is opened (e.g., manually or during execution)
+- **THEN** the viewer SHALL reduce its available width and adjust the React Flow canvas
+- **AND** the viewer SHALL optionally call `fitView` to keep the graph centered
+
+<!-- @trace
+source: optimize-execution-ui
+updated: 2026-03-14
+code:
+  - packages/viewer/server/index.ts
+  - packages/viewer/server/workspace-handlers.ts
+  - packages/viewer/server/watcher.ts
+  - apps/cli/src/dev.ts
+  - packages/viewer/src/types.ts
+  - packages/viewer/server/state.ts
+  - packages/viewer/package.json
+  - packages/viewer/src/App.tsx
+  - packages/viewer/server/execution.ts
+  - packages/viewer/src/hooks/use-websocket.ts
+  - packages/viewer/server/workspace-api.ts
+  - packages/viewer/server/app.ts
+tests:
+  - packages/viewer/server/workspace-api.test.ts
+  - packages/viewer/server/execution.test.ts
+  - packages/viewer/src/hooks/use-websocket.test.ts
+  - packages/viewer/server/workspace-handlers.test.ts
+  - packages/viewer/server/state.test.ts
 -->
