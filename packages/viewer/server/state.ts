@@ -1,16 +1,17 @@
 import type { Server } from 'node:http'
 import type { WebSocket } from 'ws'
-import type { BroadcastFunction, WebSocketMessagePayloads } from '../src/hooks/use-websocket'
-import type { FlowGraphResponse } from '../src/types'
+import type { BroadcastFunction, FlowGraphResponse, WebSocketMessagePayloads } from '../src/types'
 import { WebSocketServer } from 'ws'
 
 export class ViewerState {
   private lastFlowReload: FlowGraphResponse | null = null
   private stepStatuses = new Map<string, string>()
   private wss: WebSocketServer
+  private exitOnDisconnect: boolean
 
-  constructor(server: Server) {
+  constructor(server: Server, options: { exitOnDisconnect?: boolean } = {}) {
     this.wss = new WebSocketServer({ server })
+    this.exitOnDisconnect = options.exitOnDisconnect ?? false
     this.setupWss()
   }
 
@@ -25,6 +26,9 @@ export class ViewerState {
       }
 
       ws.on('close', () => {
+        if (!this.exitOnDisconnect)
+          return
+
         setTimeout(() => {
           if (this.wss.clients.size === 0) {
             process.stdout.write(`[Viewer] All clients disconnected. Closing process...\n`)

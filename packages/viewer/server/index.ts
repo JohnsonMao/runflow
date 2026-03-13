@@ -1,4 +1,5 @@
-export type { BroadcastFunction } from '../src/hooks/use-websocket'
+export type { BroadcastFunction, WebSocketMessage, WebSocketMessagePayloads } from '../src/types'
 export * from './app'
 export * from './execution'
 export * from './workspace-api'
+export * from './workspace-handlers'

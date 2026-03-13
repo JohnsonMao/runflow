@@ -54,6 +54,7 @@
     "@radix-ui/react-tabs": "catalog:frontend",
     "@radix-ui/react-tooltip": "catalog:frontend",
     "@tailwindcss/vite": "catalog:frontend",
+    "@testing-library/react": "catalog:dev",
     "@types/dagre": "catalog:dev",
     "@types/polka": "catalog:dev",
     "@types/react": "catalog:frontend",

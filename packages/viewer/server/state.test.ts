@@ -57,4 +57,14 @@ describe('viewerState', () => {
     const lastFlowReload = (state as unknown as { lastFlowReload: unknown }).lastFlowReload
     expect(lastFlowReload).toBe(payload)
   })
+
+  it('should initialize with exitOnDisconnect option', () => {
+    const stateWithExit = new ViewerState(mockServer, { exitOnDisconnect: true })
+    const exitOnDisconnect = (stateWithExit as unknown as { exitOnDisconnect: boolean }).exitOnDisconnect
+    expect(exitOnDisconnect).toBe(true)
+
+    const stateNoExit = new ViewerState(mockServer, { exitOnDisconnect: false })
+    const exitOnDisconnectNo = (stateNoExit as unknown as { exitOnDisconnect: boolean }).exitOnDisconnect
+    expect(exitOnDisconnectNo).toBe(false)
+  })
 })

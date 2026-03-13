@@ -82,4 +82,28 @@ describe('createWorkspaceApiMiddleware', () => {
     expect(body.workspaceRoot).toBe('/test')
     expect(body.configured).toBe(true)
   })
+
+  it('should handle /api/workspace/tree', async () => {
+    const mockCtx = {
+      cwd: '/test',
+      configDir: '/test',
+      config: {},
+    }
+    const middleware = createWorkspaceApiMiddleware(mockCtx as unknown as WorkspaceContext)
+    const req = { url: '/api/workspace/tree' } as unknown as IncomingMessage
+    const res = {
+      statusCode: 0,
+      setHeader: vi.fn(),
+      end: vi.fn(),
+    } as unknown as ServerResponse & {
+      statusCode: number
+      end: { mock: { calls: string[][] } }
+    }
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+  })
 })

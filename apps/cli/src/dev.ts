@@ -1,4 +1,4 @@
-import type { BroadcastFunction } from '@runflow/viewer'
+import type { ViewerServer } from '@runflow/viewer'
 import path from 'node:path'
 import { reloadAndExecuteFlow, startViewerServer } from '@runflow/viewer'
 import {
@@ -33,27 +33,12 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
     process.exit(1)
   }
 
-  let lastParamsFromUI: Record<string, unknown> | undefined
-
-  // Define broadcast proxy to avoid circular dependency / use before define
-  let broadcast: BroadcastFunction = () => {}
-
-  const reloadAndRunFlow = async (shouldRun = true, params?: Record<string, unknown>, targetFlowPath?: string): Promise<void> => {
-    try {
-      const activeFlowPath = targetFlowPath || flowPath
-      console.log(`[Dev] ${shouldRun ? 'Running' : 'Reloading'} flow: ${activeFlowPath}`)
-      const effectiveParams = params || lastParamsFromUI
-
-      await reloadAndExecuteFlow(
-        { ...workspaceCtx, broadcast },
-        activeFlowPath,
-        { params: effectiveParams, shouldBroadcast: true, skipRun: !shouldRun },
-      )
-    }
-    catch (e) {
-      console.error(`[Dev] Error in dev cycle:`, e)
-      broadcast('ERROR', e instanceof Error ? e.message : String(e))
-    }
+  const reloadFlow = async (viewerServer: ViewerServer): Promise<void> => {
+    await reloadAndExecuteFlow(
+      { ...workspaceCtx, broadcast: viewerServer.broadcast },
+      flowPath,
+      { shouldBroadcast: true, skipRun: true },
+    )
   }
 
   // 1. Start Integrated Viewer Server with internal Watcher
@@ -61,19 +46,10 @@ export async function runDev(flowPath: string, options: DevOptions): Promise<voi
     port,
     workspaceCtx,
     watchPath: absoluteFlowPath,
-    onChange: () => {
-      // On save, just reload to update the graph/UI, don't run automatically
-      reloadAndRunFlow(false).catch(e => console.error('[Dev] Watcher reload error:', e))
-    },
+    onChange: () => reloadFlow(viewerServer),
   })
 
-  // Assign the real broadcast function
-  broadcast = (type, payload) => {
-    viewerServer.broadcast(type, payload)
-  }
-
-  // Handle Initial Load (don't run yet, just resolve and cache/broadcast)
-  await reloadAndRunFlow(false)
+  await reloadFlow(viewerServer)
 
   if (options.open) {
     const viewerUrl = `http://localhost:${port}/?flowId=${encodeURIComponent(flowPath)}`

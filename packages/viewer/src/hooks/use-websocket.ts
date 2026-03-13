@@ -1,34 +1,5 @@
-import type { FlowGraphResponse } from '../types'
+import type { WebSocketMessage } from '../types'
 import { useEffect, useRef, useState } from 'react'
-
-/**
- * WebSocket message payload types for each message type
- */
-export interface WebSocketMessagePayloads {
-  FLOW_RELOAD: FlowGraphResponse
-  FLOW_START: { flowId: string }
-  PARAMS_VALIDATION_ERROR: { error: string, fieldPaths: string[] }
-  STEP_STATE_CHANGE: { stepId: string, status: string, outputs?: unknown, error?: string }
-  ERROR: unknown
-}
-
-/**
- * Type-safe WebSocket message with discriminated union
- */
-export type WebSocketMessage = {
-  [K in keyof WebSocketMessagePayloads]: {
-    type: K
-    payload: WebSocketMessagePayloads[K]
-  }
-}[keyof WebSocketMessagePayloads]
-
-/**
- * Type-safe broadcast function
- */
-export type BroadcastFunction = <T extends keyof WebSocketMessagePayloads>(
-  type: T,
-  payload: WebSocketMessagePayloads[T],
-) => void
 
 export function useWebSocket(url: string | null, onMessage?: (message: WebSocketMessage) => void) {
   const [isConnected, setIsConnected] = useState(false)

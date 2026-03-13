@@ -1,4 +1,4 @@
-import type { BroadcastFunction } from '../src/hooks/use-websocket'
+import type { BroadcastFunction } from '../src/types'
 import type { WorkspaceContext } from './workspace-api'
 import { watch } from 'chokidar'
 

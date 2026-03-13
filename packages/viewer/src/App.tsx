@@ -1,6 +1,5 @@
 import type { LogEntry } from './components/ExecutionPanel'
-import type { WebSocketMessage } from './hooks/use-websocket'
-import type { TreeNode, WorkspaceStatus } from './types'
+import type { TreeNode, WebSocketMessage, WorkspaceStatus } from './types'
 import React, { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
